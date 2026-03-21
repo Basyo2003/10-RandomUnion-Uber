@@ -3,84 +3,84 @@
     "studentId": "55-2712",
     "name": "Aly Basyouni",
     "githubUsername": "Basyo2003",
-    "service": ""
+    "service": "driver"
   },
   {
     "studentId": "55-0814",
     "name": "Youssef Khaled Elshall",
     "githubUsername": "Usifkhalid",
-    "service": ""
+    "service": "location"
   },
   {
     "studentId": "55-15679",
     "name": "Nour Shalaby",
     "githubUsername": "nour-shalaby",
-    "service": ""
+    "service": "user"
   },
   {
     "studentId": "55-0254",
     "name": "Abdelrahman Khairat",
     "githubUsername": "Abdelrahmankhairat",
-    "service": ""
+    "service": "driver"
   },
   {
     "studentId": "55-10169",
     "name": "Ibrahim Ashmawy",
     "githubUsername": "ibrahim-ashmawy",
-    "service": ""
+    "service": "user"
   },
   {
     "studentId": "55-1876",
     "name": "Youssef Abdulazim",
     "githubUsername": "YoussefAmattar",
-    "service": ""
+    "service": "ride"
   },
   {
     "studentId": "55-8293",
     "name": "Ahmed Hany",
     "githubUsername": "Shahh03",
-    "service": ""
+    "service": "location"
   },
   {
     "studentId": "55-1117",
     "name": "Zeiad Elenani",
     "githubUsername": "Zeiadenani",
-    "service": ""
+    "service": "ride"
   },
   {
     "studentId": "55-1378",
     "name": "Ziad Mahmoud",
-    "githubUsername": "",
-    "service": ""
+    "githubUsername": "ZiadTMahmoud",
+    "service": "driver"
   },
   {
     "studentId": "55-2005",
-    "name": "Youssef Ahmad Elbatrawy",
+    "name": "Youssef Elbatrawy",
     "githubUsername": "youssefelbatrawy",
-    "service": ""
+    "service": "payment"
   },
   {
     "studentId": "55-0839",
     "name": "Amr Hesham",
     "githubUsername": "Amrhesham1",
-    "service": ""
+    "service": "location"
   },
   {
     "studentId": "55-25131",
     "name": "Kerollos Ashraf",
     "githubUsername": "Kerollos289",
-    "service": ""
+    "service": "payment"
   },
   {
     "studentId": "55-15981",
     "name": "Karim Waleed",
     "githubUsername": "Kareemwaleed1",
-    "service": ""
+    "service": "user"
   },
   {
     "studentId": "43-2918",
     "name": "Mohamed Elayadi",
     "githubUsername": "ayadi99",
-    "service": ""
+    "service": "ride"
   }
 ]
