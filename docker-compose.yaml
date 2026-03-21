@@ -1,4 +1,44 @@
 services:
+  user-service:
+    build: ./user-service
+    ports:
+      - "8081:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/uberdb
+    depends_on:
+      - postgres
+  driver-service:
+    build: ./driver-service
+    ports:
+      - "8082:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/uberdb
+    depends_on:
+      - postgres
+  ride-service:
+    build: ./ride-service
+    ports:
+      - "8083:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/uberdb
+    depends_on:
+      - postgres
+  location-service:
+    build: ./location-service
+    ports:
+      - "8084:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/uberdb
+    depends_on:
+      - postgres
+  payment-service:
+    build: ./payment-service
+    ports:
+      - "8085:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/uberdb
+    depends_on:
+      - postgres
   postgres:
     image: postgres:latest
     container_name: uber-db
@@ -9,7 +49,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: uberdb
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql
 
 volumes:
   pgdata:
