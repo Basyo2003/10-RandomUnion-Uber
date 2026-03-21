@@ -3,9 +3,10 @@ package com.team10.uber.driver.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.team10.uber.driver.enums.DriverStatus;
-import io.hypersistence.utils.hibernate.type.json.JsonBinaryType;
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.Type;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -41,7 +42,7 @@ public class Driver {
     @Column
     private Integer totalRatings = 0;
 
-    @Type(JsonBinaryType.class)
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private Map<String, Object> vehicleDetails;
 

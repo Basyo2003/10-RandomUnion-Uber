@@ -2,9 +2,10 @@ package com.team10.uber.ride.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.team10.uber.ride.enums.RideStatus;
-import io.hypersistence.utils.hibernate.type.json.JsonBinaryType;
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.Type;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -43,7 +44,7 @@ public class Ride {
     @Column
     private Double fare;
 
-    @Type(JsonBinaryType.class)
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private Map<String, Object> metadata;
 

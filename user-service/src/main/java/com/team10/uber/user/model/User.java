@@ -3,9 +3,10 @@ package com.team10.uber.user.model;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.team10.uber.user.enums.Role;
 import com.team10.uber.user.enums.Status;
-import io.hypersistence.utils.hibernate.type.json.JsonBinaryType;
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.Type;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -39,7 +40,7 @@ public class User {
     @Column(nullable = false)
     private Status status = Status.ACTIVE;
 
-    @Type(JsonBinaryType.class)
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private Map<String, Object> preferences;
 
