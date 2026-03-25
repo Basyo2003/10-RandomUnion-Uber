@@ -4,7 +4,9 @@ import com.team10.uber.driver.model.Driver;
 import com.team10.uber.driver.model.DriverDocument;
 import com.team10.uber.driver.repository.DriverDocumentRepository;
 import com.team10.uber.driver.repository.DriverRepository;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -21,7 +23,8 @@ public class DriverDocumentService {
 
     public DriverDocument createDriverDocument(Long driverId, DriverDocument driverDocument) {
         Driver driver = driverRepository.findById(driverId)
-                .orElseThrow(() -> new RuntimeException("Driver not found with id: " + driverId));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Driver not found with id: " + driverId));
 
         driverDocument.setDriver(driver);
         return driverDocumentRepository.save(driverDocument);
@@ -33,7 +36,8 @@ public class DriverDocumentService {
 
     public DriverDocument getDriverDocumentById(Long id) {
         return driverDocumentRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Driver document not found with id: " + id));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Driver document not found with id: " + id));
     }
 
     public DriverDocument updateDriverDocument(Long id, DriverDocument updatedDriverDocument) {
@@ -47,7 +51,8 @@ public class DriverDocumentService {
 
         if (updatedDriverDocument.getDriver() != null && updatedDriverDocument.getDriver().getId() != null) {
             Driver driver = driverRepository.findById(updatedDriverDocument.getDriver().getId())
-                    .orElseThrow(() -> new RuntimeException("Driver not found with id: " + updatedDriverDocument.getDriver().getId()));
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                            "Driver not found with id: " + updatedDriverDocument.getDriver().getId()));
             existingDriverDocument.setDriver(driver);
         }
 
