@@ -1,10 +1,13 @@
 package com.team10.uber.driver.controller;
 
+import com.team10.uber.driver.dto.RateDriverDTO;
 import com.team10.uber.driver.model.Driver;
 import com.team10.uber.driver.service.DriverService;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 
 @RestController
 @RequestMapping("/api/drivers")
@@ -41,4 +44,10 @@ public class DriverController {
         driverService.deleteDriver(id);
         return "Driver deleted successfully";
     }
+
+    @PostMapping("/{id}/rate")
+    public Driver rateDriver(@PathVariable Long id, @RequestBody RateDriverDTO rateDriverDTO) {
+        return driverService.rateDriver(id, rateDriverDTO.getRideId(), rateDriverDTO.getRating());
+    }
+
 }
