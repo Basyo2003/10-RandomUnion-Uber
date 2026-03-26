@@ -3,6 +3,7 @@ package com.team10.uber.user.controller;
 import com.team10.uber.user.model.User;
 import com.team10.uber.user.service.UserService;
 import org.springframework.web.bind.annotation.*;
+import com.team10.uber.user.dto.UserProfileDTO;
 
 import java.util.List;
 
@@ -41,5 +42,9 @@ public class UserController {
     public String deleteUser(@PathVariable Long id) {
         userService.deleteUser(id);
         return "User deleted successfully";
+    }
+    @GetMapping("/{id}/profile")
+    public UserProfileDTO getUserProfile(@PathVariable Long id) {
+        return userService.getUserProfile(id);
     }
 }
