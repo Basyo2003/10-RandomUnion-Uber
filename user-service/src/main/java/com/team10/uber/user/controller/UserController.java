@@ -55,6 +55,7 @@ public class UserController {
         } catch (RuntimeException e) {
             return ResponseEntity.notFound().build();
         }
+    }
     @GetMapping("/{id}/profile")
     public UserProfileDTO getUserProfile(@PathVariable Long id) {
         return userService.getUserProfile(id);
