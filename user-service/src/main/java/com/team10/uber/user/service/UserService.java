@@ -63,6 +63,7 @@ public class UserService {
         user.setPreferences(merged);
 
         return userRepository.save(user);
+    }
     public UserProfileDTO getUserProfile(Long id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
