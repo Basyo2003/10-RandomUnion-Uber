@@ -1,22 +1,25 @@
 package com.team10.uber.driver.controller;
 
+import com.team10.uber.driver.dto.DriverWithDocumentsDTO;
 import com.team10.uber.driver.dto.RateDriverDTO;
+import com.team10.uber.driver.dto.VerifyDriverDTO;
 import com.team10.uber.driver.model.Driver;
+import com.team10.uber.driver.service.DriverDocumentService;
 import com.team10.uber.driver.service.DriverService;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 
 @RestController
 @RequestMapping("/api/drivers")
 public class DriverController {
 
     private final DriverService driverService;
+    private final DriverDocumentService driverDocumentService;
 
-    public DriverController(DriverService driverService) {
+    public DriverController(DriverService driverService, DriverDocumentService driverDocumentService) {
         this.driverService = driverService;
+        this.driverDocumentService = driverDocumentService;
     }
 
     @PostMapping
@@ -48,6 +51,12 @@ public class DriverController {
     @PostMapping("/{id}/rate")
     public Driver rateDriver(@PathVariable Long id, @RequestBody RateDriverDTO rateDriverDTO) {
         return driverService.rateDriver(id, rateDriverDTO.getRideId(), rateDriverDTO.getRating());
+    }
+
+    @PutMapping("/{driverId}/documents/{documentId}/verify")
+    public DriverWithDocumentsDTO verifyDriverDocument(@PathVariable Long driverId, @PathVariable Long documentId,
+            @RequestBody VerifyDriverDTO verifyRequest) {
+        return driverDocumentService.verifyDriverDocument(driverId, documentId, verifyRequest.getVerifiedBy());
     }
 
 }
