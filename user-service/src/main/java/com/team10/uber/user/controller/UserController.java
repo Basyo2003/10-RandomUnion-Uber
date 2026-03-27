@@ -4,6 +4,7 @@ import com.team10.uber.user.model.User;
 import com.team10.uber.user.service.UserService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import com.team10.uber.user.dto.UserProfileDTO;
 
 import java.util.List;
 import java.util.Map;
@@ -54,5 +55,8 @@ public class UserController {
         } catch (RuntimeException e) {
             return ResponseEntity.notFound().build();
         }
+    @GetMapping("/{id}/profile")
+    public UserProfileDTO getUserProfile(@PathVariable Long id) {
+        return userService.getUserProfile(id);
     }
 }
