@@ -102,7 +102,7 @@ public class DriverDocumentService {
 
         // Step 6: Verify verifiedBy is ADMIN user → 403 if not
         if (verifiedBy == null) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Verifier user ID must be provided");
         }
         String userRole = driverDocumentRepository.findUserRoleById(verifiedBy)
