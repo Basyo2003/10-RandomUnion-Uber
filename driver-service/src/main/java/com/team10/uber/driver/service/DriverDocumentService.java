@@ -73,7 +73,7 @@ public class DriverDocumentService {
     @Transactional
     public DriverWithDocumentsDTO verifyDriverDocument(Long driverId, Long documentId, Long verifiedBy) {
         // Step 1: Find driver by ID → 404 if not found
-        driverRepository.findById(driverId)
+        Driver driver = driverRepository.findById(driverId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Driver not found with id: " + driverId));
 
@@ -95,12 +95,16 @@ public class DriverDocumentService {
         }
 
         // Step 5: Check document not already verified → 400 if verified
-        if (document.getVerified() != null && document.getVerified()) {
+        if (Boolean.TRUE.equals(document.getVerified())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Document is already verified");
         }
 
         // Step 6: Verify verifiedBy is ADMIN user → 403 if not
+        if (verifiedBy == null) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Verifier user ID must be provided");
+        }
         String userRole = driverDocumentRepository.findUserRoleById(verifiedBy)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN,
                         "Verifier user not found"));
@@ -125,10 +129,6 @@ public class DriverDocumentService {
         driverDocumentRepository.save(document);
 
         // Step 8: Return the full driver with all documents
-        Driver driver = driverRepository.findById(driverId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "Driver not found with id: " + driverId));
-
         return new DriverWithDocumentsDTO(driver, driver.getDriverDocuments());
 
     }
