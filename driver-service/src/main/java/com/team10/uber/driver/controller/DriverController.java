@@ -1,5 +1,6 @@
 package com.team10.uber.driver.controller;
 
+import com.team10.uber.driver.dto.DriverDocumentAlertDTO;
 import com.team10.uber.driver.dto.RateDriverDTO;
 import com.team10.uber.driver.model.Driver;
 import com.team10.uber.driver.service.DriverService;
@@ -48,6 +49,11 @@ public class DriverController {
     @PostMapping("/{id}/rate")
     public Driver rateDriver(@PathVariable Long id, @RequestBody RateDriverDTO rateDriverDTO) {
         return driverService.rateDriver(id, rateDriverDTO.getRideId(), rateDriverDTO.getRating());
+    }
+
+    @GetMapping("/documents/expired")
+    public List<DriverDocumentAlertDTO> getExpiredDocuments() {
+        return driverService.getDriversWithExpiredDocuments();
     }
 
 }
