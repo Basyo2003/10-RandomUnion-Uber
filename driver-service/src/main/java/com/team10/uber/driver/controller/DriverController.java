@@ -1,5 +1,6 @@
 package com.team10.uber.driver.controller;
 
+import com.team10.uber.driver.dto.DriverDocumentAlertDTO;
 import com.team10.uber.driver.dto.DriverWithDocumentsDTO;
 import com.team10.uber.driver.dto.RateDriverDTO;
 import com.team10.uber.driver.dto.VerifyDriverDTO;
@@ -53,6 +54,10 @@ public class DriverController {
         return driverService.rateDriver(id, rateDriverDTO.getRideId(), rateDriverDTO.getRating());
     }
 
+    @GetMapping("/documents/expired")
+    public List<DriverDocumentAlertDTO> getExpiredDocuments() {
+        return driverService.getDriversWithExpiredDocuments();
+    }
     @PutMapping("/{driverId}/documents/{documentId}/verify")
     public DriverWithDocumentsDTO verifyDriverDocument(@PathVariable Long driverId, @PathVariable Long documentId,
             @RequestBody VerifyDriverDTO verifyRequest) {
