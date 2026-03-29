@@ -5,6 +5,7 @@ import com.team10.uber.payment.repository.PaymentRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+import java.time.LocalDateTime;
 
 import java.util.List;
 
@@ -48,5 +49,9 @@ public class PaymentService {
                     HttpStatus.NOT_FOUND, "Payment not found with id: " + id);
         }
         paymentRepository.deleteById(id);
+    }
+
+    public List<Payment> searchPayments(String status, LocalDateTime startDate, LocalDateTime endDate) {
+        return paymentRepository.findByStatusAndDateRange(status, startDate, endDate);
     }
 }

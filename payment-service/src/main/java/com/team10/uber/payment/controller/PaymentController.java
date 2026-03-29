@@ -5,6 +5,9 @@ import com.team10.uber.payment.service.PaymentService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import java.time.LocalDateTime;
+import java.util.List;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.List;
 
@@ -44,5 +47,18 @@ public class PaymentController {
     public ResponseEntity<Void> deletePayment(@PathVariable Long id) {
         paymentService.deletePayment(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/search")
+    public ResponseEntity<List<Payment>> searchPayments(
+            @RequestParam(required = false) String status,
+            @RequestParam String startDate,
+            @RequestParam String endDate) {
+
+        LocalDateTime start = LocalDateTime.parse(startDate + "T00:00:00");
+        LocalDateTime end = LocalDateTime.parse(endDate + "T23:59:59");
+
+        List<Payment> payments = paymentService.searchPayments(status, start, end);
+        return ResponseEntity.ok(payments);
     }
 }

@@ -41,16 +41,17 @@ public class Payment {
     @Column(columnDefinition = "jsonb")
     private Map<String, Object> transactionDetails;
 
-    @Column(nullable = false, updatable = false)
+    @Column(nullable = false)
     private LocalDateTime createdAt;
 
     @OneToMany(mappedBy = "payment", cascade = CascadeType.ALL)
     @JsonIgnore
     private List<PaymentCoupon> paymentCoupons;
-
     @PrePersist
     protected void onCreate() {
-        this.createdAt = LocalDateTime.now();
+        if (this.createdAt == null) {
+            this.createdAt = LocalDateTime.now();
+        }
     }
 
     // Getters and Setters
@@ -76,6 +77,7 @@ public class Payment {
     public void setTransactionDetails(Map<String, Object> transactionDetails) { this.transactionDetails = transactionDetails; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 
     public List<PaymentCoupon> getPaymentCoupons() { return paymentCoupons; }
     public void setPaymentCoupons(List<PaymentCoupon> paymentCoupons) { this.paymentCoupons = paymentCoupons; }
