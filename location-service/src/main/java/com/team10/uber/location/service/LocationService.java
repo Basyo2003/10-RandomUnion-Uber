@@ -23,7 +23,7 @@ public class LocationService {
 
     // CREATE
     public Location createLocation(Location location) {
-       // verifyDriverExists(location.getDriverId());
+        driverExists(location.getDriverId());
         return locationRepository.save(location);
     }
 
@@ -44,7 +44,7 @@ public class LocationService {
     public Location updateLocation(Long id, Location updated) {
         Location existing = getLocationById(id);
 
-        //verifyDriverExists(updated.getDriverId());
+        driverExists(updated.getDriverId());
 
         existing.setDriverId(updated.getDriverId());
         existing.setLatitude(updated.getLatitude());
@@ -63,7 +63,7 @@ public class LocationService {
     }
 
     // required by spec (driver is not JPA-managed)
-    private void verifyDriverExists(Long driverId) {
+    private void driverExists(Long driverId) {
         Integer count = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM drivers WHERE id = ?",
                 Integer.class,
