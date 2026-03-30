@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import java.util.HashMap;
 import java.util.Map;
 import org.springframework.web.server.ResponseStatusException;
+import com.team10.uber.user.dto.UserRideSummaryDTO;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -93,5 +94,38 @@ public class UserService {
         userProfileDTO.setTotalAddresses(addressDTOList.size());
 
         return userProfileDTO;
+    }
+
+    public UserRideSummaryDTO getUserRideSummary(Long id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        List<Object[]> resultRows = userRepository.getRideSummaryByUserId(id);
+
+        // Safeguard to handle when there are no rows returned
+        Object[] result = resultRows.isEmpty() ? new Object[]{0L, 0L, 0L, 0.0, 0.0} : resultRows.get(0);
+
+        Long totalRides = 0L;
+        Long completedRides = 0L;
+        Long cancelledRides = 0L;
+        Double totalSpent = 0.0;
+        Double averageFare = 0.0;
+
+        // Safely cast the results from Object[] and handle any null or unexpected values
+        if (result[0] != null) totalRides = ((Number) result[0]).longValue();
+        if (result[1] != null) completedRides = ((Number) result[1]).longValue();
+        if (result[2] != null) cancelledRides = ((Number) result[2]).longValue();
+        if (result[3] != null) totalSpent = ((Number) result[3]).doubleValue();
+        if (result[4] != null) averageFare = ((Number) result[4]).doubleValue();
+
+        return new UserRideSummaryDTO(
+                user.getId(),
+                user.getName(),
+                totalRides,
+                completedRides,
+                cancelledRides,
+                totalSpent,
+                averageFare
+        );
     }
 }

@@ -5,6 +5,8 @@ import com.team10.uber.user.service.UserService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import com.team10.uber.user.dto.UserProfileDTO;
+import com.team10.uber.user.dto.UserRideSummaryDTO;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Map;
@@ -59,5 +61,15 @@ public class UserController {
     @GetMapping("/{id}/profile")
     public UserProfileDTO getUserProfile(@PathVariable Long id) {
         return userService.getUserProfile(id);
+    }
+
+    @GetMapping("/{id}/ride-summary")
+    public ResponseEntity<UserRideSummaryDTO> getUserRideSummary(@PathVariable Long id) {
+        try {
+            UserRideSummaryDTO summary = userService.getUserRideSummary(id);
+            return ResponseEntity.ok(summary);
+        } catch (ResponseStatusException e) {
+            return ResponseEntity.notFound().build();
+        }
     }
 }
