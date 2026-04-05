@@ -4,6 +4,7 @@ import com.team10.uber.driver.dto.DriverDocumentAlertDTO;
 import com.team10.uber.driver.dto.DriverWithDocumentsDTO;
 import com.team10.uber.driver.dto.RateDriverDTO;
 import com.team10.uber.driver.dto.VerifyDriverDTO;
+import com.team10.uber.driver.enums.DriverStatus;
 import com.team10.uber.driver.model.Driver;
 import com.team10.uber.driver.service.DriverDocumentService;
 import com.team10.uber.driver.service.DriverService;
@@ -36,6 +37,14 @@ public class DriverController {
     @GetMapping("/{id}")
     public Driver getDriverById(@PathVariable Long id) {
         return driverService.getDriverById(id);
+    }
+
+    @GetMapping("/search")
+    public List<Driver> searchDrivers(
+            @RequestParam(required = false) DriverStatus status,
+            @RequestParam(required = false) Double minRating,
+            @RequestParam(required = false) Double maxRating) {
+        return driverService.searchDrivers(status, minRating, maxRating);
     }
 
     @PutMapping("/{id}")
