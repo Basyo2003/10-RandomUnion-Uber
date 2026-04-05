@@ -1,5 +1,6 @@
 package com.team10.uber.location.controller;
 
+import com.team10.uber.location.dto.BatchLocationRequest;
 import com.team10.uber.location.model.Location;
 import com.team10.uber.location.service.LocationService;
 import org.springframework.http.HttpStatus;
@@ -43,5 +44,11 @@ public class LocationController {
     public Map<String, String> deleteLocation(@PathVariable Long id) {
         locationService.deleteLocation(id);
         return Map.of("message", "Location deleted successfully");
+    }
+
+    @PostMapping("/batch")
+    @ResponseStatus(HttpStatus.CREATED)
+    public Map<String, Object> batchCreateLocations(@RequestBody BatchLocationRequest request) {
+        return locationService.batchCreateLocations(request);
     }
 }
