@@ -1,7 +1,9 @@
 package com.team10.uber.user.controller;
 
+import com.team10.uber.user.enums.Role;
 import com.team10.uber.user.model.User;
 import com.team10.uber.user.service.UserService;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -41,5 +43,14 @@ public class UserController {
     public String deleteUser(@PathVariable Long id) {
         userService.deleteUser(id);
         return "User deleted successfully";
+    }
+    @GetMapping("/search")
+    public ResponseEntity<List<User>> searchUsers(
+            @RequestParam(value = "name", required = false) String name,
+            @RequestParam(value = "email", required = false) String email,
+            @RequestParam(value = "role", required = false) String role) {
+
+        List<User> users = userService.searchUsers(name, email, role);
+        return ResponseEntity.ok(users);
     }
 }
