@@ -20,4 +20,25 @@ public interface UserRepository extends JpaRepository<User, Long> {
             WHERE r.user_id = :userId
             """, nativeQuery = true)
     List<Object[]> getRideSummaryByUserId(@Param("userId") Long userId);
+
+    // S1-F6: Top Riders by Spending
+    @Query(value = """
+            SELECT
+                u.id AS userId,
+                u.name AS name,
+                COALESCE(SUM(CASE WHEN r.status = 'COMPLETED' THEN r.fare ELSE 0 END), 0) AS totalSpent,
+                COUNT(CASE WHEN r.status = 'COMPLETED' THEN 1 END) AS rideCount
+            FROM users u
+            LEFT JOIN rides r ON r.user_id = u.id
+            AND r.requested_at BETWEEN CAST(:startDate AS timestamp) AND CAST(:endDate AS timestamp)
+            GROUP BY u.id, u.name
+            HAVING SUM(CASE WHEN r.status = 'COMPLETED' THEN r.fare ELSE 0 END) > 0
+            ORDER BY totalSpent DESC
+            LIMIT :limit
+            """, nativeQuery = true)
+    List<Object[]> getTopRidersBySpending(
+            @Param("startDate") String startDate,
+            @Param("endDate") String endDate,
+            @Param("limit") int limit
+    );
 }
