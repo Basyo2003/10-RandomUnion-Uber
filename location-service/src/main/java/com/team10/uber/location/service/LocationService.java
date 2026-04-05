@@ -76,4 +76,15 @@ public class LocationService {
             );
         }
     }
+
+    //Service methods
+    public Location getLatestLocationByDriverId(Long driverId) {
+        driverExists(driverId);
+
+        return locationRepository.findTopByDriverIdOrderByTimestampDesc(driverId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "No locations found for driver with id: " + driverId
+                ));
+    }
 }
