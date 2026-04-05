@@ -10,6 +10,7 @@ import com.team10.uber.driver.service.DriverService;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/drivers")
@@ -36,6 +37,11 @@ public class DriverController {
     @GetMapping("/{id}")
     public Driver getDriverById(@PathVariable Long id) {
         return driverService.getDriverById(id);
+    }
+
+    @PutMapping("/{id}/vehicle")
+    public Driver updateVehicleDetails(@PathVariable Long id, @RequestBody Map<String, Object> vehicleUpdates) {
+        return driverService.updateVehicleDetails(id, vehicleUpdates);
     }
 
     @PutMapping("/{id}")
