@@ -23,7 +23,7 @@ public class LocationService {
 
     // CREATE
     public Location createLocation(Location location) {
-       // verifyDriverExists(location.getDriverId());
+        driverExists(location.getDriverId());
         return locationRepository.save(location);
     }
 
@@ -44,7 +44,7 @@ public class LocationService {
     public Location updateLocation(Long id, Location updated) {
         Location existing = getLocationById(id);
 
-        //verifyDriverExists(updated.getDriverId());
+        driverExists(updated.getDriverId());
 
         existing.setDriverId(updated.getDriverId());
         existing.setLatitude(updated.getLatitude());
@@ -63,7 +63,7 @@ public class LocationService {
     }
 
     // required by spec (driver is not JPA-managed)
-    private void verifyDriverExists(Long driverId) {
+    private void driverExists(Long driverId) {
         Integer count = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM drivers WHERE id = ?",
                 Integer.class,
@@ -73,6 +73,41 @@ public class LocationService {
         if (count == null || count == 0) {
             throw new ResponseStatusException(
                     HttpStatus.NOT_FOUND, "Driver not found"
+            );
+        }
+    }
+
+
+    public List<Location> filterLocationsByMetadata(String key, String operator, String value) {
+        if (key == null || key.isBlank() || value == null || value.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Key and value are required");
+        }
+
+        if (operator == null || operator.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Operator is required");
+        }
+
+        return switch (operator.toLowerCase()) {
+            case "eq" -> locationRepository.findByMetadataEq(key, value);
+            case "gt" -> {
+                validateNumeric(value);
+                yield locationRepository.findByMetadataGt(key, value);
+            }
+            case "lt" -> {
+                validateNumeric(value);
+                yield locationRepository.findByMetadataLt(key, value);
+            }
+            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid operator");
+        };
+    }
+
+    private void validateNumeric(String value) {
+        try {
+            Double.parseDouble(value);
+        } catch (NumberFormatException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Value must be numeric for gt or lt"
             );
         }
     }
