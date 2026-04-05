@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.*;
 import com.team10.uber.user.dto.UserProfileDTO;
 import com.team10.uber.user.dto.UserRideSummaryDTO;
 import org.springframework.web.server.ResponseStatusException;
+import com.team10.uber.user.dto.TopRiderDTO;
 
 import java.util.List;
 import java.util.Map;
@@ -70,6 +71,20 @@ public class UserController {
             return ResponseEntity.ok(summary);
         } catch (ResponseStatusException e) {
             return ResponseEntity.notFound().build();
+        }
+    }
+
+    // S1-F6: Top Riders by Spending
+    @GetMapping("/reports/top-riders")
+    public ResponseEntity<?> getTopRiders(
+            @RequestParam String startDate,
+            @RequestParam String endDate,
+            @RequestParam int limit) {
+        try {
+            List<TopRiderDTO> result = userService.getTopRiders(startDate, endDate, limit);
+            return ResponseEntity.ok(result);
+        } catch (ResponseStatusException e) {
+            return ResponseEntity.status(e.getStatusCode()).body(e.getReason());
         }
     }
 }

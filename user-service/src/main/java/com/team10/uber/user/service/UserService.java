@@ -11,6 +11,9 @@ import java.util.HashMap;
 import java.util.Map;
 import org.springframework.web.server.ResponseStatusException;
 import com.team10.uber.user.dto.UserRideSummaryDTO;
+import com.team10.uber.user.dto.TopRiderDTO;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -127,5 +130,33 @@ public class UserService {
                 totalSpent,
                 averageFare
         );
+    }
+
+    public List<TopRiderDTO> getTopRiders(String startDate, String endDate, int limit) {
+        try {
+            LocalDate start = LocalDate.parse(startDate);
+            LocalDate end = LocalDate.parse(endDate);
+            if (start.isAfter(end)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "startDate must be before endDate");
+            }
+        } catch (DateTimeParseException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid date format. Use yyyy-MM-dd");
+        }
+
+        // Fix: include the full end day by appending time boundaries
+        String startDateTime = startDate + " 00:00:00";
+        String endDateTime   = endDate   + " 23:59:59";
+
+        List<Object[]> results = userRepository.getTopRidersBySpending(startDateTime, endDateTime, limit);
+
+        List<TopRiderDTO> topRiders = new ArrayList<>();
+        for (Object[] row : results) {
+            Long userId = ((Number) row[0]).longValue();
+            String name = (String) row[1];
+            Double totalSpent = ((Number) row[2]).doubleValue();
+            Long rideCount = ((Number) row[3]).longValue();
+            topRiders.add(new TopRiderDTO(userId, name, totalSpent, rideCount));
+        }
+        return topRiders;
     }
 }
