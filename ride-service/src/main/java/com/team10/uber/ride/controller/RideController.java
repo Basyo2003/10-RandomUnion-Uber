@@ -6,6 +6,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/rides")
 public class RideController {
@@ -40,5 +42,10 @@ public class RideController {
     public String deleteRide(@PathVariable Long id) {
         rideService.deleteRide(id);
         return "Ride deleted successfully";
+    }
+
+    @GetMapping("/metadata/search")
+    public List<Ride> filterByMetadata(@RequestParam String key, @RequestParam String value) {
+        return rideService.filterByMetadata(key, value);
     }
 }

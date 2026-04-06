@@ -2,7 +2,9 @@ package com.team10.uber.ride.service;
 
 import com.team10.uber.ride.model.Ride;
 import com.team10.uber.ride.repository.RideRepository;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -45,5 +47,12 @@ public class RideService {
     public void deleteRide(Long id) {
         Ride ride = getRideById(id);
         rideRepository.delete(ride);
+    }
+
+    public List<Ride> filterByMetadata(String key, String value) {
+        if (key == null || key.isBlank() || value == null || value.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "key and value must not be blank");
+        }
+        return rideRepository.findByMetadataField(key, value);
     }
 }
