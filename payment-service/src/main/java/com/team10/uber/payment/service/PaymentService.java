@@ -5,10 +5,12 @@ import com.team10.uber.payment.repository.PaymentRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
-import com.team10.uber.payment.dto.UserPaymentSummaryDTO;
+import com.team10.uber.payment.enums.PaymentStatus;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
-
+import org.springframework.transaction.annotation.Transactional;
+import com.team10.uber.payment.dto.UserPaymentSummaryDTO;
 import java.util.List;
 
 @Service
@@ -51,6 +53,28 @@ public class PaymentService {
                     HttpStatus.NOT_FOUND, "Payment not found with id: " + id);
         }
         paymentRepository.deleteById(id);
+    }
+
+    @Transactional
+    public Payment refundPayment(Long id, String reason) {
+        Payment payment = getPaymentById(id);
+
+        if (payment.getStatus() != PaymentStatus.COMPLETED) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "Payment cannot be refunded. Current status: " + payment.getStatus());
+        }
+
+        payment.setStatus(PaymentStatus.REFUNDED);
+
+        Map<String, Object> details = payment.getTransactionDetails();
+        if (details == null) {
+            details = new HashMap<>();
+        }
+        details.put("refundReason", reason);
+        details.put("refundedAt", LocalDateTime.now().toString());
+        payment.setTransactionDetails(details);
+
+        return paymentRepository.save(payment);
     }
 
     public UserPaymentSummaryDTO getUserPaymentSummary(Long userId) {
