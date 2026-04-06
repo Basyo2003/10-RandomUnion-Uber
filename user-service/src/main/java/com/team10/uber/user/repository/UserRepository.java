@@ -1,6 +1,5 @@
 package com.team10.uber.user.repository;
 
-
 import com.team10.uber.user.enums.Role;
 import com.team10.uber.user.model.User;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -8,16 +7,17 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface UserRepository extends JpaRepository<User, Long> {
-        @Query(value = "SELECT * FROM users u WHERE " +
-                "(:name IS NULL OR LOWER(u.name) LIKE LOWER(CONCAT('%', :name, '%'))) AND " +
-                "(:email IS NULL OR LOWER(u.email) LIKE LOWER(CONCAT('%', :email, '%'))) AND " +
-                "(:role IS NULL OR u.role = :role)",
-                nativeQuery = true)
-        List<User> searchUsers(@Param("name") String name,
-                               @Param("email") String email,
-                               @Param("role") String role);
+    @Query(value = "SELECT * FROM users u WHERE " +
+            "(:name IS NULL OR LOWER(u.name) LIKE LOWER(CONCAT('%', :name, '%'))) AND " +
+            "(:email IS NULL OR LOWER(u.email) LIKE LOWER(CONCAT('%', :email, '%'))) AND " +
+            "(:role IS NULL OR u.role = :role)", nativeQuery = true)
+    List<User> searchUsers(@Param("name") String name,
+            @Param("email") String email,
+            @Param("role") String role);
 
     @Query(value = """
             SELECT
@@ -49,9 +49,16 @@ public interface UserRepository extends JpaRepository<User, Long> {
     List<Object[]> getTopRidersBySpending(
             @Param("startDate") String startDate,
             @Param("endDate") String endDate,
-            @Param("limit") int limit
-    );
+            @Param("limit") int limit);
 
     @Query(value = "SELECT * FROM users u WHERE u.preferences ->> :key = :value", nativeQuery = true)
     List<User> searchByPreference(@Param("key") String key, @Param("value") String value);
+
+    @Query(value = """
+            SELECT COUNT(*) > 0
+            FROM rides
+            WHERE user_id = :userId
+              AND status NOT IN ('COMPLETED', 'CANCELLED')
+            """, nativeQuery = true)
+    boolean hasActiveRides(@Param("userId") Long userId);
 }
