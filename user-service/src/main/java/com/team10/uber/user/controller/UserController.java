@@ -44,6 +44,11 @@ public class UserController {
         return "User deleted successfully";
     }
 
+    @PutMapping("/{id}/deactivate")
+    public User deactivateUser(@PathVariable Long id) {
+        return userService.deactivateUser(id);
+    }
+
     @GetMapping("/{id}/profile")
     public UserProfileDTO getUserProfile(@PathVariable Long id) {
         return userService.getUserProfile(id);

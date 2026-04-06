@@ -2,6 +2,7 @@ package com.team10.uber.user.service;
 
 import com.team10.uber.user.dto.AddressDTO;
 import com.team10.uber.user.dto.UserProfileDTO;
+import com.team10.uber.user.enums.Status;
 import com.team10.uber.user.model.SavedAddress;
 import com.team10.uber.user.model.User;
 import com.team10.uber.user.repository.SavedAddressRepository;
@@ -56,6 +57,20 @@ public class UserService {
         User user = getUserById(id);
         userRepository.delete(user);
     }
+
+    @Transactional
+    public User deactivateUser(Long id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        if (userRepository.hasActiveRides(id)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User has active rides");
+        }
+
+        user.setStatus(Status.DEACTIVATED);
+        return userRepository.save(user);
+    }
+
     public UserProfileDTO getUserProfile(Long id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
