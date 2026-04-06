@@ -97,4 +97,13 @@ public class UserController {
             return ResponseEntity.status(e.getStatusCode()).body(e.getReason());
         }
     }
+
+    @GetMapping("/preferences/search")
+    public ResponseEntity<List<User>> searchByPreference(
+            @RequestParam String key,
+            @RequestParam String value) {
+
+        List<User> users = userService.searchByPreference(key, value);
+        return ResponseEntity.ok(users);
+    }
 }
