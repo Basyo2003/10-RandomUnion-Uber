@@ -71,6 +71,21 @@ public class DriverService {
         return driverRepository.save(existingDriver);
     }
 
+    public Driver updateVehicleDetails(Long id, Map<String, Object> vehicleUpdates) {
+        Driver existingDriver = getDriverById(id); // 404 if not found
+
+        Map<String, Object> merged = new HashMap<>();
+        if (existingDriver.getVehicleDetails() != null) {
+            merged.putAll(existingDriver.getVehicleDetails());
+        }
+        if (vehicleUpdates != null) {
+            merged.putAll(vehicleUpdates);
+        }
+
+        existingDriver.setVehicleDetails(merged);
+        return driverRepository.save(existingDriver);
+    }
+
     public void deleteDriver(Long id) {
         Driver driver = getDriverById(id);
         driverRepository.delete(driver);

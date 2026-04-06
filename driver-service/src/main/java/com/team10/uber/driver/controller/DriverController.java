@@ -11,6 +11,7 @@ import com.team10.uber.driver.service.DriverService;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/drivers")
@@ -47,6 +48,11 @@ public class DriverController {
         return driverService.searchDrivers(status, minRating, maxRating);
     }
 
+    @PutMapping("/{id}/vehicle")
+    public Driver updateVehicleDetails(@PathVariable Long id, @RequestBody Map<String, Object> vehicleUpdates) {
+        return driverService.updateVehicleDetails(id, vehicleUpdates);
+    }
+
     @PutMapping("/{id}")
     public Driver updateDriver(@PathVariable Long id, @RequestBody Driver updatedDriver) {
         return driverService.updateDriver(id, updatedDriver);
@@ -67,6 +73,7 @@ public class DriverController {
     public List<DriverDocumentAlertDTO> getExpiredDocuments() {
         return driverService.getDriversWithExpiredDocuments();
     }
+
     @PutMapping("/{driverId}/documents/{documentId}/verify")
     public DriverWithDocumentsDTO verifyDriverDocument(@PathVariable Long driverId, @PathVariable Long documentId,
             @RequestBody VerifyDriverDTO verifyRequest) {

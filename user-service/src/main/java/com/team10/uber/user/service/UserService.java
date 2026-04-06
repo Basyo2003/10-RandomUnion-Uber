@@ -1,5 +1,6 @@
 package com.team10.uber.user.service;
 
+import com.team10.uber.user.enums.Role;
 import com.team10.uber.user.dto.AddressDTO;
 import com.team10.uber.user.dto.UserProfileDTO;
 import com.team10.uber.user.model.SavedAddress;
@@ -11,6 +12,9 @@ import java.util.HashMap;
 import java.util.Map;
 import org.springframework.web.server.ResponseStatusException;
 import com.team10.uber.user.dto.UserRideSummaryDTO;
+import com.team10.uber.user.dto.TopRiderDTO;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -54,6 +58,15 @@ public class UserService {
     public void deleteUser(Long id) {
         User user = getUserById(id);
         userRepository.delete(user);
+    }
+
+    public List<User> searchUsers(String name, String email, String role) {
+        // Optional: Trim strings or handle empty strings as nulls
+        String searchName = (name != null && !name.trim().isEmpty()) ? name.trim() : null;
+        String searchEmail = (email != null && !email.trim().isEmpty()) ? email.trim() : null;
+        String searchRole = (role != null && !role.trim().isEmpty()) ? role.trim() : null;
+
+        return userRepository.searchUsers(searchName, searchEmail, searchRole);
     }
     public User updatePreferences(Long id, Map<String, Object> newPreferences) {
         User user = userRepository.findById(id)
@@ -127,5 +140,42 @@ public class UserService {
                 totalSpent,
                 averageFare
         );
+    }
+
+    public List<TopRiderDTO> getTopRiders(String startDate, String endDate, int limit) {
+        try {
+            LocalDate start = LocalDate.parse(startDate);
+            LocalDate end = LocalDate.parse(endDate);
+            if (start.isAfter(end)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "startDate must be before endDate");
+            }
+        } catch (DateTimeParseException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid date format. Use yyyy-MM-dd");
+        }
+
+        // Fix: include the full end day by appending time boundaries
+        String startDateTime = startDate + " 00:00:00";
+        String endDateTime   = endDate   + " 23:59:59";
+
+        List<Object[]> results = userRepository.getTopRidersBySpending(startDateTime, endDateTime, limit);
+
+        List<TopRiderDTO> topRiders = new ArrayList<>();
+        for (Object[] row : results) {
+            Long userId = ((Number) row[0]).longValue();
+            String name = (String) row[1];
+            Double totalSpent = ((Number) row[2]).doubleValue();
+            Long rideCount = ((Number) row[3]).longValue();
+            topRiders.add(new TopRiderDTO(userId, name, totalSpent, rideCount));
+        }
+        return topRiders;
+    }
+
+    public List<User> searchByPreference(String key, String value) {
+        // Requirement: throw (400) if key or value is blank
+        if (key == null || key.trim().isEmpty() || value == null || value.trim().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Key and value must not be blank");
+        }
+
+        return userRepository.searchByPreference(key, value);
     }
 }

@@ -1,5 +1,6 @@
 package com.team10.uber.user.controller;
 
+import com.team10.uber.user.enums.Role;
 import com.team10.uber.user.model.User;
 import com.team10.uber.user.service.UserService;
 import org.springframework.http.ResponseEntity;
@@ -7,6 +8,7 @@ import org.springframework.web.bind.annotation.*;
 import com.team10.uber.user.dto.UserProfileDTO;
 import com.team10.uber.user.dto.UserRideSummaryDTO;
 import org.springframework.web.server.ResponseStatusException;
+import com.team10.uber.user.dto.TopRiderDTO;
 
 import java.util.List;
 import java.util.Map;
@@ -47,6 +49,15 @@ public class UserController {
         userService.deleteUser(id);
         return "User deleted successfully";
     }
+    @GetMapping("/search")
+    public ResponseEntity<List<User>> searchUsers(
+            @RequestParam(value = "name", required = false) String name,
+            @RequestParam(value = "email", required = false) String email,
+            @RequestParam(value = "role", required = false) String role) {
+
+        List<User> users = userService.searchUsers(name, email, role);
+        return ResponseEntity.ok(users);
+    }
 
     // S1-F2: Update User Preferences (JSONB)
     @PutMapping("/{id}/preferences")
@@ -71,5 +82,28 @@ public class UserController {
         } catch (ResponseStatusException e) {
             return ResponseEntity.notFound().build();
         }
+    }
+
+    // S1-F6: Top Riders by Spending
+    @GetMapping("/reports/top-riders")
+    public ResponseEntity<?> getTopRiders(
+            @RequestParam String startDate,
+            @RequestParam String endDate,
+            @RequestParam int limit) {
+        try {
+            List<TopRiderDTO> result = userService.getTopRiders(startDate, endDate, limit);
+            return ResponseEntity.ok(result);
+        } catch (ResponseStatusException e) {
+            return ResponseEntity.status(e.getStatusCode()).body(e.getReason());
+        }
+    }
+
+    @GetMapping("/preferences/search")
+    public ResponseEntity<List<User>> searchByPreference(
+            @RequestParam String key,
+            @RequestParam String value) {
+
+        List<User> users = userService.searchByPreference(key, value);
+        return ResponseEntity.ok(users);
     }
 }
