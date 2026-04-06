@@ -169,4 +169,13 @@ public class UserService {
         }
         return topRiders;
     }
+
+    public List<User> searchByPreference(String key, String value) {
+        // Requirement: throw (400) if key or value is blank
+        if (key == null || key.trim().isEmpty() || value == null || value.trim().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Key and value must not be blank");
+        }
+
+        return userRepository.searchByPreference(key, value);
+    }
 }

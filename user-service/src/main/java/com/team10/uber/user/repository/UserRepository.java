@@ -51,4 +51,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
             @Param("endDate") String endDate,
             @Param("limit") int limit
     );
+
+    @Query(value = "SELECT * FROM users u WHERE u.preferences ->> :key = :value", nativeQuery = true)
+    List<User> searchByPreference(@Param("key") String key, @Param("value") String value);
 }
