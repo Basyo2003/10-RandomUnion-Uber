@@ -10,8 +10,7 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 import org.springframework.transaction.annotation.Transactional;
-
-
+import com.team10.uber.payment.dto.UserPaymentSummaryDTO;
 import java.util.List;
 
 @Service
@@ -76,5 +75,35 @@ public class PaymentService {
         payment.setTransactionDetails(details);
 
         return paymentRepository.save(payment);
+    }
+
+    public UserPaymentSummaryDTO getUserPaymentSummary(Long userId) {
+        // a) Verify user exists via native SQL
+        int userCount = paymentRepository.countUserById(userId);
+        if (userCount == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found with id: " + userId);
+        }
+
+        // b) Query payment data grouped by method
+        List<Object[]> results = paymentRepository.findPaymentSummaryByUserId(userId);
+
+        // c) Build method breakdown map
+        Map<String, Double> methodBreakdown = new HashMap<>();
+        for (Object[] row : results) {
+            String method = (String) row[0];
+            Double totalForMethod = ((Number) row[2]).doubleValue();
+            methodBreakdown.put(method, totalForMethod);
+        }
+
+        // d) Calculate totals
+        long totalPayments = 0;
+        double totalAmount = 0.0;
+        for (Object[] row : results) {
+            totalPayments += ((Number) row[1]).longValue();
+            totalAmount += ((Number) row[2]).doubleValue();
+        }
+
+        // e) Build and return DTO
+        return new UserPaymentSummaryDTO(userId, totalPayments, totalAmount, methodBreakdown);
     }
 }
