@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+import com.team10.uber.location.dto.StationaryDriverDTO;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -23,7 +24,7 @@ public class LocationService {
 
     // CREATE
     public Location createLocation(Location location) {
-       // verifyDriverExists(location.getDriverId());
+        driverExists(location.getDriverId());
         return locationRepository.save(location);
     }
 
@@ -44,7 +45,7 @@ public class LocationService {
     public Location updateLocation(Long id, Location updated) {
         Location existing = getLocationById(id);
 
-        //verifyDriverExists(updated.getDriverId());
+        driverExists(updated.getDriverId());
 
         existing.setDriverId(updated.getDriverId());
         existing.setLatitude(updated.getLatitude());
@@ -63,7 +64,7 @@ public class LocationService {
     }
 
     // required by spec (driver is not JPA-managed)
-    private void verifyDriverExists(Long driverId) {
+    private void driverExists(Long driverId) {
         Integer count = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM drivers WHERE id = ?",
                 Integer.class,
@@ -75,5 +76,22 @@ public class LocationService {
                     HttpStatus.NOT_FOUND, "Driver not found"
             );
         }
+    }
+
+    public List<StationaryDriverDTO> getStationaryDrivers(Double maxSpeed, Integer sinceMinutes) {
+        if (maxSpeed == null || maxSpeed < 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "maxSpeed must be >= 0"
+            );
+        }
+
+        if (sinceMinutes == null || sinceMinutes <= 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "sinceMinutes must be > 0"
+            );
+        }
+
+        LocalDateTime cutoffTime = LocalDateTime.now().minusMinutes(sinceMinutes);
+        return locationRepository.findStationaryDrivers(maxSpeed, cutoffTime);
     }
 }
