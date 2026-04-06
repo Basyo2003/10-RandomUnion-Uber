@@ -45,4 +45,12 @@ public class PaymentController {
         paymentService.deletePayment(id);
         return ResponseEntity.noContent().build();
     }
+
+    @PostMapping("/{paymentId}/coupons/{couponId}")
+    public ResponseEntity<Payment> applyCoupon(
+            @PathVariable Long paymentId,
+            @PathVariable Long couponId) {
+        Payment payment = paymentService.applyCoupon(paymentId, couponId);
+        return ResponseEntity.status(HttpStatus.CREATED).body(payment);
+    }
 }
