@@ -33,22 +33,6 @@ public class Location {
 
     public Location() {}
 
-    public Location(Long driverId, Double latitude, Double longitude, Map<String, Object> metadata) {
-        this.driverId = driverId;
-        this.latitude = latitude;
-        this.longitude = longitude;
-        this.metadata = metadata;
-    }
-
-    public Location(Long driverId, Double latitude, Double longitude,
-                    LocalDateTime timestamp, Map<String, Object> metadata) {
-        this.driverId = driverId;
-        this.latitude = latitude;
-        this.longitude = longitude;
-        this.timestamp = timestamp;
-        this.metadata = metadata;
-    }
-
     @PrePersist
     protected void onCreate() {
         this.timestamp = LocalDateTime.now();
