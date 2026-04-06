@@ -37,6 +37,12 @@ public class DriverService {
     }
 
     public List<Driver> searchDrivers(DriverStatus status, Double minRating, Double maxRating) {
+        if (minRating != null && minRating < 0.0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "minRating must be >= 0.0");
+        }
+        if (maxRating != null && maxRating > 5.0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "maxRating must be <= 5.0");
+        }
         if (minRating != null && maxRating != null && minRating > maxRating) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid rating range: minRating > maxRating");
         }
