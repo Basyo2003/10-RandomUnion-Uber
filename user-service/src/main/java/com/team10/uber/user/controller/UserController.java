@@ -43,8 +43,14 @@ public class UserController {
         userService.deleteUser(id);
         return "User deleted successfully";
     }
+
     @GetMapping("/{id}/profile")
     public UserProfileDTO getUserProfile(@PathVariable Long id) {
         return userService.getUserProfile(id);
+    }
+
+    @PutMapping("/{userId}/addresses/{addressId}/default")
+    public UserProfileDTO setDefaultSavedAddress(@PathVariable Long userId, @PathVariable Long addressId) {
+        return userService.setDefaultSavedAddress(userId, addressId);
     }
 }

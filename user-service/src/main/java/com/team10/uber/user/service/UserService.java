@@ -4,7 +4,9 @@ import com.team10.uber.user.dto.AddressDTO;
 import com.team10.uber.user.dto.UserProfileDTO;
 import com.team10.uber.user.model.SavedAddress;
 import com.team10.uber.user.model.User;
+import com.team10.uber.user.repository.SavedAddressRepository;
 import com.team10.uber.user.repository.UserRepository;
+import jakarta.transaction.Transactional;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -16,9 +18,11 @@ import java.util.List;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final SavedAddressRepository savedAddressRepository;
 
-    public UserService(UserRepository userRepository) {
+    public UserService(UserRepository userRepository, SavedAddressRepository savedAddressRepository) {
         this.userRepository = userRepository;
+        this.savedAddressRepository = savedAddressRepository;
     }
 
     public User createUser(User user) {
@@ -81,5 +85,27 @@ public class UserService {
         userProfileDTO.setTotalAddresses(addressDTOList.size());
 
         return userProfileDTO;
+    }
+    @Transactional
+    public UserProfileDTO setDefaultSavedAddress(Long userId, Long addressId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        SavedAddress targetAddress = savedAddressRepository.findById(addressId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Saved address not found"));
+
+        if (!targetAddress.getUser().getId().equals(userId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Saved address does not belong to this user");
+        }
+
+        for (SavedAddress address : user.getSavedAddresses()) {
+            address.setIsDefault(false);
+        }
+
+        targetAddress.setIsDefault(true);
+
+        userRepository.save(user);
+
+        return getUserProfile(userId);
     }
 }
