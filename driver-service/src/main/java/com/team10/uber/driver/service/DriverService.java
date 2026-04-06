@@ -1,6 +1,7 @@
 package com.team10.uber.driver.service;
 
 import com.team10.uber.driver.dto.DriverDocumentAlertDTO;
+import com.team10.uber.driver.enums.DriverStatus;
 import com.team10.uber.driver.model.Driver;
 import com.team10.uber.driver.model.DriverDocument;
 import com.team10.uber.driver.repository.DriverDocumentRepository;
@@ -33,6 +34,19 @@ public class DriverService {
 
     public List<Driver> getAllDrivers() {
         return driverRepository.findAll();
+    }
+
+    public List<Driver> searchDrivers(DriverStatus status, Double minRating, Double maxRating) {
+        if (minRating != null && minRating < 0.0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "minRating must be >= 0.0");
+        }
+        if (maxRating != null && maxRating > 5.0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "maxRating must be <= 5.0");
+        }
+        if (minRating != null && maxRating != null && minRating > maxRating) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid rating range: minRating > maxRating");
+        }
+        return driverRepository.searchDrivers(status, minRating, maxRating);
     }
 
     public Driver getDriverById(Long id) {
