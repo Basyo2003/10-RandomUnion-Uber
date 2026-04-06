@@ -5,6 +5,7 @@ import com.team10.uber.payment.service.PaymentService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import com.team10.uber.payment.dto.ProcessPaymentDTO;
 
 import java.util.List;
 
@@ -44,5 +45,13 @@ public class PaymentController {
     public ResponseEntity<Void> deletePayment(@PathVariable Long id) {
         paymentService.deletePayment(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/ride/{rideId}")
+    public ResponseEntity<Payment> processPaymentForRide(
+            @PathVariable Long rideId,
+            @RequestBody ProcessPaymentDTO dto) {
+        Payment payment = paymentService.processPaymentForRide(rideId, dto);
+        return ResponseEntity.status(HttpStatus.CREATED).body(payment);
     }
 }

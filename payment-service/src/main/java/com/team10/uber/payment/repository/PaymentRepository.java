@@ -54,4 +54,16 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     Object[] findRefundStats(
             @Param("startDate") LocalDateTime startDate,
             @Param("endDate") LocalDateTime endDate);
+
+    // Check ride exists and get its status
+    @Query(value = "SELECT status FROM rides WHERE id = :rideId", nativeQuery = true)
+    String findRideStatusById(@Param("rideId") Long rideId);
+
+    // Get ride fare
+    @Query(value = "SELECT fare FROM rides WHERE id = :rideId", nativeQuery = true)
+    Double findRideFareById(@Param("rideId") Long rideId);
+
+    // Get ride userId
+    @Query(value = "SELECT user_id FROM rides WHERE id = :rideId", nativeQuery = true)
+    Long findRideUserIdById(@Param("rideId") Long rideId);
 }
