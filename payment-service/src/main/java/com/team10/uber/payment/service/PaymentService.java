@@ -9,6 +9,7 @@ import com.team10.uber.payment.enums.PaymentStatus;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
+import org.springframework.transaction.annotation.Transactional;
 
 
 import java.util.List;
@@ -55,6 +56,7 @@ public class PaymentService {
         paymentRepository.deleteById(id);
     }
 
+    @Transactional
     public Payment refundPayment(Long id, String reason) {
         Payment payment = getPaymentById(id);
 
