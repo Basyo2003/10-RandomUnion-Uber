@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/drivers")
@@ -47,6 +48,9 @@ public class DriverController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
         return driverService.getDriverEarningsSummary(id, startDate, endDate);
+    @PutMapping("/{id}/vehicle")
+    public Driver updateVehicleDetails(@PathVariable Long id, @RequestBody Map<String, Object> vehicleUpdates) {
+        return driverService.updateVehicleDetails(id, vehicleUpdates);
     }
 
     @PutMapping("/{id}")

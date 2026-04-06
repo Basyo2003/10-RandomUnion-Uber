@@ -77,6 +77,19 @@ public class DriverService {
         double averageFare = totalRides == 0L ? 0.0 : totalEarnings / totalRides;
 
         return new DriverEarningsDTO(driver.getId(), driver.getName(), totalRides, totalEarnings, averageFare);
+    public Driver updateVehicleDetails(Long id, Map<String, Object> vehicleUpdates) {
+        Driver existingDriver = getDriverById(id); // 404 if not found
+
+        Map<String, Object> merged = new HashMap<>();
+        if (existingDriver.getVehicleDetails() != null) {
+            merged.putAll(existingDriver.getVehicleDetails());
+        }
+        if (vehicleUpdates != null) {
+            merged.putAll(vehicleUpdates);
+        }
+
+        existingDriver.setVehicleDetails(merged);
+        return driverRepository.save(existingDriver);
     }
 
     public void deleteDriver(Long id) {
