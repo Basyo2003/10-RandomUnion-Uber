@@ -23,7 +23,6 @@ public class UserController {
         this.userService = userService;
     }
 
-
     @PostMapping
     public User createUser(@RequestBody User user) {
         return userService.createUser(user);
@@ -49,6 +48,7 @@ public class UserController {
         userService.deleteUser(id);
         return "User deleted successfully";
     }
+
     @GetMapping("/search")
     public ResponseEntity<List<User>> searchUsers(
             @RequestParam(value = "name", required = false) String name,
@@ -69,6 +69,7 @@ public class UserController {
             return ResponseEntity.notFound().build();
         }
     }
+
     @GetMapping("/{id}/profile")
     public UserProfileDTO getUserProfile(@PathVariable Long id) {
         return userService.getUserProfile(id);
@@ -96,5 +97,24 @@ public class UserController {
         } catch (ResponseStatusException e) {
             return ResponseEntity.status(e.getStatusCode()).body(e.getReason());
         }
+    }
+
+    @GetMapping("/preferences/search")
+    public ResponseEntity<List<User>> searchByPreference(
+            @RequestParam String key,
+            @RequestParam String value) {
+
+        List<User> users = userService.searchByPreference(key, value);
+        return ResponseEntity.ok(users);
+    }
+
+    @PutMapping("/{id}/deactivate")
+    public User deactivateUser(@PathVariable Long id) {
+        return userService.deactivateUser(id);
+    }
+
+    @PutMapping("/{userId}/addresses/{addressId}/default")
+    public UserProfileDTO setDefaultSavedAddress(@PathVariable Long userId, @PathVariable Long addressId) {
+        return userService.setDefaultSavedAddress(userId, addressId);
     }
 }

@@ -54,4 +54,7 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     Object[] findRefundStats(
             @Param("startDate") LocalDateTime startDate,
             @Param("endDate") LocalDateTime endDate);
+
+    @Query(value = "SELECT COUNT(*) FROM users WHERE id = :userId", nativeQuery = true)
+    int countUserById(@Param("userId") Long userId);
 }
