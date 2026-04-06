@@ -9,6 +9,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.time.LocalDate;
 
 @Service
 public class LocationService {
@@ -23,7 +24,7 @@ public class LocationService {
 
     // CREATE
     public Location createLocation(Location location) {
-       // verifyDriverExists(location.getDriverId());
+        driverExists(location.getDriverId());
         return locationRepository.save(location);
     }
 
@@ -44,7 +45,7 @@ public class LocationService {
     public Location updateLocation(Long id, Location updated) {
         Location existing = getLocationById(id);
 
-        //verifyDriverExists(updated.getDriverId());
+        driverExists(updated.getDriverId());
 
         existing.setDriverId(updated.getDriverId());
         existing.setLatitude(updated.getLatitude());
@@ -63,7 +64,7 @@ public class LocationService {
     }
 
     // required by spec (driver is not JPA-managed)
-    private void verifyDriverExists(Long driverId) {
+    private void driverExists(Long driverId) {
         Integer count = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM drivers WHERE id = ?",
                 Integer.class,
@@ -75,5 +76,37 @@ public class LocationService {
                     HttpStatus.NOT_FOUND, "Driver not found"
             );
         }
+    }
+
+    public List<Location> getLocationsInDateRange(String startDate, String endDate, Long driverId) {
+
+        if (startDate == null || endDate == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Start and end dates are required");
+        }
+
+        LocalDate start;
+        LocalDate end;
+
+        try {
+            start = LocalDate.parse(startDate);
+            end = LocalDate.parse(endDate);
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid date format. Use YYYY-MM-DD");
+        }
+
+        if (start.isAfter(end)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Start date cannot be after end date");
+        }
+
+        LocalDateTime startDateTime = start.atStartOfDay();
+        LocalDateTime endDateTime = end.atTime(23, 59, 59);
+
+        if (driverId != null) {
+            return locationRepository
+                    .findByDriverIdAndTimestampBetweenOrderByTimestampAsc(driverId, startDateTime, endDateTime);
+        }
+
+        return locationRepository
+                .findByTimestampBetweenOrderByTimestampAsc(startDateTime, endDateTime);
     }
 }
