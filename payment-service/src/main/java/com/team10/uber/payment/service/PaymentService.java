@@ -14,6 +14,7 @@ import java.util.Optional;
 import org.springframework.transaction.annotation.Transactional;
 import com.team10.uber.payment.enums.PaymentStatus;
 import java.time.LocalDateTime;
+import com.team10.uber.payment.dto.PaymentWithCouponsDTO;
 
 import java.util.List;
 
@@ -66,7 +67,7 @@ public class PaymentService {
     }
 
     @Transactional
-    public Payment applyCoupon(Long paymentId, Long couponId) {
+    public PaymentWithCouponsDTO applyCoupon(Long paymentId, Long couponId) {
 
         // a) Find payment
         Payment payment = getPaymentById(paymentId);
@@ -126,6 +127,7 @@ public class PaymentService {
         couponRepository.save(coupon);
 
         // j) Return updated payment
-        return getPaymentById(paymentId);
+        List<PaymentCoupon> appliedCoupons = paymentCouponRepository.findByPaymentId(paymentId);
+        return new PaymentWithCouponsDTO(getPaymentById(paymentId), appliedCoupons);
     }
 }
