@@ -19,26 +19,26 @@ public class Ride {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
+    @Column()
     private Long userId;
 
     @Column
     private Long driverId;
 
-    @Column(nullable = false)
+    @Column()
     private Double pickupLatitude;
 
-    @Column(nullable = false)
+    @Column()
     private Double pickupLongitude;
 
-    @Column(nullable = false)
+    @Column()
     private Double dropoffLatitude;
 
-    @Column(nullable = false)
+    @Column()
     private Double dropoffLongitude;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column()
     private RideStatus status;
 
     @Column
@@ -48,7 +48,7 @@ public class Ride {
     @Column(columnDefinition = "jsonb")
     private Map<String, Object> metadata;
 
-    @Column(nullable = false, updatable = false)
+    @Column(updatable = false)
     private LocalDateTime requestedAt;
 
     @Column

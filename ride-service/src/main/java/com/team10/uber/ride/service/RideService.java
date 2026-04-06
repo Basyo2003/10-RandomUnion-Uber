@@ -28,6 +28,10 @@ public class RideService {
                 .orElseThrow(() -> new RuntimeException("Ride not found with id: " + id));
     }
 
+    public List<Ride> getRidesByDriverId(Long driverId) {
+        return rideRepository.findByDriverId(driverId);
+    }
+
     public Ride updateRide(Long id, Ride updatedRide) {
         Ride existing = getRideById(id);
         existing.setUserId(updatedRide.getUserId());

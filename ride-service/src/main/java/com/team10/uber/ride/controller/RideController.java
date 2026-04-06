@@ -26,9 +26,11 @@ public class RideController {
         return rideService.getAllRides();
     }
 
+
+
     @GetMapping("/{id}")
-    public Ride getRideById(@PathVariable Long id) {
-        return rideService.getRideById(id);
+    public List<Ride> getRideById(@PathVariable Long id) {
+        return rideService.getRidesByDriverId(id);
     }
 
     @PutMapping("/{id}")
