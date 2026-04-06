@@ -1,5 +1,7 @@
 package com.team10.uber.ride.controller;
 
+import com.team10.uber.ride.dto.FareEstimateDTO;
+import com.team10.uber.ride.dto.FareEstimateRequestDTO;
 import com.team10.uber.ride.model.Ride;
 import com.team10.uber.ride.service.RideService;
 import org.springframework.web.bind.annotation.*;
@@ -40,5 +42,10 @@ public class RideController {
     public String deleteRide(@PathVariable Long id) {
         rideService.deleteRide(id);
         return "Ride deleted successfully";
+    }
+
+    @PostMapping("/estimate")
+    public FareEstimateDTO getFareEstimate(@RequestBody FareEstimateRequestDTO request) {
+        return rideService.getFareEstimate(request);
     }
 }
