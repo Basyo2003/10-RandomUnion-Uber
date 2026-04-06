@@ -1,6 +1,7 @@
 package com.team10.uber.driver.service;
 
 import com.team10.uber.driver.dto.DriverDocumentAlertDTO;
+import com.team10.uber.driver.dto.DriverEarningsDTO;
 import com.team10.uber.driver.model.Driver;
 import com.team10.uber.driver.model.DriverDocument;
 import com.team10.uber.driver.repository.DriverDocumentRepository;
@@ -11,6 +12,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -55,6 +58,25 @@ public class DriverService {
         existingDriver.setDriverDocuments(updatedDriver.getDriverDocuments());
 
         return driverRepository.save(existingDriver);
+    }
+
+    public DriverEarningsDTO getDriverEarningsSummary(Long driverId, LocalDate startDate, LocalDate endDate) {
+        Driver driver = getDriverById(driverId); // 404 if not found
+
+        if (startDate.isAfter(endDate)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid date range: startDate > endDate");
+        }
+
+        LocalDateTime startTs = startDate.atStartOfDay();
+        LocalDateTime endExclusive = endDate.plusDays(1).atStartOfDay();
+
+        DriverRepository.EarningsAggregate agg = driverRepository.getEarningsAggregate(driverId, startTs, endExclusive);
+
+        long totalRides = (agg == null || agg.getTotalRides() == null) ? 0L : agg.getTotalRides();
+        double totalEarnings = (agg == null || agg.getTotalEarnings() == null) ? 0.0 : agg.getTotalEarnings();
+        double averageFare = totalRides == 0L ? 0.0 : totalEarnings / totalRides;
+
+        return new DriverEarningsDTO(driver.getId(), driver.getName(), totalRides, totalEarnings, averageFare);
     }
 
     public void deleteDriver(Long id) {
