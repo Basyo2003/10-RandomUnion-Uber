@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.team10.uber.payment.enums.PaymentStatus;
 import java.time.LocalDateTime;
 import com.team10.uber.payment.dto.PaymentWithCouponsDTO;
+import java.time.LocalDateTime;
 
 import java.util.List;
 
@@ -187,5 +188,9 @@ public class PaymentService {
         // j) Return updated payment
         List<PaymentCoupon> appliedCoupons = paymentCouponRepository.findByPaymentId(paymentId);
         return new PaymentWithCouponsDTO(getPaymentById(paymentId), appliedCoupons);
+    }
+
+    public List<Payment> searchPayments(String status, LocalDateTime startDate, LocalDateTime endDate) {
+        return paymentRepository.findByStatusAndDateRange(status, startDate, endDate);
     }
 }
