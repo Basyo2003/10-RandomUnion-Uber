@@ -1,10 +1,18 @@
 package com.team10.uber.ride.controller;
 
+import java.util.List;
+
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
 import com.team10.uber.ride.model.Ride;
 import com.team10.uber.ride.service.RideService;
-import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/rides")
@@ -40,5 +48,9 @@ public class RideController {
     public String deleteRide(@PathVariable Long id) {
         rideService.deleteRide(id);
         return "Ride deleted successfully";
+    }
+     @PutMapping("/{id}/complete")
+    public Ride completeRide(@PathVariable Long id) {
+        return rideService.completeRide(id);
     }
 }
