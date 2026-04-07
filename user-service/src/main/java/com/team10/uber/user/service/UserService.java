@@ -193,6 +193,15 @@ public class UserService {
         return userRepository.searchByPreference(key, value);
     }
 
+    public List<User> searchByLanguageAndRides(String lang, Integer minRides) {
+        if (lang == null || lang.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Language is required");
+        }
+        int rides = (minRides != null) ? minRides : 0;
+
+        return userRepository.findUsersByLanguageAndCompletedRides(lang, rides);
+    }
+
     @Transactional
     public User deactivateUser(Long id) {
         User user = userRepository.findById(id)

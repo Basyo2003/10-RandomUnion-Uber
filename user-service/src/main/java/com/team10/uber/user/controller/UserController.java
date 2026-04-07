@@ -108,6 +108,16 @@ public class UserController {
         return ResponseEntity.ok(users);
     }
 
+    @GetMapping("/preferences/language")
+    public ResponseEntity<List<User>> getUsersByLanguageAndRides(
+            @RequestParam String lang,
+            @RequestParam(defaultValue = "0") int minRides) {
+
+        // The Service layer handles the (400) validation and the Native SQL call
+        List<User> users = userService.searchByLanguageAndRides(lang, minRides);
+        return ResponseEntity.ok(users);
+    }
+  
     @PutMapping("/{id}/deactivate")
     public User deactivateUser(@PathVariable Long id) {
         return userService.deactivateUser(id);
