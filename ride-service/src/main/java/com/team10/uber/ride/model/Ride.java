@@ -1,15 +1,26 @@
 package com.team10.uber.ride.model;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.team10.uber.ride.enums.RideStatus;
-import jakarta.persistence.*;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.annotations.Type;
-import org.hibernate.type.SqlTypes;
-
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.team10.uber.ride.enums.RideStatus;
+
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.Table;
 
 @Entity
 @Table(name = "rides")
@@ -60,7 +71,9 @@ public class Ride {
 
     @PrePersist
     protected void onCreate() {
-        this.requestedAt = LocalDateTime.now();
+        if (this.requestedAt == null) {
+            this.requestedAt = LocalDateTime.now();
+        }
     }
 
     // Getters and Setters
