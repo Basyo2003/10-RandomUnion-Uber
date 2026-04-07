@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+import com.team10.uber.location.dto.NearbyDriverDTO;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -90,5 +91,13 @@ public class LocationController {
         location.setMetadata(metadata);
 
         return locationService.createLocationForDriver(driverId, location);
+    }
+    @GetMapping("/nearby")
+    public List<NearbyDriverDTO> getNearbyDrivers(
+            @RequestParam Double lat,
+            @RequestParam Double lon,
+            @RequestParam Double radiusKm
+    ) {
+        return locationService.findNearbyAvailableDrivers(lat, lon, radiusKm);
     }
 }

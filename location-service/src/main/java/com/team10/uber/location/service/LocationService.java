@@ -6,6 +6,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+import com.team10.uber.location.dto.NearbyDriverDTO;
+import java.util.ArrayList;
+import java.util.Comparator;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -82,4 +85,80 @@ public class LocationService {
         location.setDriverId(driverId);
         return locationRepository.save(location);
     }
+    public List<NearbyDriverDTO> findNearbyAvailableDrivers(Double lat, Double lon, Double radiusKm) {
+        List<Location> latestLocations = locationRepository.findLatestLocationPerDriver();
+        List<NearbyDriverDTO> result = new ArrayList<>();
+
+        for (Location location : latestLocations) {
+            Long driverId = location.getDriverId();
+
+            List<DriverInfo> driverRows = jdbcTemplate.query(
+                    "SELECT id, name, status FROM drivers WHERE id = ?",
+                    (rs, rowNum) -> new DriverInfo(
+                            rs.getLong("id"),
+                            rs.getString("name"),
+                            rs.getString("status")
+                    ),
+                    driverId
+            );
+
+            if (driverRows.isEmpty()) {
+                continue;
+            }
+
+            DriverInfo driver = driverRows.get(0);
+
+            if (!"AVAILABLE".equals(driver.getStatus())) {
+                continue;
+            }
+
+            double distanceKm = calculateDistanceKm(
+                    lat, lon,
+                    location.getLatitude(), location.getLongitude()
+            );
+
+            if (distanceKm <= radiusKm) {
+                result.add(new NearbyDriverDTO(
+                        driverId,
+                        driver.getName(),
+                        location.getLatitude(),
+                        location.getLongitude(),
+                        distanceKm
+                ));
+            }
+        }
+
+        result.sort(Comparator.comparing(NearbyDriverDTO::getDistanceKm));
+        return result;
+    }
+    private double calculateDistanceKm(Double lat1, Double lon1, Double lat2, Double lon2) {
+        double dLat = lat1 - lat2;
+        double dLon = lon1 - lon2;
+        return Math.sqrt(dLat * dLat + dLon * dLon) * 111;
+    }
+
+    private static class DriverInfo {
+        private final Long id;
+        private final String name;
+        private final String status;
+
+        public DriverInfo(Long id, String name, String status) {
+            this.id = id;
+            this.name = name;
+            this.status = status;
+        }
+
+        public Long getId() {
+            return id;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public String getStatus() {
+            return status;
+        }
+    }
+
 }
