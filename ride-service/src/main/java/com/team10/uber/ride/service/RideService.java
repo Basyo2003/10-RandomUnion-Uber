@@ -1,10 +1,15 @@
 package com.team10.uber.ride.service;
 
+import java.util.List;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+
+import com.team10.uber.ride.enums.RideStatus;
 import com.team10.uber.ride.model.Ride;
 import com.team10.uber.ride.repository.RideRepository;
-import org.springframework.stereotype.Service;
-
-import java.util.List;
 
 @Service
 public class RideService {
@@ -45,5 +50,34 @@ public class RideService {
     public void deleteRide(Long id) {
         Ride ride = getRideById(id);
         rideRepository.delete(ride);
+    }
+
+    @Transactional
+    public Ride cancelRide(Long rideId) {
+        Ride ride = rideRepository.findById(rideId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Ride not found with id: " + rideId));
+
+        RideStatus currentStatus = ride.getStatus();
+        if (currentStatus != RideStatus.REQUESTED && currentStatus != RideStatus.ACCEPTED) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Ride can only be cancelled when status is REQUESTED or ACCEPTED");
+        }
+
+        ride.setStatus(RideStatus.CANCELLED);
+
+        if (ride.getDriverId() != null) {
+            if (rideRepository.countDriversById(ride.getDriverId()) == 0) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Driver not found with id: " + ride.getDriverId());
+            }
+
+            int updatedRows = rideRepository.updateDriverStatusToAvailable(ride.getDriverId());
+            if (updatedRows == 0) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Driver not found with id: " + ride.getDriverId());
+            }
+        }
+
+        return rideRepository.save(ride);
     }
 }
