@@ -5,6 +5,10 @@ import com.team10.uber.payment.service.PaymentService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import java.util.Map;
+
+import com.team10.uber.payment.dto.UserPaymentSummaryDTO;
+import com.team10.uber.payment.dto.PaymentWithCouponsDTO;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -39,7 +43,7 @@ public class PaymentController {
 
     @PutMapping("/{id}")
     public ResponseEntity<Payment> updatePayment(@PathVariable Long id,
-                                                 @RequestBody Payment payment) {
+            @RequestBody Payment payment) {
         return ResponseEntity.ok(paymentService.updatePayment(id, payment));
     }
 
@@ -47,6 +51,27 @@ public class PaymentController {
     public ResponseEntity<Void> deletePayment(@PathVariable Long id) {
         paymentService.deletePayment(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/{id}/refund")
+    public ResponseEntity<Payment> refundPayment(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> body) {
+        String reason = body.get("reason");
+        return ResponseEntity.ok(paymentService.refundPayment(id, reason));
+    }
+
+    @GetMapping("/user/{userId}/summary")
+    public ResponseEntity<UserPaymentSummaryDTO> getUserPaymentSummary(@PathVariable Long userId) {
+        return ResponseEntity.ok(paymentService.getUserPaymentSummary(userId));
+    }
+
+    @PostMapping("/{paymentId}/coupons/{couponId}")
+    public ResponseEntity<PaymentWithCouponsDTO> applyCoupon(
+            @PathVariable Long paymentId,
+            @PathVariable Long couponId) {
+        PaymentWithCouponsDTO result = paymentService.applyCoupon(paymentId, couponId);
+        return ResponseEntity.status(HttpStatus.CREATED).body(result);
     }
 
     @GetMapping("/search")
