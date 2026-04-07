@@ -106,4 +106,14 @@ public class UserController {
         List<User> users = userService.searchByPreference(key, value);
         return ResponseEntity.ok(users);
     }
+
+    @GetMapping("/preferences/language")
+    public ResponseEntity<List<User>> getUsersByLanguageAndRides(
+            @RequestParam String lang,
+            @RequestParam(defaultValue = "0") int minRides) {
+
+        // The Service layer handles the (400) validation and the Native SQL call
+        List<User> users = userService.searchByLanguageAndRides(lang, minRides);
+        return ResponseEntity.ok(users);
+    }
 }

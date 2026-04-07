@@ -54,4 +54,14 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     @Query(value = "SELECT * FROM users u WHERE u.preferences ->> :key = :value", nativeQuery = true)
     List<User> searchByPreference(@Param("key") String key, @Param("value") String value);
+
+    @Query(value = "SELECT u.* FROM users u " +
+            "INNER JOIN rides r ON u.id = r.user_id " +
+            "WHERE u.preferences ->> 'language' = :lang " +
+            "AND r.status = 'COMPLETED' " +
+            "GROUP BY u.id " +
+            "HAVING COUNT(r.id) >= :minRides",
+            nativeQuery = true)
+    List<User> findUsersByLanguageAndCompletedRides(@Param("lang") String lang,
+                                                    @Param("minRides") int minRides);
 }
