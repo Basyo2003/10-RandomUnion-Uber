@@ -10,7 +10,9 @@ import com.team10.uber.driver.model.Driver;
 import com.team10.uber.driver.service.DriverDocumentService;
 import com.team10.uber.driver.service.DriverService;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -63,7 +65,24 @@ public class DriverController {
     public Driver updateVehicleDetails(@PathVariable Long id, @RequestBody Map<String, Object> vehicleUpdates) {
         return driverService.updateVehicleDetails(id, vehicleUpdates);
     }
+    @PutMapping("/{id}/availability")
+    public void updateDriverAvailability(
+        @PathVariable Long id,
+        @RequestBody Map<String, String> body) {
 
+    DriverStatus status;
+
+    try {
+        status = DriverStatus.valueOf(body.get("status"));
+    } catch (Exception e) {
+        throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Invalid status value"
+        );
+    }
+
+    driverService.updateDriverAvailability(id, status);
+}
     @PutMapping("/{id}")
     public Driver updateDriver(@PathVariable Long id, @RequestBody Driver updatedDriver) {
         return driverService.updateDriver(id, updatedDriver);

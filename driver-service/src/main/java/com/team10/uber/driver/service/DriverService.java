@@ -149,6 +149,26 @@ public class DriverService {
         return driverRepository.save(driver);
 
     }
+@Transactional
+public void updateDriverAvailability(Long driverId, DriverStatus newStatus) {
+
+    Driver driver = getDriverById(driverId); // already handles 404
+
+    // If trying to go OFFLINE → check active rides
+    if (newStatus == DriverStatus.OFFLINE) {
+        int activeRides = driverRepository.countActiveRides(driverId);
+
+        if (activeRides > 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Driver has active rides and cannot go OFFLINE"
+            );
+        }
+    }
+
+    driver.setStatus(newStatus);
+    driverRepository.save(driver);
+}
 
     public List<DriverDocumentAlertDTO> getDriversWithExpiredDocuments() {
         List<DriverDocument> expiredDocuments = driverDocumentRepository.findExpiredDocuments();

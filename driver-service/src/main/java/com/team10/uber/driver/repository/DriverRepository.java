@@ -55,4 +55,11 @@ public interface DriverRepository extends JpaRepository<Driver, Long> {
     // Get ride status directly as a String — no Ride class needed
     @Query(value = "SELECT status FROM rides WHERE id = :rideId", nativeQuery = true)
     Optional<String> findRideStatusById(@Param("rideId") Long rideId);
+    @Query(value = """
+        SELECT COUNT(*) 
+        FROM rides 
+        WHERE driver_id = :driverId 
+        AND status IN ('REQUESTED', 'ACCEPTED', 'IN_PROGRESS')
+        """, nativeQuery = true)
+int countActiveRides(@Param("driverId") Long driverId);
 }
