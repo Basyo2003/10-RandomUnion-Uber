@@ -83,5 +83,11 @@ public class LocationController {
     ) {
         return locationService.getLocationsInDateRange(startDate, endDate, driverId);
     }
+    @DeleteMapping("/purge")
+    public Map<String, Integer> purgeOldLocations(@RequestParam int olderThanDays) {
+        int deletedCount = locationService.purgeOldLocations(olderThanDays);
+        return Map.of("deletedCount", deletedCount);
+    }
+
 }
 

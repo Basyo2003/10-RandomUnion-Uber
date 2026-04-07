@@ -6,6 +6,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.transaction.annotation.Transactional;
+import java.util.Map;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -108,5 +110,15 @@ public class LocationService {
 
         return locationRepository
                 .findByTimestampBetweenOrderByTimestampAsc(startDateTime, endDateTime);
+    }
+
+    @Transactional
+    public int purgeOldLocations(int olderThanDays) {
+        LocalDateTime cutoff = LocalDateTime.now().minusDays(olderThanDays);
+
+        int count = locationRepository.countLocationsOlderThan(cutoff);
+        locationRepository.deleteLocationsOlderThan(cutoff);
+
+        return count;
     }
 }

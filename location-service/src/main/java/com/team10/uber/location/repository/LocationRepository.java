@@ -3,7 +3,7 @@ package com.team10.uber.location.repository;
 import com.team10.uber.location.model.Location;
 import org.springframework.data.jpa.repository.JpaRepository;
 import java.time.LocalDateTime;
-
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -37,5 +37,12 @@ public interface LocationRepository extends JpaRepository<Location, Long> {
             @Param("startDate") LocalDateTime startDate,
             @Param("endDate") LocalDateTime endDate
     );
+
+    @Query(value = "SELECT COUNT(*) FROM locations WHERE timestamp < :cutoff", nativeQuery = true)
+    int countLocationsOlderThan(@Param("cutoff") LocalDateTime cutoff);
+
+    @Modifying
+    @Query(value = "DELETE FROM locations WHERE timestamp < :cutoff", nativeQuery = true)
+    int deleteLocationsOlderThan(@Param("cutoff") LocalDateTime cutoff);
 }
 
