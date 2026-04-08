@@ -2,6 +2,7 @@ package com.team10.uber.driver.service;
 
 import com.team10.uber.driver.dto.DriverDocumentAlertDTO;
 import com.team10.uber.driver.dto.DriverEarningsDTO;
+import com.team10.uber.driver.dto.TopRatedDriverDTO;
 import com.team10.uber.driver.enums.DriverStatus;
 import com.team10.uber.driver.model.Driver;
 import com.team10.uber.driver.model.DriverDocument;
@@ -112,6 +113,23 @@ public class DriverService {
         Driver driver = getDriverById(id);
         driverRepository.delete(driver);
     }
+public List<TopRatedDriverDTO> getTopRatedDrivers(int limit) {
+
+    List<Object[]> rows = driverRepository.findTopDriversWithRideCount(limit);
+
+    List<TopRatedDriverDTO> result = new ArrayList<>();
+
+    for (Object[] row : rows) {
+        result.add(new TopRatedDriverDTO(
+                ((Number) row[0]).longValue(),   // driverId
+                (String) row[1],                // name
+                ((Number) row[2]).doubleValue(), // rating
+                ((Number) row[3]).longValue()   // totalRides
+        ));
+    }
+
+    return result;
+}
 
     @Transactional
     public Driver rateDriver(Long id, Long rideId, Double rating) {

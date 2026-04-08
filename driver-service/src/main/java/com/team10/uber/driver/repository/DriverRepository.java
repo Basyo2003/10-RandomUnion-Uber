@@ -1,5 +1,6 @@
 package com.team10.uber.driver.repository;
 
+import com.team10.uber.driver.dto.TopRatedDriverDTO;
 import com.team10.uber.driver.enums.DriverStatus;
 import com.team10.uber.driver.model.Driver;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -55,4 +56,15 @@ public interface DriverRepository extends JpaRepository<Driver, Long> {
     // Get ride status directly as a String — no Ride class needed
     @Query(value = "SELECT status FROM rides WHERE id = :rideId", nativeQuery = true)
     Optional<String> findRideStatusById(@Param("rideId") Long rideId);
+@Query(value = """
+    SELECT d.id, d.name, d.rating, COUNT(r.id)
+    FROM drivers d
+    LEFT JOIN rides r 
+        ON d.id = r.driver_id 
+        AND r.status = 'COMPLETED'
+    GROUP BY d.id, d.name, d.rating
+    ORDER BY d.rating DESC, COUNT(r.id) DESC
+    LIMIT :limit
+""", nativeQuery = true)
+List<Object[]> findTopDriversWithRideCount(@Param("limit") int limit);
 }

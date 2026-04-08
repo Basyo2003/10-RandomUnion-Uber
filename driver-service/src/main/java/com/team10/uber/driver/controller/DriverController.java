@@ -1,5 +1,6 @@
 package com.team10.uber.driver.controller;
 
+import com.team10.uber.driver.dto.TopRatedDriverDTO;
 import com.team10.uber.driver.dto.DriverDocumentAlertDTO;
 import com.team10.uber.driver.dto.DriverEarningsDTO;
 import com.team10.uber.driver.dto.DriverWithDocumentsDTO;
@@ -37,6 +38,13 @@ public class DriverController {
     public List<Driver> getAllDrivers() {
         return driverService.getAllDrivers();
     }
+  @GetMapping("/reports/top-rated")
+public List<TopRatedDriverDTO> getTopRatedDrivers(
+        @RequestParam(defaultValue = "5") int limit) {
+
+    return driverService.getTopRatedDrivers(limit);
+}
+
 
     @GetMapping("/{id}")
     public Driver getDriverById(@PathVariable Long id) {
