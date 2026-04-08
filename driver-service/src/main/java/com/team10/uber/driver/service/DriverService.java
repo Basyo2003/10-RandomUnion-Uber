@@ -88,6 +88,22 @@ public class DriverService {
         existingDriver.setVehicleDetails(merged);
         return driverRepository.save(existingDriver);
     }
+    public List<Driver> filterByVehicleType(String type, DriverStatus status) {
+
+    System.out.println("TYPE = " + type);
+    System.out.println("STATUS = " + status);
+
+    if (type == null || type.isBlank()) {
+        throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Vehicle type is required"
+        );
+    }
+
+    String statusValue = (status != null) ? status.name() : null;
+
+    return driverRepository.findByVehicleType(type, statusValue);
+}
 
     public DriverEarningsDTO getDriverEarningsSummary(Long driverId, LocalDate startDate, LocalDate endDate) {
         Driver driver = getDriverById(driverId); // 404 if not found

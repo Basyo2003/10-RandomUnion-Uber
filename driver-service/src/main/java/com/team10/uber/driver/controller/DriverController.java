@@ -10,7 +10,9 @@ import com.team10.uber.driver.model.Driver;
 import com.team10.uber.driver.service.DriverDocumentService;
 import com.team10.uber.driver.service.DriverService;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -37,6 +39,33 @@ public class DriverController {
     public List<Driver> getAllDrivers() {
         return driverService.getAllDrivers();
     }
+    @GetMapping("/search")
+    public List<Driver> searchDrivers(
+            @RequestParam(required = false) DriverStatus status,
+            @RequestParam(required = false) Double minRating,
+            @RequestParam(required = false) Double maxRating) {
+        return driverService.searchDrivers(status, minRating, maxRating);
+    }
+@GetMapping("/vehicle-type")
+public List<Driver> filterByVehicleType(
+        @RequestParam(name = "type") String type,
+        @RequestParam(name = "status", required = false) String status) {
+
+    System.out.println("TYPE = " + type);  
+    System.out.println("STATUS = " + status);
+
+    DriverStatus driverStatus = null;
+
+    if (status != null) {
+        try {
+            driverStatus = DriverStatus.valueOf(status);
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid status value");
+        }
+    }
+
+    return driverService.filterByVehicleType(type, driverStatus);
+}
 
     @GetMapping("/{id}")
     public Driver getDriverById(@PathVariable Long id) {
@@ -51,13 +80,8 @@ public class DriverController {
         return driverService.getDriverEarningsSummary(id, startDate, endDate);
     }
 
-    @GetMapping("/search")
-    public List<Driver> searchDrivers(
-            @RequestParam(required = false) DriverStatus status,
-            @RequestParam(required = false) Double minRating,
-            @RequestParam(required = false) Double maxRating) {
-        return driverService.searchDrivers(status, minRating, maxRating);
-    }
+    
+
 
     @PutMapping("/{id}/vehicle")
     public Driver updateVehicleDetails(@PathVariable Long id, @RequestBody Map<String, Object> vehicleUpdates) {

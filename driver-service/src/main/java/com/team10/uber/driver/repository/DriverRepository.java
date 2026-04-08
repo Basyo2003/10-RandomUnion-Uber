@@ -55,4 +55,12 @@ public interface DriverRepository extends JpaRepository<Driver, Long> {
     // Get ride status directly as a String — no Ride class needed
     @Query(value = "SELECT status FROM rides WHERE id = :rideId", nativeQuery = true)
     Optional<String> findRideStatusById(@Param("rideId") Long rideId);
+@Query(value = """
+        SELECT * FROM drivers
+        WHERE LOWER((CAST(vehicle_details AS jsonb) ->> 'type')) = LOWER(:type)
+        AND (:status IS NULL OR status = :status)
+        """, nativeQuery = true)
+List<Driver> findByVehicleType(
+        @Param("type") String type,
+        @Param("status") String status);
 }
