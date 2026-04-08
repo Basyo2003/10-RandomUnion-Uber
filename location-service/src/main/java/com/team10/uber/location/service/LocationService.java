@@ -1,4 +1,5 @@
 package com.team10.uber.location.service;
+import com.team10.uber.location.repository.LocationRepository;
 
 import com.team10.uber.location.model.Location;
 import com.team10.uber.location.repository.LocationRepository;
@@ -23,7 +24,7 @@ public class LocationService {
 
     // CREATE
     public Location createLocation(Location location) {
-        driverExists(location.getDriverId());
+        locationRepository.driverExists(jdbcTemplate,location.getDriverId());
         return locationRepository.save(location);
     }
 
@@ -44,7 +45,7 @@ public class LocationService {
     public Location updateLocation(Long id, Location updated) {
         Location existing = getLocationById(id);
 
-        driverExists(updated.getDriverId());
+        locationRepository.driverExists(jdbcTemplate,updated.getDriverId());
 
         existing.setDriverId(updated.getDriverId());
         existing.setLatitude(updated.getLatitude());
@@ -63,23 +64,11 @@ public class LocationService {
     }
 
     // required by spec (driver is not JPA-managed)
-    private void driverExists(Long driverId) {
-        Integer count = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM drivers WHERE id = ?",
-                Integer.class,
-                driverId
-        );
 
-        if (count == null || count == 0) {
-            throw new ResponseStatusException(
-                    HttpStatus.NOT_FOUND, "Driver not found"
-            );
-        }
-    }
 
     //Service methods
     public Location getLatestLocationByDriverId(Long driverId) {
-        driverExists(driverId);
+        locationRepository.driverExists(jdbcTemplate,driverId);
 
         return locationRepository.findTopByDriverIdOrderByTimestampDesc(driverId)
                 .orElseThrow(() -> new ResponseStatusException(
