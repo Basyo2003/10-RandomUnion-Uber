@@ -60,7 +60,8 @@ public class RideService {
         RideStatus currentStatus = ride.getStatus();
         if (currentStatus != RideStatus.REQUESTED && currentStatus != RideStatus.ACCEPTED) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Ride can only be cancelled when status is REQUESTED or ACCEPTED");
+                "Ride can only be cancelled when status is REQUESTED or ACCEPTED. Current status: "
+                    + currentStatus);
         }
 
         ride.setStatus(RideStatus.CANCELLED);
