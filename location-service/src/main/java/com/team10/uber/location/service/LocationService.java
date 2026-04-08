@@ -66,7 +66,7 @@ public class LocationService {
     // required by spec (driver is not JPA-managed)
 
 
-    //Service methods
+    //S4-F1
     public Location getLatestLocationByDriverId(Long driverId) {
         locationRepository.driverExists(jdbcTemplate,driverId);
 

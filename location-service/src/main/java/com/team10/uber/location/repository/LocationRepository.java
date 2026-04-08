@@ -10,7 +10,7 @@ import java.util.Optional;
 
 public interface LocationRepository extends JpaRepository<Location, Long> {
 
-    // For feature S4-F1 (latest location)
+    //S4-F1
     Optional<Location> findTopByDriverIdOrderByTimestampDesc(Long driverId);
 
     default void driverExists(JdbcTemplate jdbcTemplate, Long driverId) {

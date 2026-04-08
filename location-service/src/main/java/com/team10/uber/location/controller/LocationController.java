@@ -74,6 +74,7 @@ public class LocationController {
         return Map.of("message", "Location deleted successfully");
     }
 
+    //S4-F1
     @GetMapping("/driver/{driverId}/latest")
     public Location getLatestLocationByDriverId(@PathVariable Long driverId) {
         return locationService.getLatestLocationByDriverId(driverId);
