@@ -10,6 +10,10 @@ import com.team10.uber.ride.model.Ride;
 
 public interface RideRepository extends JpaRepository<Ride, Long> {
 
+    // 0) Check if driver exists by id
+    @Query(value = "SELECT COUNT(1) FROM drivers WHERE id = :driverId", nativeQuery = true)
+    int countDriverById(@Param("driverId") Long driverId);
+
     // 1) Update driver status to AVAILABLE
     @Modifying
     @Transactional

@@ -61,12 +61,15 @@ public class RideService {
 
         // 2) Validate status
         if (ride.getStatus() != RideStatus.IN_PROGRESS) {
-            throw new InvalidRideStatusException("Only IN_PROGRESS rides can be completed");
+            throw new InvalidRideStatusException(
+                    "Ride status must be IN_PROGRESS to complete. Current status: " + ride.getStatus()
+            );
         }
 
-        // 3) Validate driver is assigned on ride
-        if (ride.getDriverId() == null) {
-            throw new DriverNotFoundException("Driver not found for ride id: " + rideId);
+        // 3) Validate driver exists and is assigned to this ride
+        int driverExists = rideRepository.countDriverById(ride.getDriverId());
+        if (driverExists == 0) {
+            throw new DriverNotFoundException("Driver not found with id: " + ride.getDriverId());
         }
 
         // 4) Set ride as completed
