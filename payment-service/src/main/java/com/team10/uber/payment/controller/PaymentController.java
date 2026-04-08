@@ -95,4 +95,9 @@ public class PaymentController {
         LocalDateTime end   = LocalDateTime.parse(endDate   + "T23:59:59");
         return ResponseEntity.ok(paymentService.getRevenueReport(start, end));
     }
+
+    @PutMapping("/{id}/retry")
+    public ResponseEntity<Payment> retryPayment(@PathVariable Long id) {
+        return ResponseEntity.ok(paymentService.retryPayment(id));
+    }
 }
