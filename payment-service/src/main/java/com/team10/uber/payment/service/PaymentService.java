@@ -220,4 +220,28 @@ public class PaymentService {
 
         return new RevenueReportDTO(totalRevenue, totalTransactions, averagePayment, refundedAmount, refundCount);
     }
+
+    @Transactional
+    public Payment retryPayment(Long id) {
+        Payment payment = paymentRepository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Payment not found"));
+    
+        if (payment.getStatus() != PaymentStatus.FAILED) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only FAILED payments can be retried");
+        }
+    
+        payment.setStatus(PaymentStatus.COMPLETED);
+    
+        Map<String, Object> details = payment.getTransactionDetails();
+        if (details == null) {
+            details = new java.util.HashMap<>();
+        }
+    
+        int retryAttempt = details.containsKey("retryAttempt") ? ((Number) details.get("retryAttempt")).intValue() + 1 : 1;
+    
+        details.put("retryAttempt", retryAttempt);
+        details.put("gatewayResponse", "approved");
+        payment.setTransactionDetails(details);
+    
+        return paymentRepository.save(payment);
+    }
 }
