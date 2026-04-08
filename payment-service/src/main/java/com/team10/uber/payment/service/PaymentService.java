@@ -204,12 +204,19 @@ public class PaymentService {
         Object[] revenueRow = paymentRepository.findRevenueStats(startDate, endDate);
         Object[] refundRow  = paymentRepository.findRefundStats(startDate, endDate);
 
-        Double totalRevenue      = revenueRow[0] != null ? ((Number) revenueRow[0]).doubleValue() : 0.0;
-        Long   totalTransactions = revenueRow[1] != null ? ((Number) revenueRow[1]).longValue()   : 0L;
-        Double averagePayment    = (totalTransactions > 0) ? totalRevenue / totalTransactions      : 0.0;
+        if (revenueRow != null && revenueRow.length > 0 && revenueRow[0] instanceof Object[]) {
+            revenueRow = (Object[]) revenueRow[0];
+        }
+        if (refundRow != null && refundRow.length > 0 && refundRow[0] instanceof Object[]) {
+            refundRow = (Object[]) refundRow[0];
+        }
 
-        Double refundedAmount = refundRow[0] != null ? ((Number) refundRow[0]).doubleValue() : 0.0;
-        Long   refundCount    = refundRow[1] != null ? ((Number) refundRow[1]).longValue()   : 0L;
+        Double totalRevenue = (revenueRow != null && revenueRow.length > 0 && revenueRow[0] != null) ? ((Number) revenueRow[0]).doubleValue() : 0.0;
+        Long   totalTransactions = (revenueRow != null && revenueRow.length > 1 && revenueRow[1] != null) ? ((Number) revenueRow[1]).longValue() : 0L;
+        Double averagePayment= (totalTransactions > 0) ? totalRevenue / totalTransactions : 0.0;
+
+        Double refundedAmount = (refundRow != null && refundRow.length > 0 && refundRow[0] != null) ? ((Number) refundRow[0]).doubleValue() : 0.0;
+        Long   refundCount = (refundRow != null && refundRow.length > 1 && refundRow[1] != null) ? ((Number) refundRow[1]).longValue() : 0L;
 
         return new RevenueReportDTO(totalRevenue, totalTransactions, averagePayment, refundedAmount, refundCount);
     }
