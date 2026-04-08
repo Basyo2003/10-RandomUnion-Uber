@@ -23,7 +23,6 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 @Service
 public class UserService {
@@ -45,11 +44,12 @@ public class UserService {
     }
 
     public User getUserById(Long id) {
-        return findUserByIdOrThrow(id);
+        return userRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("User not found with id: " + id));
     }
 
     public User updateUser(Long id, User updatedUser) {
-        User existingUser = findUserByIdOrThrow(id);
+        User existingUser = getUserById(id);
 
         existingUser.setName(updatedUser.getName());
         existingUser.setEmail(updatedUser.getEmail());
@@ -63,7 +63,7 @@ public class UserService {
     }
 
     public void deleteUser(Long id) {
-        User user = findUserByIdOrThrow(id);
+        User user = getUserById(id);
         userRepository.delete(user);
     }
 
