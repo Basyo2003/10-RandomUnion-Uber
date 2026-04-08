@@ -9,10 +9,10 @@ import java.util.Map;
 
 import com.team10.uber.payment.dto.UserPaymentSummaryDTO;
 import com.team10.uber.payment.dto.PaymentWithCouponsDTO;
+import com.team10.uber.payment.dto.RevenueReportDTO;
+
 import java.time.LocalDateTime;
 import java.util.List;
-import org.springframework.web.bind.annotation.RequestParam;
-
 import java.util.List;
 
 @RestController
@@ -85,5 +85,14 @@ public class PaymentController {
 
         List<Payment> payments = paymentService.searchPayments(status, start, end);
         return ResponseEntity.ok(payments);
+    }
+
+    @GetMapping("/reports/revenue")
+    public ResponseEntity<RevenueReportDTO> getRevenueReport(
+            @RequestParam String startDate,
+            @RequestParam String endDate) {
+        LocalDateTime start = LocalDateTime.parse(startDate + "T00:00:00");
+        LocalDateTime end   = LocalDateTime.parse(endDate   + "T23:59:59");
+        return ResponseEntity.ok(paymentService.getRevenueReport(start, end));
     }
 }

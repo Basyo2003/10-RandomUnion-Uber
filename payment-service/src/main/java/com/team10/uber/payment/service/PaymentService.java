@@ -21,6 +21,8 @@ import org.springframework.transaction.annotation.Transactional;
 import com.team10.uber.payment.enums.PaymentStatus;
 import java.time.LocalDateTime;
 import com.team10.uber.payment.dto.PaymentWithCouponsDTO;
+import com.team10.uber.payment.dto.RevenueReportDTO;
+
 import java.time.LocalDateTime;
 
 import java.util.List;
@@ -192,5 +194,23 @@ public class PaymentService {
 
     public List<Payment> searchPayments(String status, LocalDateTime startDate, LocalDateTime endDate) {
         return paymentRepository.findByStatusAndDateRange(status, startDate, endDate);
+    }
+
+    public RevenueReportDTO getRevenueReport(LocalDateTime startDate, LocalDateTime endDate) {
+        if (startDate.isAfter(endDate)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "startDate must be before endDate");
+        }
+
+        Object[] revenueRow = paymentRepository.findRevenueStats(startDate, endDate);
+        Object[] refundRow  = paymentRepository.findRefundStats(startDate, endDate);
+
+        Double totalRevenue      = revenueRow[0] != null ? ((Number) revenueRow[0]).doubleValue() : 0.0;
+        Long   totalTransactions = revenueRow[1] != null ? ((Number) revenueRow[1]).longValue()   : 0L;
+        Double averagePayment    = (totalTransactions > 0) ? totalRevenue / totalTransactions      : 0.0;
+
+        Double refundedAmount = refundRow[0] != null ? ((Number) refundRow[0]).doubleValue() : 0.0;
+        Long   refundCount    = refundRow[1] != null ? ((Number) refundRow[1]).longValue()   : 0L;
+
+        return new RevenueReportDTO(totalRevenue, totalTransactions, averagePayment, refundedAmount, refundCount);
     }
 }
