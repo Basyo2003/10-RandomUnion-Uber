@@ -75,6 +75,7 @@ public class LocationController {
         return Map.of("message", "Location deleted successfully");
     }
 
+    //S4-F9
     @GetMapping("/stationary")
     public ResponseEntity<?> getStationaryDrivers(
             @RequestParam Double maxSpeed,
