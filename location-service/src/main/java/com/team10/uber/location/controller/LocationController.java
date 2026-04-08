@@ -1,5 +1,6 @@
 package com.team10.uber.location.controller;
 
+import com.team10.uber.location.dto.DriverMovementSummaryDTO;
 import com.team10.uber.location.model.Location;
 import com.team10.uber.location.service.LocationService;
 import org.springframework.http.HttpStatus;
@@ -7,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -72,5 +74,15 @@ public class LocationController {
     public Map<String, String> deleteLocation(@PathVariable Long id) {
         locationService.deleteLocation(id);
         return Map.of("message", "Location deleted successfully");
+    }
+
+    //S4-F8
+    @GetMapping("/driver/{driverId}/summary")
+    public DriverMovementSummaryDTO getDriverMovementSummary(
+            @PathVariable Long driverId,
+            @RequestParam LocalDate startDate,
+            @RequestParam LocalDate endDate
+    ) {
+        return locationService.getDriverMovementSummary(driverId, startDate, endDate);
     }
 }

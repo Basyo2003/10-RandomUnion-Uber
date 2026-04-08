@@ -1,21 +1,21 @@
 package com.team10.uber.location.dto;
 
 import java.time.LocalDateTime;
-
+//S4-F8
 public class DriverMovementSummaryDTO {
 
     private Long driverId;
-    private int totalLocationPoints;
-    private double averageSpeed;
-    private double maxSpeed;
+    private Long totalLocationPoints;
+    private Double averageSpeed;
+    private Double maxSpeed;
     private LocalDateTime firstTimestamp;
     private LocalDateTime lastTimestamp;
 
     public DriverMovementSummaryDTO() {
     }
 
-    public DriverMovementSummaryDTO(Long driverId, int totalLocationPoints, double averageSpeed, double maxSpeed,
-                                    LocalDateTime firstTimestamp, LocalDateTime lastTimestamp) {
+    public DriverMovementSummaryDTO(Long driverId, Long totalLocationPoints, Double averageSpeed,
+                                    Double maxSpeed, LocalDateTime firstTimestamp, LocalDateTime lastTimestamp) {
         this.driverId = driverId;
         this.totalLocationPoints = totalLocationPoints;
         this.averageSpeed = averageSpeed;
@@ -32,28 +32,28 @@ public class DriverMovementSummaryDTO {
         this.driverId = driverId;
     }
 
-    public int getTotalLocationPoints() {
+    public Long getTotalLocationPoints() {
         return totalLocationPoints;
     }
 
-    public void setTotalLocationPoints(int totalLocationPoints) {
+    public void setTotalLocationPoints(Long totalLocationPoints) {
         this.totalLocationPoints = totalLocationPoints;
     }
 
-    public double getAverageSpeed() {
+    public Double getAverageSpeed() {
         return averageSpeed;
     }
 
-    public void setAverageSpeed(double averageSpeed) {
+    public void setAverageSpeed(Double averageSpeed) {
         this.averageSpeed = averageSpeed;
     }
 
-    public void setMaxSpeed(double maxSpeed) {
-        this.maxSpeed = maxSpeed;
+    public Double getMaxSpeed() {
+        return maxSpeed;
     }
 
-    public double getMaxSpeed() {
-        return maxSpeed;
+    public void setMaxSpeed(Double maxSpeed) {
+        this.maxSpeed = maxSpeed;
     }
 
     public LocalDateTime getFirstTimestamp() {
