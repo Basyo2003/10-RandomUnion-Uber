@@ -1,10 +1,15 @@
 package com.team10.uber.user.controller;
 
+import com.team10.uber.user.dto.TopRiderDTO;
+import com.team10.uber.user.dto.UserProfileDTO;
+import com.team10.uber.user.dto.UserRideSummaryDTO;
 import com.team10.uber.user.model.User;
 import com.team10.uber.user.service.UserService;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/users")
@@ -41,5 +46,55 @@ public class UserController {
     public String deleteUser(@PathVariable Long id) {
         userService.deleteUser(id);
         return "User deleted successfully";
+    }
+
+    @GetMapping("/search")
+    public ResponseEntity<List<User>> searchUsers(
+            @RequestParam(value = "name", required = false) String name,
+            @RequestParam(value = "email", required = false) String email,
+            @RequestParam(value = "role", required = false) String role) {
+        return ResponseEntity.ok(userService.searchUsers(name, email, role));
+    }
+
+    @PutMapping("/{id}/preferences")
+    public ResponseEntity<User> updatePreferences(@PathVariable Long id, @RequestBody Map<String, Object> preferences) {
+        return ResponseEntity.ok(userService.updatePreferences(id, preferences));
+    }
+
+    @GetMapping("/{id}/ride-summary")
+    public ResponseEntity<UserRideSummaryDTO> getUserRideSummary(@PathVariable Long id) {
+        return ResponseEntity.ok(userService.getUserRideSummary(id));
+    }
+
+    @PutMapping("/{id}/deactivate")
+    public ResponseEntity<User> deactivateUser(@PathVariable Long id) {
+        return ResponseEntity.ok(userService.deactivateUser(id));
+    }
+
+    @GetMapping("/{id}/profile")
+    public UserProfileDTO getUserProfile(@PathVariable Long id) {
+        return userService.getUserProfile(id);
+    }
+
+    @GetMapping("/preferences/search")
+    public ResponseEntity<List<User>> searchByPreference(
+            @RequestParam String key,
+            @RequestParam String value) {
+        return ResponseEntity.ok(userService.searchByPreference(key, value));
+    }
+
+    @GetMapping("/reports/top-riders")
+    public ResponseEntity<List<TopRiderDTO>> getTopRiders(
+            @RequestParam String startDate,
+            @RequestParam String endDate,
+            @RequestParam int limit) {
+        return ResponseEntity.ok(userService.getTopRiders(startDate, endDate, limit));
+    }
+
+    @GetMapping("/preferences/language")
+    public ResponseEntity<List<User>> getUsersByLanguageAndRides(
+            @RequestParam String lang,
+            @RequestParam(defaultValue = "0") int minRides) {
+        return ResponseEntity.ok(userService.searchByLanguageAndRides(lang, minRides));
     }
 }
