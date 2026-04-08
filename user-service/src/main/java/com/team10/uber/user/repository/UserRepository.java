@@ -1,22 +1,23 @@
 package com.team10.uber.user.repository;
 
-
+import com.team10.uber.user.enums.Role;
 import com.team10.uber.user.model.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface UserRepository extends JpaRepository<User, Long> {
     @Query(value = "SELECT * FROM users u WHERE " +
             "(:name IS NULL OR LOWER(u.name) LIKE LOWER(CONCAT('%', :name, '%'))) AND " +
             "(:email IS NULL OR LOWER(u.email) LIKE LOWER(CONCAT('%', :email, '%'))) AND " +
-            "(:role IS NULL OR u.role = :role)",
-            nativeQuery = true)
+            "(:role IS NULL OR u.role = :role)", nativeQuery = true)
     List<User> searchUsers(@Param("name") String name,
-                           @Param("email") String email,
-                           @Param("role") String role);
+            @Param("email") String email,
+            @Param("role") String role);
 
     @Query(value = """
             SELECT
@@ -30,19 +31,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
             """, nativeQuery = true)
     List<Object[]> getRideSummaryByUserId(@Param("userId") Long userId);
 
-    @Query(value = """
-            SELECT EXISTS (
-                SELECT 1
-                FROM rides r
-                WHERE r.user_id = :userId
-                  AND r.status IN ('REQUESTED', 'ACCEPTED', 'IN_PROGRESS')
-            )
-            """, nativeQuery = true)
-    boolean hasActiveRides(@Param("userId") Long userId);
-
-    @Query(value = "SELECT * FROM users u WHERE u.preferences ->> :key = :value", nativeQuery = true)
-    List<User> searchByPreference(@Param("key") String key, @Param("value") String value);
-
+    // S1-F6: Top Riders by Spending
     @Query(value = """
             SELECT
                 u.id AS userId,
@@ -50,8 +39,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
                 COALESCE(SUM(CASE WHEN r.status = 'COMPLETED' THEN r.fare ELSE 0 END), 0) AS totalSpent,
                 COUNT(CASE WHEN r.status = 'COMPLETED' THEN 1 END) AS rideCount
             FROM users u
-            LEFT JOIN rides r ON u.id = r.user_id
-              AND r.requested_at BETWEEN CAST(:startDate AS timestamp) AND CAST(:endDate AS timestamp)
+            LEFT JOIN rides r ON r.user_id = u.id
+            AND r.requested_at BETWEEN CAST(:startDate AS timestamp) AND CAST(:endDate AS timestamp)
             GROUP BY u.id, u.name
             HAVING SUM(CASE WHEN r.status = 'COMPLETED' THEN r.fare ELSE 0 END) > 0
             ORDER BY totalSpent DESC
@@ -60,17 +49,26 @@ public interface UserRepository extends JpaRepository<User, Long> {
     List<Object[]> getTopRidersBySpending(
             @Param("startDate") String startDate,
             @Param("endDate") String endDate,
-            @Param("limit") int limit
-    );
+            @Param("limit") int limit);
 
+    @Query(value = "SELECT * FROM users u WHERE u.preferences ->> :key = :value", nativeQuery = true)
+    List<User> searchByPreference(@Param("key") String key, @Param("value") String value);
+
+    @Query(value = "SELECT u.* FROM users u " +
+            "INNER JOIN rides r ON u.id = r.user_id " +
+            "WHERE u.preferences ->> 'language' = :lang " +
+            "AND r.status = 'COMPLETED' " +
+            "GROUP BY u.id " +
+            "HAVING COUNT(r.id) >= :minRides",
+            nativeQuery = true)
+    List<User> findUsersByLanguageAndCompletedRides(@Param("lang") String lang,
+                                                    @Param("minRides") int minRides);
+           
     @Query(value = """
-            SELECT u.*
-            FROM users u
-            JOIN rides r ON u.id = r.user_id
-            WHERE u.preferences ->> 'language' = :lang
-              AND r.status = 'COMPLETED'
-            GROUP BY u.id
-            HAVING COUNT(r.id) >= :minRides
+            SELECT COUNT(*) > 0
+            FROM rides
+            WHERE user_id = :userId
+              AND status NOT IN ('COMPLETED', 'CANCELLED')
             """, nativeQuery = true)
-    List<User> findUsersByLanguageAndCompletedRides(@Param("lang") String lang, @Param("minRides") int minRides);
+    boolean hasActiveRides(@Param("userId") Long userId);
 }

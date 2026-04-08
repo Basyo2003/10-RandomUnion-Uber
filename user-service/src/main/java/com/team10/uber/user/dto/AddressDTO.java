@@ -1,40 +1,61 @@
 package com.team10.uber.user.dto;
 
-import java.time.LocalDateTime;
-import java.util.HashMap;
 import java.util.Map;
 
 public class AddressDTO {
-    private Long id;
+
     private String label;
     private String address;
     private Double latitude;
     private Double longitude;
     private Boolean isDefault;
-    private Map<String, Object> metadata = new HashMap<>();
-    private LocalDateTime createdAt;
+    private Map<String, Object> metadata;
 
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
+    public String getLabel() {
+        return label;
+    }
 
-    public String getLabel() { return label; }
-    public void setLabel(String label) { this.label = label; }
+    public void setLabel(String label) {
+        this.label = label;
+    }
 
-    public String getAddress() { return address; }
-    public void setAddress(String address) { this.address = address; }
+    public String getAddress() {
+        return address;
+    }
 
-    public Double getLatitude() { return latitude; }
-    public void setLatitude(Double latitude) { this.latitude = latitude; }
+    public void setAddress(String address) {
+        this.address = address;
+    }
 
-    public Double getLongitude() { return longitude; }
-    public void setLongitude(Double longitude) { this.longitude = longitude; }
+    public Double getLatitude() {
+        return latitude;
+    }
 
-    public Boolean getIsDefault() { return isDefault; }
-    public void setIsDefault(Boolean isDefault) { this.isDefault = isDefault; }
+    public void setLatitude(Double latitude) {
+        this.latitude = latitude;
+    }
 
-    public Map<String, Object> getMetadata() { return metadata; }
-    public void setMetadata(Map<String, Object> metadata) { this.metadata = metadata; }
+    public Double getLongitude() {
+        return longitude;
+    }
 
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    public void setLongitude(Double longitude) {
+        this.longitude = longitude;
+    }
+
+    public Boolean getIsDefault() {
+        return isDefault;
+    }
+
+    public void setIsDefault(Boolean isDefault) {
+        this.isDefault = isDefault;
+    }
+
+    public Map<String, Object> getMetadata() {
+        return metadata;
+    }
+
+    public void setMetadata(Map<String, Object> metadata) {
+        this.metadata = metadata;
+    }
 }

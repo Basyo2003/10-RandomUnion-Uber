@@ -1,5 +1,7 @@
 package com.team10.uber.user.dto;
 
+
+
 public class UserRideSummaryDTO {
 
     private Long userId;
@@ -25,24 +27,59 @@ public class UserRideSummaryDTO {
         this.averageFare = averageFare;
     }
 
-    public Long getUserId() { return userId; }
-    public void setUserId(Long userId) { this.userId = userId; }
+    public Long getUserId() {
+        return userId;
+    }
 
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
+    public void setUserId(Long userId) {
+        this.userId = userId;
+    }
 
-    public Long getTotalRides() { return totalRides; }
-    public void setTotalRides(Long totalRides) { this.totalRides = totalRides; }
+    public String getName() {
+        return name;
+    }
 
-    public Long getCompletedRides() { return completedRides; }
-    public void setCompletedRides(Long completedRides) { this.completedRides = completedRides; }
+    public void setName(String name) {
+        this.name = name;
+    }
 
-    public Long getCancelledRides() { return cancelledRides; }
-    public void setCancelledRides(Long cancelledRides) { this.cancelledRides = cancelledRides; }
+    public Long getTotalRides() {
+        return totalRides;
+    }
 
-    public Double getTotalSpent() { return totalSpent; }
-    public void setTotalSpent(Double totalSpent) { this.totalSpent = totalSpent; }
+    public void setTotalRides(Long totalRides) {
+        this.totalRides = totalRides;
+    }
 
-    public Double getAverageFare() { return averageFare; }
-    public void setAverageFare(Double averageFare) { this.averageFare = averageFare; }
+    public Long getCompletedRides() {
+        return completedRides;
+    }
+
+    public void setCompletedRides(Long completedRides) {
+        this.completedRides = completedRides;
+    }
+
+    public Long getCancelledRides() {
+        return cancelledRides;
+    }
+
+    public void setCancelledRides(Long cancelledRides) {
+        this.cancelledRides = cancelledRides;
+    }
+
+    public Double getTotalSpent() {
+        return totalSpent;
+    }
+
+    public void setTotalSpent(Double totalSpent) {
+        this.totalSpent = totalSpent;
+    }
+
+    public Double getAverageFare() {
+        return averageFare;
+    }
+
+    public void setAverageFare(Double averageFare) {
+        this.averageFare = averageFare;
+    }
 }
