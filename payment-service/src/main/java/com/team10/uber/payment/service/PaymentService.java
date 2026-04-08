@@ -21,6 +21,8 @@ import org.springframework.transaction.annotation.Transactional;
 import com.team10.uber.payment.enums.PaymentStatus;
 import java.time.LocalDateTime;
 
+
+import com.team10.uber.payment.dto.CouponUsageDTO;
 import com.team10.uber.payment.dto.PaymentDetailsDTO;
 import com.team10.uber.payment.dto.RevenueReportDTO;
 
@@ -250,5 +252,23 @@ public class PaymentService {
         }
 
         return new PaymentDetailsDTO(payment.getId(), payment.getRideId(), payment.getUserId(), payment.getAmount(), payment.getMethod(), payment.getStatus(), transactionDetails, appliedCouponDTOs, totalDiscount, finalAmount); 
+    }
+
+    public List<CouponUsageDTO> getTopUsedCoupons(int limit) {
+        List<Object[]> rows = paymentCouponRepository.findTopUsedCoupons(limit);
+    
+        return rows.stream().map(row -> {
+            Long couponId = ((Number) row[0]).longValue();
+            String code = (String)  row[1];
+            String discountType = (String)  row[2];
+            Double discountValue = ((Number) row[3]).doubleValue();
+            Integer timesUsed = ((Number) row[4]).intValue();
+            Double totalDiscountGiven = ((Number) row[5]).doubleValue();
+            Boolean active = (Boolean) row[6];
+    
+            java.time.LocalDateTime expiryDate = ((java.sql.Timestamp) row[7]).toLocalDateTime();
+            Boolean expired = expiryDate.isBefore(java.time.LocalDateTime.now());
+    
+            return new CouponUsageDTO(couponId, code, discountType, discountValue, timesUsed, totalDiscountGiven, active, expired);}).collect(java.util.stream.Collectors.toList());
     }
 }
