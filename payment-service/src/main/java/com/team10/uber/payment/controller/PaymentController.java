@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
 import com.team10.uber.payment.dto.UserPaymentSummaryDTO;
+import com.team10.uber.payment.dto.PaymentDetailsDTO;
 import com.team10.uber.payment.dto.PaymentWithCouponsDTO;
 import com.team10.uber.payment.dto.RevenueReportDTO;
 
@@ -99,5 +100,10 @@ public class PaymentController {
     @PutMapping("/{id}/retry")
     public ResponseEntity<Payment> retryPayment(@PathVariable Long id) {
         return ResponseEntity.ok(paymentService.retryPayment(id));
+    }
+
+    @GetMapping("/{paymentId}/details")
+    public ResponseEntity<PaymentDetailsDTO> getPaymentDetails(@PathVariable Long paymentId) {
+        return ResponseEntity.ok(paymentService.getPaymentDetails(paymentId));
     }
 }

@@ -20,6 +20,8 @@ import java.util.Optional;
 import org.springframework.transaction.annotation.Transactional;
 import com.team10.uber.payment.enums.PaymentStatus;
 import java.time.LocalDateTime;
+
+import com.team10.uber.payment.dto.PaymentDetailsDTO;
 import com.team10.uber.payment.dto.PaymentWithCouponsDTO;
 import com.team10.uber.payment.dto.RevenueReportDTO;
 
@@ -243,5 +245,19 @@ public class PaymentService {
         payment.setTransactionDetails(details);
     
         return paymentRepository.save(payment);
+    }
+
+    public PaymentDetailsDTO getPaymentDetails(Long paymentId) {
+        Payment payment = paymentRepository.findById(paymentId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Payment not found"));
+
+        List<PaymentCoupon> paymentCoupons = paymentCouponRepository.findByPaymentId(paymentId);
+
+        List<PaymentDetailsDTO.AppliedCouponDTO> appliedCouponDTOs = paymentCoupons.stream().map(pc -> new PaymentDetailsDTO.AppliedCouponDTO(pc.getCoupon().getCode(), pc.getCoupon().getDiscountType().name(), pc.getDiscountApplied(), pc.getAppliedAt())).collect(java.util.stream.Collectors.toList());
+
+        Double totalDiscount = appliedCouponDTOs.stream().mapToDouble(PaymentDetailsDTO.AppliedCouponDTO::getDiscountApplied).sum();
+
+        Double finalAmount = payment.getAmount() - totalDiscount;
+
+        return new PaymentDetailsDTO(payment.getId(), payment.getRideId(), payment.getUserId(), payment.getAmount(), payment.getMethod(), payment.getStatus(), payment.getTransactionDetails(), appliedCouponDTOs, totalDiscount, finalAmount);
     }
 }
