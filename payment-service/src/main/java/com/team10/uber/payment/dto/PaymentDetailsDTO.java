@@ -20,37 +20,48 @@ public class PaymentDetailsDTO {
     private Double totalDiscount;
     private Double finalAmount;
 
+    public PaymentDetailsDTO() {}
+
     public static class AppliedCouponDTO {
         private String couponCode;
         private String discountType;
         private Double discountApplied;
         private LocalDateTime appliedAt;
 
-        public AppliedCouponDTO(String couponCode, String discountType,
-                                Double discountApplied, LocalDateTime appliedAt) {
-            this.couponCode      = couponCode;
-            this.discountType    = discountType;
+        public AppliedCouponDTO() {}
+
+        public AppliedCouponDTO(String couponCode, String discountType, Double discountApplied, LocalDateTime appliedAt) {
+            this.couponCode = couponCode;
+            this.discountType = discountType;
             this.discountApplied = discountApplied;
-            this.appliedAt       = appliedAt;
+            this.appliedAt = appliedAt;
         }
 
-        public String getCouponCode()           { return couponCode; }
-        public String getDiscountType()         { return discountType; }
-        public Double getDiscountApplied()      { return discountApplied; }
-        public LocalDateTime getAppliedAt()     { return appliedAt; }
+        public String getCouponCode() {
+            return couponCode;
+        }
+        public String getDiscountType() {
+            return discountType;
+        }
+        public Double getDiscountApplied(){
+            return discountApplied;
+        }
+        public LocalDateTime getAppliedAt(){
+            return appliedAt;
+        }
     }
 
     public PaymentDetailsDTO(Long paymentId, Long rideId, Long userId, Double originalAmount, PaymentMethod method, PaymentStatus status, Map<String, Object> transactionDetails, List<AppliedCouponDTO> appliedCoupons, Double totalDiscount, Double finalAmount) {
-        this.paymentId          = paymentId;
-        this.rideId             = rideId;
-        this.userId             = userId;
-        this.originalAmount     = originalAmount;
-        this.method             = method;
-        this.status             = status;
+        this.paymentId = paymentId;
+        this.rideId = rideId;
+        this.userId = userId;
+        this.originalAmount = originalAmount;
+        this.method = method;
+        this.status = status;
         this.transactionDetails = transactionDetails;
-        this.appliedCoupons     = appliedCoupons;
-        this.totalDiscount      = totalDiscount;
-        this.finalAmount        = finalAmount;
+        this.appliedCoupons = appliedCoupons;
+        this.totalDiscount = totalDiscount;
+        this.finalAmount = finalAmount;
     }
 
     public Long getPaymentId() {
