@@ -1,7 +1,10 @@
 package com.team10.uber.ride.controller;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
+import com.team10.uber.ride.enums.RideStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -90,5 +93,15 @@ public class RideController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
     ) {
         return rideService.getRideAnalytics(startDate, endDate);
+    }
+    @GetMapping("/search")
+    public List<Ride> GetRidesByStatusandDateRange(
+            @RequestParam(required = false) RideStatus status,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+
+        LocalDateTime start = startDate.atStartOfDay();
+        LocalDateTime end   = endDate.atTime(23, 59, 59);
+        return rideService.GetRidesByStatusandDateRange(status, start, end);
     }
 }
