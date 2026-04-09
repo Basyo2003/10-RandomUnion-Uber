@@ -1,6 +1,7 @@
 package com.team10.uber.driver.controller;
 
 import com.team10.uber.driver.dto.DriverDocumentAlertDTO;
+import com.team10.uber.driver.dto.DriverEarningsDTO;
 import com.team10.uber.driver.dto.DriverWithDocumentsDTO;
 import com.team10.uber.driver.dto.RateDriverDTO;
 import com.team10.uber.driver.dto.VerifyDriverDTO;
@@ -8,8 +9,10 @@ import com.team10.uber.driver.enums.DriverStatus;
 import com.team10.uber.driver.model.Driver;
 import com.team10.uber.driver.service.DriverDocumentService;
 import com.team10.uber.driver.service.DriverService;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -38,6 +41,14 @@ public class DriverController {
     @GetMapping("/{id}")
     public Driver getDriverById(@PathVariable Long id) {
         return driverService.getDriverById(id);
+    }
+
+    @GetMapping("/{id}/earnings")
+    public DriverEarningsDTO getDriverEarningsSummary(
+            @PathVariable Long id,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+        return driverService.getDriverEarningsSummary(id, startDate, endDate);
     }
 
     @GetMapping("/search")

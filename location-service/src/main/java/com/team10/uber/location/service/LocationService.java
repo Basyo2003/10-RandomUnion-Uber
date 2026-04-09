@@ -1,15 +1,19 @@
 package com.team10.uber.location.service;
-
-import com.team10.uber.location.model.Location;
 import com.team10.uber.location.repository.LocationRepository;
+
+import com.team10.uber.location.dto.DriverMovementSummaryDTO;
+import com.team10.uber.location.dto.DriverMovementSummaryProjection;
+import com.team10.uber.location.model.Location;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+import com.team10.uber.location.dto.StationaryDriverDTO;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.time.LocalDate;
+import java.util.Optional;
 
 @Service
 public class LocationService {
@@ -24,7 +28,7 @@ public class LocationService {
 
     // CREATE
     public Location createLocation(Location location) {
-        driverExists(location.getDriverId());
+        locationRepository.driverExists(jdbcTemplate,location.getDriverId());
         return locationRepository.save(location);
     }
 
@@ -45,7 +49,7 @@ public class LocationService {
     public Location updateLocation(Long id, Location updated) {
         Location existing = getLocationById(id);
 
-        driverExists(updated.getDriverId());
+        locationRepository.driverExists(jdbcTemplate,updated.getDriverId());
 
         existing.setDriverId(updated.getDriverId());
         existing.setLatitude(updated.getLatitude());
@@ -63,21 +67,23 @@ public class LocationService {
 
     }
 
-    // required by spec (driver is not JPA-managed)
-    private void driverExists(Long driverId) {
-        Integer count = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM drivers WHERE id = ?",
-                Integer.class,
-                driverId
-        );
+   
+    
 
-        if (count == null || count == 0) {
-            throw new ResponseStatusException(
-                    HttpStatus.NOT_FOUND, "Driver not found"
-            );
-        }
+
+    //S4-F1
+    public Location getLatestLocationByDriverId(Long driverId) {
+        locationRepository.driverExists(jdbcTemplate,driverId);
+
+        return locationRepository.findTopByDriverIdOrderByTimestampDesc(driverId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "No locations found for driver with id: " + driverId
+                ));
     }
 
+
+    //S4-F6
     public List<Location> getLocationsInDateRange(String startDate, String endDate, Long driverId) {
 
         if (startDate == null || endDate == null) {
@@ -108,5 +114,64 @@ public class LocationService {
 
         return locationRepository
                 .findByTimestampBetweenOrderByTimestampAsc(startDateTime, endDateTime);
+    }
+    //S4-F8
+    public DriverMovementSummaryDTO getDriverMovementSummary(Long driverId, LocalDate startDate, LocalDate endDate) {
+
+        if (endDate.isBefore(startDate)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "endDate must be on or after startDate"
+            );
+        }
+        if (!locationRepository.driverExists(driverId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Driver not found");
+        }
+
+        LocalDateTime startDateTime = startDate.atStartOfDay();
+        LocalDateTime endDateTime = endDate.plusDays(1).atStartOfDay();
+
+        Optional<DriverMovementSummaryProjection> optionalSummary =
+                locationRepository.getDriverMovementSummary(driverId, startDateTime, endDateTime);
+
+        if (optionalSummary.isEmpty()) {
+            return new DriverMovementSummaryDTO(
+                    driverId,
+                    0L,
+                    0.0,
+                    0.0,
+                    null,
+                    null
+            );
+        }
+
+        DriverMovementSummaryProjection summary = optionalSummary.get();
+
+        return new DriverMovementSummaryDTO(
+                summary.getDriverId(),
+                summary.getTotalLocationPoints(),
+                summary.getAverageSpeed(),
+                summary.getMaxSpeed(),
+                summary.getFirstTimestamp(),
+                summary.getLastTimestamp()
+        );
+    }
+  
+   //S4-F9
+    public List<StationaryDriverDTO> getStationaryDrivers(Double maxSpeed, Integer sinceMinutes) {
+        if (maxSpeed == null || maxSpeed < 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "maxSpeed must be >= 0"
+            );
+        }
+
+        if (sinceMinutes == null || sinceMinutes <= 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "sinceMinutes must be > 0"
+            );
+        }
+
+        LocalDateTime cutoffTime = LocalDateTime.now().minusMinutes(sinceMinutes);
+        return locationRepository.findStationaryDrivers(maxSpeed, cutoffTime);
     }
 }
