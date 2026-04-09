@@ -73,7 +73,7 @@ public class LocationController {
         locationService.deleteLocation(id);
         return Map.of("message", "Location deleted successfully");
     }
-
+    //S4-F5
     @GetMapping("/metadata/search")
     public List<Location> filterLocationsByMetadata(
             @RequestParam String key,
