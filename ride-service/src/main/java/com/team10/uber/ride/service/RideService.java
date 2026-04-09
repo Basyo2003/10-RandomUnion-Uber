@@ -274,4 +274,16 @@ public class RideService {
                 completionRate
         );
     }
+
+    @Transactional()
+    public RideDetailsDTO GetRideDetailsWithStops(Long rideId) {
+        Ride ride = rideRepository.findById(rideId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Ride not found with id: " + rideId));
+
+        // Fetch stops ordered by stopOrder ascending at the DB level
+        List<RideStop> stops = rideStopRepository.findByRideIdOrderByStopOrderAsc(rideId);
+
+        return new RideDetailsDTO(ride, stops);
+    }
 }

@@ -63,6 +63,7 @@ public class RideController {
         rideService.deleteRide(id);
         return "Ride deleted successfully";
     }
+
      @PutMapping("/{id}/complete")
     public Ride completeRide(@PathVariable Long id) {
         return rideService.completeRide(id);
@@ -83,6 +84,13 @@ public class RideController {
     public FareEstimateDTO getFareEstimate(@RequestBody FareEstimateRequestDTO request) {
         return rideService.getFareEstimate(request);
     }
+
+    @PostMapping("/api/rides/{rideId}/details")
+    public RideDetailsDTO GetRideDetailsWithStops(
+            @PathVariable Long rideId
+    ){
+        return rideService.getRideDetailsWithStops(rideId);
+    }
   
     @GetMapping("/analytics")
     public RideAnalyticsDTO getRideAnalytics(
@@ -92,3 +100,4 @@ public class RideController {
         return rideService.getRideAnalytics(startDate, endDate);
     }
 }
+
