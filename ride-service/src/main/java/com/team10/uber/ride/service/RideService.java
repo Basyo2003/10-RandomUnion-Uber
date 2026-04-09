@@ -64,19 +64,23 @@ public class RideService {
                     + currentStatus);
         }
 
+        if (ride.getDriverId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Ride can only be cancelled when status is REQUESTED or ACCEPTED and driver is BUSY");
+        }
+
+        int busyDriver = rideRepository.countBusyDriversById(ride.getDriverId());
+        if (busyDriver == 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Ride can only be cancelled when status is REQUESTED or ACCEPTED and driver is BUSY");
+        }
+
         ride.setStatus(RideStatus.CANCELLED);
 
-        if (ride.getDriverId() != null) {
-            if (rideRepository.countDriversById(ride.getDriverId()) == 0) {
-                throw new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "Driver not found with id: " + ride.getDriverId());
-            }
-
-            int updatedRows = rideRepository.updateDriverStatusToAvailable(ride.getDriverId());
-            if (updatedRows == 0) {
-                throw new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "Driver not found with id: " + ride.getDriverId());
-            }
+        int updatedRows = rideRepository.updateDriverStatusToAvailable(ride.getDriverId());
+        if (updatedRows == 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Ride can only be cancelled when status is REQUESTED or ACCEPTED and driver is BUSY");
         }
 
         return rideRepository.save(ride);
