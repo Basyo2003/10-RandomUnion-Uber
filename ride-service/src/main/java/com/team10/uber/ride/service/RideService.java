@@ -6,7 +6,9 @@ import com.team10.uber.ride.dto.RideAnalyticsDTO;
 import com.team10.uber.ride.enums.RideStatus;
 import com.team10.uber.ride.model.Ride;
 import com.team10.uber.ride.repository.RideRepository;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -54,6 +56,13 @@ public class RideService {
         rideRepository.delete(ride);
     }
 
+    public List<Ride> filterByMetadata(String key, String value) {
+        if (key == null || key.isBlank() || value == null || value.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "key and value must not be blank");
+        }
+        return rideRepository.findByMetadataField(key, value);
+    }
+  
     public FareEstimateDTO getFareEstimate(FareEstimateRequestDTO request) {
         double distance = Math.sqrt(
                 Math.pow(request.getDropoffLatitude() - request.getPickupLatitude(), 2) +

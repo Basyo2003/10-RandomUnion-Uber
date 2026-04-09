@@ -11,6 +11,8 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDate;
 import java.util.List;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/rides")
 public class RideController {
@@ -47,6 +49,11 @@ public class RideController {
         return "Ride deleted successfully";
     }
 
+    @GetMapping("/metadata/search")
+    public List<Ride> filterByMetadata(@RequestParam String key, @RequestParam String value) {
+        return rideService.filterByMetadata(key, value);
+    }
+  
     @PostMapping("/estimate")
     public FareEstimateDTO getFareEstimate(@RequestBody FareEstimateRequestDTO request) {
         return rideService.getFareEstimate(request);
