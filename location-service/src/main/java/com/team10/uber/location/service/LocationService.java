@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+import com.team10.uber.location.dto.StationaryDriverDTO;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -66,6 +67,7 @@ public class LocationService {
 
     }
 
+   
     
 
 
@@ -153,5 +155,23 @@ public class LocationService {
                 summary.getFirstTimestamp(),
                 summary.getLastTimestamp()
         );
+    }
+  
+   //S4-F9
+    public List<StationaryDriverDTO> getStationaryDrivers(Double maxSpeed, Integer sinceMinutes) {
+        if (maxSpeed == null || maxSpeed < 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "maxSpeed must be >= 0"
+            );
+        }
+
+        if (sinceMinutes == null || sinceMinutes <= 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "sinceMinutes must be > 0"
+            );
+        }
+
+        LocalDateTime cutoffTime = LocalDateTime.now().minusMinutes(sinceMinutes);
+        return locationRepository.findStationaryDrivers(maxSpeed, cutoffTime);
     }
 }

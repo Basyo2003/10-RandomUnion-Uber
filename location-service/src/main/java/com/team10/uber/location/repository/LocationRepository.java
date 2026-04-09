@@ -1,5 +1,6 @@
 package com.team10.uber.location.repository;
 
+import com.team10.uber.location.dto.StationaryDriverDTO;
 import com.team10.uber.location.dto.DriverMovementSummaryProjection;
 import com.team10.uber.location.model.Location;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -30,6 +31,7 @@ public interface LocationRepository extends JpaRepository<Location, Long> {
         }
     }
 
+    
     // S4-F1
     Optional<Location> findTopByDriverIdOrderByTimestampDesc(Long driverId);
 
@@ -81,5 +83,31 @@ public interface LocationRepository extends JpaRepository<Location, Long> {
             @Param("driverId") Long driverId,
             @Param("startDateTime") LocalDateTime startDateTime,
             @Param("endDateTime") LocalDateTime endDateTime
+    );
+           
+    //S4-F9
+    @Query(value = """
+        SELECT 
+            l.driver_id AS driverId,
+            d.name AS driverName,
+            l.latitude AS latitude,
+            l.longitude AS longitude,
+            CAST(l.metadata ->> 'speed' AS DOUBLE PRECISION) AS lastSpeed,
+            l.timestamp AS lastUpdated
+        FROM locations l
+        JOIN drivers d ON d.id = l.driver_id
+        JOIN (
+            SELECT driver_id, MAX(timestamp) AS max_timestamp
+            FROM locations
+            GROUP BY driver_id
+        ) latest 
+            ON l.driver_id = latest.driver_id 
+           AND l.timestamp = latest.max_timestamp
+        WHERE CAST(l.metadata ->> 'speed' AS DOUBLE PRECISION) <= :maxSpeed
+          AND l.timestamp >= :cutoffTime
+        """, nativeQuery = true)
+    List<StationaryDriverDTO> findStationaryDrivers(
+            @Param("maxSpeed") Double maxSpeed,
+            @Param("cutoffTime") LocalDateTime cutoffTime
     );
 }
