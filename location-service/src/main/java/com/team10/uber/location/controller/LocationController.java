@@ -84,6 +84,8 @@ public class LocationController {
         return Map.of("message", "Location deleted successfully");
     }
 
+    
+
 
     //S4-F1
     @GetMapping("/driver/{driverId}/latest")
@@ -150,6 +152,13 @@ public class LocationController {
             @RequestParam(required = false) Long driverId
     ) {
         return locationService.getLocationsInDateRange(startDate, endDate, driverId);
+    }
+  
+    //S4-F7
+    @DeleteMapping("/purge")
+    public Map<String, Integer> purgeOldLocations(@RequestParam int olderThanDays) {
+        int deletedCount = locationService.purgeOldLocations(olderThanDays);
+        return Map.of("deletedCount", deletedCount);
     }
 
     //S4-F8

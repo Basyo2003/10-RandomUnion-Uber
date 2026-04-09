@@ -4,20 +4,18 @@ import com.team10.uber.location.dto.DriverMovementSummaryProjection;
 import com.team10.uber.location.dto.StationaryDriverDTO;
 import com.team10.uber.location.model.Location;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.server.ResponseStatusException;
-import java.util.List;
 
 import org.springframework.data.repository.query.Param;
-import org.springframework.http.HttpStatus;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.Optional;
+import java.util.List;
+
 
 public interface LocationRepository extends JpaRepository<Location, Long> {
 
@@ -36,6 +34,8 @@ public interface LocationRepository extends JpaRepository<Location, Long> {
             );
         }
     }
+
+    
 
     
     // S4-F1
@@ -114,6 +114,16 @@ public interface LocationRepository extends JpaRepository<Location, Long> {
             @Param("startDate") LocalDateTime startDate,
             @Param("endDate") LocalDateTime endDate
     );
+           
+           
+           
+    //S4-F7
+    @Query(value = "SELECT COUNT(*) FROM locations WHERE timestamp < :cutoff", nativeQuery = true)
+    int countLocationsOlderThan(@Param("cutoff") LocalDateTime cutoff);
+
+    @Modifying
+    @Query(value = "DELETE FROM locations WHERE timestamp < :cutoff", nativeQuery = true)
+    int deleteLocationsOlderThan(@Param("cutoff") LocalDateTime cutoff);
 
     // S4-F8
     @Query(value = "SELECT EXISTS (SELECT 1 FROM drivers WHERE id = :driverId)", nativeQuery = true)
