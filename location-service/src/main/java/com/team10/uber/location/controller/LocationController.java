@@ -1,5 +1,7 @@
 package com.team10.uber.location.controller;
 
+import com.team10.uber.location.dto.BatchLocationRequest;
+
 import com.team10.uber.location.dto.DriverMovementSummaryDTO;
 import com.team10.uber.location.model.Location;
 import com.team10.uber.location.service.LocationService;
@@ -79,11 +81,21 @@ public class LocationController {
         locationService.deleteLocation(id);
         return Map.of("message", "Location deleted successfully");
     }
-    
+
+
+
     //S4-F1
     @GetMapping("/driver/{driverId}/latest")
     public Location getLatestLocationByDriverId(@PathVariable Long driverId) {
         return locationService.getLatestLocationByDriverId(driverId);
+    }
+
+
+    //S4-F4
+    @PostMapping("/batch")
+    @ResponseStatus(HttpStatus.CREATED)
+    public Map<String, Object> batchCreateLocations(@RequestBody BatchLocationRequest request) {
+        return locationService.batchCreateLocations(request);
     }
 
     //S4-F5
