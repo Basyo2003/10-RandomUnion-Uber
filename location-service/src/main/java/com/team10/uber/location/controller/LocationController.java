@@ -73,6 +73,8 @@ public class LocationController {
         locationService.deleteLocation(id);
         return Map.of("message", "Location deleted successfully");
     }
+
+
     @PostMapping("/driver/{driverId}")
     @ResponseStatus(HttpStatus.CREATED)
     public Location createLocationForDriver(
