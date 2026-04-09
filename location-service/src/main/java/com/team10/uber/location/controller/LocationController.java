@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+
 import com.team10.uber.location.dto.StationaryDriverDTO;
 
 
@@ -78,11 +79,21 @@ public class LocationController {
         locationService.deleteLocation(id);
         return Map.of("message", "Location deleted successfully");
     }
-
+    
     //S4-F1
     @GetMapping("/driver/{driverId}/latest")
     public Location getLatestLocationByDriverId(@PathVariable Long driverId) {
         return locationService.getLatestLocationByDriverId(driverId);
+    }
+
+    //S4-F5
+    @GetMapping("/metadata/search")
+    public List<Location> filterLocationsByMetadata(
+            @RequestParam String key,
+            @RequestParam String operator,
+            @RequestParam String value
+    ) {
+        return locationService.filterLocationsByMetadata(key, operator, value);
     }
 
 
@@ -95,7 +106,7 @@ public class LocationController {
     ) {
         return locationService.getLocationsInDateRange(startDate, endDate, driverId);
     }
-  
+
     //S4-F8
     @GetMapping("/driver/{driverId}/summary")
     public DriverMovementSummaryDTO getDriverMovementSummary(
@@ -105,8 +116,8 @@ public class LocationController {
     ) {
         return locationService.getDriverMovementSummary(driverId, startDate, endDate);
     }
-  
-  //S4-F9
+
+    //S4-F9
     @GetMapping("/stationary")
     public ResponseEntity<?> getStationaryDrivers(
             @RequestParam Double maxSpeed,
