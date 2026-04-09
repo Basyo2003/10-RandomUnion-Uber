@@ -1,11 +1,9 @@
 package com.team10.uber.driver.model;
 
-
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.team10.uber.driver.enums.DriverStatus;
 import jakarta.persistence.*;
 import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.annotations.Type;
 import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
@@ -59,35 +57,87 @@ public class Driver {
     }
 
     // Getters and Setters
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
+    public Long getId() {
+        return id;
+    }
 
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
+    public void setId(Long id) {
+        this.id = id;
+    }
 
-    public String getEmail() { return email; }
-    public void setEmail(String email) { this.email = email; }
+    public String getName() {
+        return name;
+    }
 
-    public String getPhone() { return phone; }
-    public void setPhone(String phone) { this.phone = phone; }
+    public void setName(String name) {
+        this.name = name;
+    }
 
-    public String getLicenseNumber() { return licenseNumber; }
-    public void setLicenseNumber(String licenseNumber) { this.licenseNumber = licenseNumber; }
+    public String getEmail() {
+        return email;
+    }
 
-    public DriverStatus getStatus() { return status; }
-    public void setStatus(DriverStatus status) { this.status = status; }
+    public void setEmail(String email) {
+        this.email = email;
+    }
 
-    public Double getRating() { return rating; }
-    public void setRating(Double rating) { this.rating = rating; }
+    public String getPhone() {
+        return phone;
+    }
 
-    public Integer getTotalRatings() { return totalRatings; }
-    public void setTotalRatings(Integer totalRatings) { this.totalRatings = totalRatings; }
+    public void setPhone(String phone) {
+        this.phone = phone;
+    }
 
-    public Map<String, Object> getVehicleDetails() { return vehicleDetails; }
-    public void setVehicleDetails(Map<String, Object> vehicleDetails) { this.vehicleDetails = vehicleDetails; }
+    public String getLicenseNumber() {
+        return licenseNumber;
+    }
 
-    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setLicenseNumber(String licenseNumber) {
+        this.licenseNumber = licenseNumber;
+    }
 
-    public List<DriverDocument> getDriverDocuments() { return driverDocuments; }
-    public void setDriverDocuments(List<DriverDocument> driverDocuments) { this.driverDocuments = driverDocuments; }
+    public DriverStatus getStatus() {
+        return status;
+    }
+
+    public void setStatus(DriverStatus status) {
+        this.status = status;
+    }
+
+    public Double getRating() {
+        return rating;
+    }
+
+    public void setRating(Double rating) {
+        this.rating = rating;
+    }
+
+    public Integer getTotalRatings() {
+        return totalRatings;
+    }
+
+    public void setTotalRatings(Integer totalRatings) {
+        this.totalRatings = totalRatings;
+    }
+
+    public Map<String, Object> getVehicleDetails() {
+        return vehicleDetails;
+    }
+
+    public void setVehicleDetails(Map<String, Object> vehicleDetails) {
+        this.vehicleDetails = vehicleDetails;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public List<DriverDocument> getDriverDocuments() {
+        return driverDocuments;
+    }
+
+    public void setDriverDocuments(List<DriverDocument> driverDocuments) {
+        this.driverDocuments = driverDocuments;
+    }
 }
