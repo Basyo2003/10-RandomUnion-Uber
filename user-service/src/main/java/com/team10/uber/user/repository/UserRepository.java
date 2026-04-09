@@ -1,14 +1,11 @@
 package com.team10.uber.user.repository;
 
-import com.team10.uber.user.enums.Role;
 import com.team10.uber.user.model.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
 
 public interface UserRepository extends JpaRepository<User, Long> {
     @Query(value = "SELECT * FROM users u WHERE " +
@@ -16,8 +13,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
             "(:email IS NULL OR LOWER(u.email) LIKE LOWER(CONCAT('%', :email, '%'))) AND " +
             "(:role IS NULL OR u.role = :role)", nativeQuery = true)
     List<User> searchUsers(@Param("name") String name,
-            @Param("email") String email,
-            @Param("role") String role);
+                           @Param("email") String email,
+                           @Param("role") String role);
 
     @Query(value = """
             SELECT
@@ -31,7 +28,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
             """, nativeQuery = true)
     List<Object[]> getRideSummaryByUserId(@Param("userId") Long userId);
 
-    // S1-F6: Top Riders by Spending
     @Query(value = """
             SELECT
                 u.id AS userId,
@@ -59,11 +55,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
             "WHERE u.preferences ->> 'language' = :lang " +
             "AND r.status = 'COMPLETED' " +
             "GROUP BY u.id " +
-            "HAVING COUNT(r.id) >= :minRides",
-            nativeQuery = true)
+            "HAVING COUNT(r.id) >= :minRides", nativeQuery = true)
     List<User> findUsersByLanguageAndCompletedRides(@Param("lang") String lang,
                                                     @Param("minRides") int minRides);
-           
+
     @Query(value = """
             SELECT COUNT(*) > 0
             FROM rides
