@@ -25,6 +25,25 @@ public class PaymentService {
     }
 
     public Payment createPayment(Payment payment) {
+
+        // Check user exists
+        if (paymentRepository.countUserById(payment.getUserId()) == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "User not found with id: " + payment.getUserId());
+        }
+
+        // Check ride exists
+        if (paymentRepository.countRideById(payment.getRideId()) == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "Ride not found with id: " + payment.getRideId());
+        }
+
+        // Check ride does not already have a payment
+        if (paymentRepository.countPaymentsByRideId(payment.getRideId()) > 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "A payment already exists for ride id: " + payment.getRideId());
+        }
+
         return paymentRepository.save(payment);
     }
 
@@ -78,18 +97,36 @@ public class PaymentService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "already paid");
         }
 
-        // d) Get ride details
+        // d) Validate cardLastFour
+        if (dto.getMethod().equals("CREDIT_CARD")) {
+            String cardLastFour = dto.getCardLastFour();
+            if (cardLastFour == null || cardLastFour.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "cardLastFour is required for CREDIT_CARD payments");
+            }
+            if (cardLastFour.length() != 4 || !cardLastFour.matches("\\d{4}")) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "cardLastFour must be exactly 4 digits");
+            }
+        } else {
+            if (dto.getCardLastFour() != null && !dto.getCardLastFour().isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "cardLastFour should not be provided for " + dto.getMethod() + " payments");
+            }
+        }
+
+        // e) Get ride details
         Double fare = paymentRepository.findRideFareById(rideId);
         Long userId = paymentRepository.findRideUserIdById(rideId);
 
-        // e) Build JSONB transactionDetails
+        // f) Build JSONB transactionDetails
         Map<String, Object> transactionDetails = new HashMap<>();
         transactionDetails.put("gatewayResponse", "success");
         transactionDetails.put("cardLastFour", dto.getCardLastFour());
         transactionDetails.put("receiptUrl", "https://receipts.com/" + rideId);
         transactionDetails.put("failureReason", null);
 
-        // f) Create and save payment
+        // g) Create and save payment
         Payment payment = new Payment();
         payment.setRideId(rideId);
         payment.setUserId(userId);
