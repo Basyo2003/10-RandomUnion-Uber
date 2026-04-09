@@ -1,7 +1,7 @@
 package com.team10.uber.location.service;
+import com.team10.uber.location.repository.LocationRepository;
 
 import com.team10.uber.location.model.Location;
-import com.team10.uber.location.repository.LocationRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -63,8 +63,21 @@ public class LocationService {
 
     }
 
+    // required by spec (driver is not JPA-managed)
 
-  
+
+    //S4-F1
+    public Location getLatestLocationByDriverId(Long driverId) {
+        locationRepository.driverExists(jdbcTemplate,driverId);
+
+        return locationRepository.findTopByDriverIdOrderByTimestampDesc(driverId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "No locations found for driver with id: " + driverId
+                ));
+    }
+
+
     //S4-F6
     public List<Location> getLocationsInDateRange(String startDate, String endDate, Long driverId) {
 

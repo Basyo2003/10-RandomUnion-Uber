@@ -30,32 +30,33 @@ public interface LocationRepository extends JpaRepository<Location, Long> {
             );
         }
     }
-}
-    // For feature S4-F1 (latest location)
+
+    //S4-F1
     Optional<Location> findTopByDriverIdOrderByTimestampDesc(Long driverId);
     //S4-F6
     @Query("""
-        SELECT l
-        FROM Location l
-        WHERE l.timestamp BETWEEN :startDate AND :endDate
-        ORDER BY l.timestamp ASC
-        """)
+            SELECT l
+            FROM Location l
+            WHERE l.timestamp BETWEEN :startDate AND :endDate
+            ORDER BY l.timestamp ASC
+            """)
     List<Location> findByTimestampBetweenOrderByTimestampAsc(
             @Param("startDate") LocalDateTime startDate,
             @Param("endDate") LocalDateTime endDate
     );
     //S4-F6
     @Query("""
-        SELECT l
-        FROM Location l
-        WHERE l.driverId = :driverId
-        AND l.timestamp BETWEEN :startDate AND :endDate
-        ORDER BY l.timestamp ASC
-        """)
+            SELECT l
+            FROM Location l
+            WHERE l.driverId = :driverId
+            AND l.timestamp BETWEEN :startDate AND :endDate
+            ORDER BY l.timestamp ASC
+            """)
     List<Location> findByDriverIdAndTimestampBetweenOrderByTimestampAsc(
             @Param("driverId") Long driverId,
             @Param("startDate") LocalDateTime startDate,
             @Param("endDate") LocalDateTime endDate
     );
 }
+
 
