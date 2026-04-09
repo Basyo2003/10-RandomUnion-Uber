@@ -1,11 +1,15 @@
 package com.team10.uber.location.controller;
 
+import com.team10.uber.location.dto.DriverMovementSummaryDTO;
 import com.team10.uber.location.model.Location;
 import com.team10.uber.location.service.LocationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+import com.team10.uber.location.dto.StationaryDriverDTO;
+
+
 import org.springframework.format.annotation.DateTimeFormat;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -75,6 +79,14 @@ public class LocationController {
         return Map.of("message", "Location deleted successfully");
     }
 
+    //S4-F1
+    @GetMapping("/driver/{driverId}/latest")
+    public Location getLatestLocationByDriverId(@PathVariable Long driverId) {
+        return locationService.getLatestLocationByDriverId(driverId);
+    }
+
+
+    //S4-F6
     @GetMapping("/history")
     public List<Location> getLocationsInDateRange(
             @RequestParam String startDate,
@@ -82,6 +94,38 @@ public class LocationController {
             @RequestParam(required = false) Long driverId
     ) {
         return locationService.getLocationsInDateRange(startDate, endDate, driverId);
+    }
+  
+    //S4-F8
+    @GetMapping("/driver/{driverId}/summary")
+    public DriverMovementSummaryDTO getDriverMovementSummary(
+            @PathVariable Long driverId,
+            @RequestParam LocalDate startDate,
+            @RequestParam LocalDate endDate
+    ) {
+        return locationService.getDriverMovementSummary(driverId, startDate, endDate);
+    }
+  
+  //S4-F9
+    @GetMapping("/stationary")
+    public ResponseEntity<?> getStationaryDrivers(
+            @RequestParam Double maxSpeed,
+            @RequestParam Integer sinceMinutes
+    ) {
+        try {
+            List<StationaryDriverDTO> result =
+                    locationService.getStationaryDrivers(maxSpeed, sinceMinutes);
+            return ResponseEntity.ok(result);
+
+        } catch (ResponseStatusException ex) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("timestamp", LocalDateTime.now());
+            error.put("status", ex.getStatusCode().value());
+            error.put("error", ex.getStatusCode().toString());
+            error.put("message", ex.getReason());
+
+            return ResponseEntity.status(ex.getStatusCode()).body(error);
+        }
     }
 }
 

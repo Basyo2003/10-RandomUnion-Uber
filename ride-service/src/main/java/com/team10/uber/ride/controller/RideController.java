@@ -11,8 +11,17 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.team10.uber.ride.dto.RideStopRequestDTO;
+import com.team10.uber.ride.dto.RideWithStopsDTO;
+import com.team10.uber.ride.dto.FareEstimateDTO;
+import com.team10.uber.ride.dto.FareEstimateRequestDTO;
+import com.team10.uber.ride.dto.RideAnalyticsDTO;
 import com.team10.uber.ride.model.Ride;
 import com.team10.uber.ride.service.RideService;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDate;
 
 @RestController
 @RequestMapping("/api/rides")
@@ -52,5 +61,29 @@ public class RideController {
      @PutMapping("/{id}/complete")
     public Ride completeRide(@PathVariable Long id) {
         return rideService.completeRide(id);
+    }
+
+
+    @PostMapping("/{rideId}/stops")
+    public RideWithStopsDTO addStops(@PathVariable Long rideId, @RequestBody List<RideStopRequestDTO> stops) {
+        return rideService.addStops(rideId, stops);
+    }
+  
+    @GetMapping("/metadata/search")
+    public List<Ride> filterByMetadata(@RequestParam String key, @RequestParam String value) {
+        return rideService.filterByMetadata(key, value);
+    }
+  
+    @PostMapping("/estimate")
+    public FareEstimateDTO getFareEstimate(@RequestBody FareEstimateRequestDTO request) {
+        return rideService.getFareEstimate(request);
+    }
+  
+    @GetMapping("/analytics")
+    public RideAnalyticsDTO getRideAnalytics(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
+    ) {
+        return rideService.getRideAnalytics(startDate, endDate);
     }
 }
