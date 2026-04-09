@@ -4,6 +4,10 @@ import com.team10.uber.ride.dto.RideStopRequestDTO;
 import com.team10.uber.ride.dto.RideWithStopsDTO;
 import com.team10.uber.ride.enums.RideStatus;
 import com.team10.uber.ride.enums.StopStatus;
+import com.team10.uber.ride.dto.FareEstimateDTO;
+import com.team10.uber.ride.dto.FareEstimateRequestDTO;
+import com.team10.uber.ride.dto.RideAnalyticsDTO;
+import com.team10.uber.ride.enums.RideStatus;
 import com.team10.uber.ride.model.Ride;
 import com.team10.uber.ride.model.RideStop;
 import com.team10.uber.ride.repository.RideRepository;
@@ -14,6 +18,13 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 
 @Service
@@ -93,5 +104,75 @@ public class RideService {
 
         List<RideStop> allStops = rideStopRepository.findByRideIdOrderByStopOrderAsc(rideId);
         return new RideWithStopsDTO(ride, allStops);
+    }
+  
+    public List<Ride> filterByMetadata(String key, String value) {
+        if (key == null || key.isBlank() || value == null || value.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "key and value must not be blank");
+        }
+        return rideRepository.findByMetadataField(key, value);
+    }
+  
+    public FareEstimateDTO getFareEstimate(FareEstimateRequestDTO request) {
+        double distance = Math.sqrt(
+                Math.pow(request.getDropoffLatitude() - request.getPickupLatitude(), 2) +
+                Math.pow(request.getDropoffLongitude() - request.getPickupLongitude(), 2)
+        ) * 111;
+
+        double duration = (distance / 40) * 60;
+
+        int nearbyCount = rideRepository.countActiveRidesNearPickup(
+                request.getPickupLatitude() - 0.01, request.getPickupLatitude() + 0.01,
+                request.getPickupLongitude() - 0.01, request.getPickupLongitude() + 0.01
+        );
+
+        double surgeMultiplier;
+        if (nearbyCount <= 10) surgeMultiplier = 1.0;
+        else if (nearbyCount <= 20) surgeMultiplier = 1.5;
+        else surgeMultiplier = 2.0;
+
+        double fare = 15.0 * distance * surgeMultiplier;
+
+        return new FareEstimateDTO(distance, duration, fare, surgeMultiplier);
+    }
+    public RideAnalyticsDTO getRideAnalytics(LocalDate startDate, LocalDate endDate) {
+        if (startDate == null || endDate == null) {
+            throw new IllegalArgumentException("startDate and endDate are required");
+        }
+        if (endDate.isBefore(startDate)) {
+            throw new IllegalArgumentException("endDate must be on or after startDate");
+        }
+
+        LocalDateTime startDateTime = startDate.atStartOfDay();
+        LocalDateTime endDateTime = endDate.atTime(LocalTime.MAX);
+
+        List<Ride> rides = rideRepository.findByRequestedAtBetween(startDateTime, endDateTime);
+
+        long totalRides = rides.size();
+        long completedRides = rides.stream()
+                .filter(ride -> ride.getStatus() == RideStatus.COMPLETED)
+                .count();
+        long cancelledRides = rides.stream()
+                .filter(ride -> ride.getStatus() == RideStatus.CANCELLED)
+                .count();
+
+        double totalRevenue = rides.stream()
+                .filter(ride -> ride.getStatus() == RideStatus.COMPLETED)
+                .map(Ride::getFare)
+                .filter(fare -> fare != null)
+                .mapToDouble(Double::doubleValue)
+                .sum();
+
+        double averageFare = completedRides > 0 ? totalRevenue / completedRides : 0.0;
+        double completionRate = totalRides > 0 ? ((double) completedRides / totalRides) * 100 : 0.0;
+
+        return new RideAnalyticsDTO(
+                totalRides,
+                completedRides,
+                cancelledRides,
+                totalRevenue,
+                averageFare,
+                completionRate
+        );
     }
 }
