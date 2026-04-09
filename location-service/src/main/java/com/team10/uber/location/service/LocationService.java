@@ -27,7 +27,7 @@ public class LocationService {
     }
 
     public Location createLocation(Location location) {
-        driverExists(location.getDriverId());
+        locationRepository.driverExists(jdbcTemplate,location.getDriverId());
         return locationRepository.save(location);
 
     }
@@ -45,7 +45,7 @@ public class LocationService {
 
     public Location updateLocation(Long id, Location updated) {
         Location existing = getLocationById(id);
-        driverExists(updated.getDriverId());
+        locationRepository.driverExists(jdbcTemplate,updated.getDriverId());
         existing.setDriverId(updated.getDriverId());
         existing.setLatitude(updated.getLatitude());
         existing.setLongitude(updated.getLongitude());
@@ -59,7 +59,7 @@ public class LocationService {
         Location existing = getLocationById(id);
         locationRepository.delete(existing);
     }
-
+    //S4-F4
     @Transactional
     public Map<String, Object> batchCreateLocations(BatchLocationRequest request) {
         if (request.getDriverId() == null) {
@@ -70,7 +70,7 @@ public class LocationService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Locations list cannot be empty");
         }
 
-        driverExists(request.getDriverId());
+        locationRepository.driverExists(jdbcTemplate,request.getDriverId());
 
         List<Location> locationsToSave = new ArrayList<>();
         LocalDateTime baseTime = LocalDateTime.now();
@@ -113,18 +113,5 @@ public class LocationService {
         }
     }
 
-    // required by spec (driver is not JPA-managed)
-    private void driverExists(Long driverId) {
-        Integer count = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM drivers WHERE id = ?",
-                Integer.class,
-                driverId
-        );
 
-        if (count == null || count == 0) {
-            throw new ResponseStatusException(
-                    HttpStatus.NOT_FOUND, "Driver not found"
-            );
-        }
-    }
 }

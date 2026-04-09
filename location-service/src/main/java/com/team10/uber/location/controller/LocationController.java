@@ -75,7 +75,7 @@ public class LocationController {
         locationService.deleteLocation(id);
         return Map.of("message", "Location deleted successfully");
     }
-
+    //S4-F4
     @PostMapping("/batch")
     @ResponseStatus(HttpStatus.CREATED)
     public Map<String, Object> batchCreateLocations(@RequestBody BatchLocationRequest request) {
