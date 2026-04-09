@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+
 import org.springframework.format.annotation.DateTimeFormat;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -74,7 +75,8 @@ public class LocationController {
         locationService.deleteLocation(id);
         return Map.of("message", "Location deleted successfully");
     }
-
+}
+    //S4-F6
     @GetMapping("/history")
     public List<Location> getLocationsInDateRange(
             @RequestParam String startDate,
