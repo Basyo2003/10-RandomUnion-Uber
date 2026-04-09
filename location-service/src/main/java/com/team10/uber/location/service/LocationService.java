@@ -32,7 +32,6 @@ public class LocationService {
     }
 
     public Location createLocation(Location location) {
-        locationRepository.driverExists(jdbcTemplate,location.getDriverId());
         locationRepository.driverExists(jdbcTemplate, location.getDriverId());
         return locationRepository.save(location);
 
@@ -51,9 +50,9 @@ public class LocationService {
 
     public Location updateLocation(Long id, Location updated) {
         Location existing = getLocationById(id);
+      
         locationRepository.driverExists(jdbcTemplate,updated.getDriverId());
 
-        locationRepository.driverExists(jdbcTemplate, updated.getDriverId());
 
         existing.setDriverId(updated.getDriverId());
         existing.setLatitude(updated.getLatitude());
@@ -81,9 +80,16 @@ public class LocationService {
                 ));
     }
   
-  
+  //S4-F2
+    public Location createLocationForDriver(Long driverId, Location location) {
+        locationRepository.driverExists(jdbcTemplate,driverId);
+
+        location.setDriverId(driverId);
+        return locationRepository.save(location);
+    }
+
   //S4-F4
-    @Transactional
+     @Transactional
     public Map<String, Object> batchCreateLocations(BatchLocationRequest request) {
         if (request.getDriverId() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Driver ID is required");
@@ -136,6 +142,7 @@ public class LocationService {
         }
     }
 
+    
     // S4-F5
     public List<Location> filterLocationsByMetadata(String key, String operator, String value) {
         if (key == null || key.isBlank() || value == null || value.isBlank()) {

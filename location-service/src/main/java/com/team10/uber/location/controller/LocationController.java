@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+
 import com.team10.uber.location.dto.StationaryDriverDTO;
 
 
@@ -83,11 +84,31 @@ public class LocationController {
     }
 
 
-
     //S4-F1
     @GetMapping("/driver/{driverId}/latest")
     public Location getLatestLocationByDriverId(@PathVariable Long driverId) {
         return locationService.getLatestLocationByDriverId(driverId);
+    }
+
+
+    //S4-F2
+    @PostMapping("/driver/{driverId}")
+    @ResponseStatus(HttpStatus.CREATED)
+    public Location createLocationForDriver(
+            @PathVariable Long driverId,
+            @RequestBody Map<String, Object> body
+    ) {
+        Double latitude = Double.valueOf(body.get("latitude").toString());
+        Double longitude = Double.valueOf(body.get("longitude").toString());
+        Map<String, Object> metadata = (Map<String, Object>) body.get("metadata");
+
+        Location location = new Location();
+        location.setDriverId(driverId);
+        location.setLatitude(latitude);
+        location.setLongitude(longitude);
+        location.setMetadata(metadata);
+
+        return locationService.createLocationForDriver(driverId, location);
     }
 
 

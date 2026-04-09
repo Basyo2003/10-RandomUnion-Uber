@@ -16,6 +16,7 @@ import java.util.Optional;
 
 public interface LocationRepository extends JpaRepository<Location, Long> {
 
+
     default void driverExists(JdbcTemplate jdbcTemplate, Long driverId) {
         Integer count = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM drivers WHERE id = ?",
