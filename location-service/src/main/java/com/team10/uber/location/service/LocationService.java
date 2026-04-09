@@ -11,10 +11,12 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import com.team10.uber.location.dto.NearbyDriverDTO;
+import java.util.ArrayList;
+import java.util.Comparator;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,7 +34,7 @@ public class LocationService {
     }
 
     public Location createLocation(Location location) {
-        locationRepository.driverExists(jdbcTemplate, location.getDriverId());
+        locationRepository.driverExists(jdbcTemplate,location.getDriverId());
         return locationRepository.save(location);
 
     }
@@ -87,6 +89,43 @@ public class LocationService {
         location.setDriverId(driverId);
         return locationRepository.save(location);
     }
+  
+  
+   //S4-F3
+    public List<NearbyDriverDTO> findNearbyAvailableDrivers(Double lat, Double lon, Double radiusKm) {
+        List<Object[]> rows = locationRepository.findLatestAvailableDriverLocations();
+        List<NearbyDriverDTO> result = new ArrayList<>();
+
+        for (Object[] row : rows) {
+            Long driverId = ((Number) row[0]).longValue();
+            String driverName = (String) row[1];
+            Double driverLat = ((Number) row[2]).doubleValue();
+            Double driverLon = ((Number) row[3]).doubleValue();
+
+            double distanceKm = calculateDistanceKm(lat, lon, driverLat, driverLon);
+
+            if (distanceKm <= radiusKm) {
+                result.add(new NearbyDriverDTO(
+                        driverId,
+                        driverName,
+                        driverLat,
+                        driverLon,
+                        distanceKm
+                ));
+            }
+        }
+
+        result.sort(Comparator.comparing(NearbyDriverDTO::getDistanceKm));
+        return result;
+    }
+
+    private double calculateDistanceKm(Double lat1, Double lon1, Double lat2, Double lon2) {
+        double deltaLat = lat1 - lat2;
+        double deltaLon = lon1 - lon2;
+        return Math.sqrt(deltaLat * deltaLat + deltaLon * deltaLon) * 111;
+    }
+
+
 
   //S4-F4
      @Transactional
@@ -188,6 +227,8 @@ public class LocationService {
         }
     }
 
+
+  
     // S4-F6
     public List<Location> getLocationsInDateRange(String startDate, String endDate, Long driverId) {
         if (startDate == null || endDate == null) {
@@ -294,6 +335,7 @@ public class LocationService {
         LocalDateTime cutoffTime = LocalDateTime.now().minusMinutes(sinceMinutes);
         return locationRepository.findStationaryDrivers(maxSpeed, cutoffTime);
     }
+   
 
 
 }
