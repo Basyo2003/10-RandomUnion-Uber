@@ -92,6 +92,7 @@ public class LocationController {
 
         return locationService.createLocationForDriver(driverId, location);
     }
+    //S4-F3
     @GetMapping("/nearby")
     public List<NearbyDriverDTO> getNearbyDrivers(
             @RequestParam Double lat,

@@ -26,7 +26,7 @@ public class LocationService {
 
     // CREATE
     public Location createLocation(Location location) {
-        driverExists(location.getDriverId());
+        locationRepository.driverExists(jdbcTemplate,location.getDriverId());
         return locationRepository.save(location);
     }
 
@@ -47,7 +47,7 @@ public class LocationService {
     public Location updateLocation(Long id, Location updated) {
         Location existing = getLocationById(id);
 
-        driverExists(updated.getDriverId());
+        locationRepository.driverExists(jdbcTemplate,updated.getDriverId());
 
         existing.setDriverId(updated.getDriverId());
         existing.setLatitude(updated.getLatitude());
@@ -65,64 +65,32 @@ public class LocationService {
 
     }
 
-    // required by spec (driver is not JPA-managed)
-    private void driverExists(Long driverId) {
-        Integer count = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM drivers WHERE id = ?",
-                Integer.class,
-                driverId
-        );
 
-        if (count == null || count == 0) {
-            throw new ResponseStatusException(
-                    HttpStatus.NOT_FOUND, "Driver not found"
-            );
-        }
-    }
     public Location createLocationForDriver(Long driverId, Location location) {
-        driverExists(driverId);
+        locationRepository.driverExists(jdbcTemplate,driverId);
 
         location.setDriverId(driverId);
         return locationRepository.save(location);
     }
+    //S4-F3
     public List<NearbyDriverDTO> findNearbyAvailableDrivers(Double lat, Double lon, Double radiusKm) {
-        List<Location> latestLocations = locationRepository.findLatestLocationPerDriver();
+        List<Object[]> rows = locationRepository.findLatestAvailableDriverLocations();
         List<NearbyDriverDTO> result = new ArrayList<>();
 
-        for (Location location : latestLocations) {
-            Long driverId = location.getDriverId();
+        for (Object[] row : rows) {
+            Long driverId = ((Number) row[0]).longValue();
+            String driverName = (String) row[1];
+            Double driverLat = ((Number) row[2]).doubleValue();
+            Double driverLon = ((Number) row[3]).doubleValue();
 
-            List<DriverInfo> driverRows = jdbcTemplate.query(
-                    "SELECT id, name, status FROM drivers WHERE id = ?",
-                    (rs, rowNum) -> new DriverInfo(
-                            rs.getLong("id"),
-                            rs.getString("name"),
-                            rs.getString("status")
-                    ),
-                    driverId
-            );
-
-            if (driverRows.isEmpty()) {
-                continue;
-            }
-
-            DriverInfo driver = driverRows.get(0);
-
-            if (!"AVAILABLE".equals(driver.getStatus())) {
-                continue;
-            }
-
-            double distanceKm = calculateDistanceKm(
-                    lat, lon,
-                    location.getLatitude(), location.getLongitude()
-            );
+            double distanceKm = calculateDistanceKm(lat, lon, driverLat, driverLon);
 
             if (distanceKm <= radiusKm) {
                 result.add(new NearbyDriverDTO(
                         driverId,
-                        driver.getName(),
-                        location.getLatitude(),
-                        location.getLongitude(),
+                        driverName,
+                        driverLat,
+                        driverLon,
                         distanceKm
                 ));
             }
@@ -131,34 +99,11 @@ public class LocationService {
         result.sort(Comparator.comparing(NearbyDriverDTO::getDistanceKm));
         return result;
     }
+
     private double calculateDistanceKm(Double lat1, Double lon1, Double lat2, Double lon2) {
-        double dLat = lat1 - lat2;
-        double dLon = lon1 - lon2;
-        return Math.sqrt(dLat * dLat + dLon * dLon) * 111;
-    }
-
-    private static class DriverInfo {
-        private final Long id;
-        private final String name;
-        private final String status;
-
-        public DriverInfo(Long id, String name, String status) {
-            this.id = id;
-            this.name = name;
-            this.status = status;
-        }
-
-        public Long getId() {
-            return id;
-        }
-
-        public String getName() {
-            return name;
-        }
-
-        public String getStatus() {
-            return status;
-        }
+        double deltaLat = lat1 - lat2;
+        double deltaLon = lon1 - lon2;
+        return Math.sqrt(deltaLat * deltaLat + deltaLon * deltaLon) * 111;
     }
 
 }
