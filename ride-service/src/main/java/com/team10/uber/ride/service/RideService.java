@@ -2,10 +2,15 @@ package com.team10.uber.ride.service;
 
 import com.team10.uber.ride.dto.FareEstimateDTO;
 import com.team10.uber.ride.dto.FareEstimateRequestDTO;
+import com.team10.uber.ride.dto.RideAnalyticsDTO;
+import com.team10.uber.ride.enums.RideStatus;
 import com.team10.uber.ride.model.Ride;
 import com.team10.uber.ride.repository.RideRepository;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 
 @Service
@@ -70,5 +75,45 @@ public class RideService {
         double fare = 15.0 * distance * surgeMultiplier;
 
         return new FareEstimateDTO(distance, duration, fare, surgeMultiplier);
+    }
+    public RideAnalyticsDTO getRideAnalytics(LocalDate startDate, LocalDate endDate) {
+        if (startDate == null || endDate == null) {
+            throw new IllegalArgumentException("startDate and endDate are required");
+        }
+        if (endDate.isBefore(startDate)) {
+            throw new IllegalArgumentException("endDate must be on or after startDate");
+        }
+
+        LocalDateTime startDateTime = startDate.atStartOfDay();
+        LocalDateTime endDateTime = endDate.atTime(LocalTime.MAX);
+
+        List<Ride> rides = rideRepository.findByRequestedAtBetween(startDateTime, endDateTime);
+
+        long totalRides = rides.size();
+        long completedRides = rides.stream()
+                .filter(ride -> ride.getStatus() == RideStatus.COMPLETED)
+                .count();
+        long cancelledRides = rides.stream()
+                .filter(ride -> ride.getStatus() == RideStatus.CANCELLED)
+                .count();
+
+        double totalRevenue = rides.stream()
+                .filter(ride -> ride.getStatus() == RideStatus.COMPLETED)
+                .map(Ride::getFare)
+                .filter(fare -> fare != null)
+                .mapToDouble(Double::doubleValue)
+                .sum();
+
+        double averageFare = completedRides > 0 ? totalRevenue / completedRides : 0.0;
+        double completionRate = totalRides > 0 ? ((double) completedRides / totalRides) * 100 : 0.0;
+
+        return new RideAnalyticsDTO(
+                totalRides,
+                completedRides,
+                cancelledRides,
+                totalRevenue,
+                averageFare,
+                completionRate
+        );
     }
 }

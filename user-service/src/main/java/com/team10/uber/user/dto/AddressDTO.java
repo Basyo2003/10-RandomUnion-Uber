@@ -1,15 +1,26 @@
 package com.team10.uber.user.dto;
 
+import java.time.LocalDateTime;
 import java.util.Map;
 
 public class AddressDTO {
 
+    private Long id;
     private String label;
     private String address;
     private Double latitude;
     private Double longitude;
     private Boolean isDefault;
     private Map<String, Object> metadata;
+    private LocalDateTime createdAt;
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
 
     public String getLabel() {
         return label;
@@ -57,5 +68,13 @@ public class AddressDTO {
 
     public void setMetadata(Map<String, Object> metadata) {
         this.metadata = metadata;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
     }
 }
