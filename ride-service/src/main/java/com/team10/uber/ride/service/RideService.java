@@ -72,6 +72,38 @@ public class RideService {
     }
 
     @Transactional
+    public Ride cancelRide(Long rideId) {
+        Ride ride = rideRepository.findById(rideId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Ride not found with id: " + rideId));
+
+        RideStatus currentStatus = ride.getStatus();
+        if (currentStatus != RideStatus.REQUESTED && currentStatus != RideStatus.ACCEPTED) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "Ride can only be cancelled when status is REQUESTED or ACCEPTED. Current status: "
+                    + currentStatus);
+        }
+
+        if (ride.getDriverId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Ride can only be cancelled when status is REQUESTED or ACCEPTED and driver is BUSY");
+        }
+
+        int busyDriver = rideRepository.countBusyDriversById(ride.getDriverId());
+        if (busyDriver == 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Ride can only be cancelled when status is REQUESTED or ACCEPTED and driver is BUSY");
+        }
+
+        ride.setStatus(RideStatus.CANCELLED);
+
+        int updatedRows = rideRepository.updateDriverStatusToAvailable(ride.getDriverId());
+        if (updatedRows == 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Ride can only be cancelled when status is REQUESTED or ACCEPTED and driver is BUSY");
+        }
+
+        return rideRepository.save(ride);
+    }
     public Ride completeRide(Long rideId) {
         // 1) Find ride
         Ride ride = getRideById(rideId);
@@ -84,12 +116,12 @@ public class RideService {
         }
 
         // 3) Validate driver exists and is assigned to this ride
-        int driverExists = rideRepository.countDriverById(ride.getDriverId());
+        int driverExists = rideRepository.countDriversById(ride.getDriverId());
         if (driverExists == 0) {
             throw new DriverNotFoundException("Driver not found with id: " + ride.getDriverId());
         }
 
-        int busyDriver = rideRepository.countBusyDriverById(ride.getDriverId());
+        int busyDriver = rideRepository.countBusyDriversById(ride.getDriverId());
         if (busyDriver == 0) {
             throw new InvalidRideStatusException(
                     "Ride can only be completed when ride is IN_PROGRESS and driver is BUSY. Current driver status is not BUSY"

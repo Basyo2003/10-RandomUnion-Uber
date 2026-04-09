@@ -53,6 +53,11 @@ public class RideController {
         return rideService.updateRide(id, updatedRide);
     }
 
+    @PutMapping("/{id}/cancel")
+    public Ride cancelRide(@PathVariable Long id) {
+        return rideService.cancelRide(id);
+    }
+
     @DeleteMapping("/{id}")
     public String deleteRide(@PathVariable Long id) {
         rideService.deleteRide(id);
