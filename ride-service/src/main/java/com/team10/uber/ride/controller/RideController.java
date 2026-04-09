@@ -1,5 +1,7 @@
 package com.team10.uber.ride.controller;
 
+import com.team10.uber.ride.dto.FareEstimateDTO;
+import com.team10.uber.ride.dto.FareEstimateRequestDTO;
 import com.team10.uber.ride.dto.RideAnalyticsDTO;
 import com.team10.uber.ride.model.Ride;
 import com.team10.uber.ride.service.RideService;
@@ -45,6 +47,11 @@ public class RideController {
         return "Ride deleted successfully";
     }
 
+    @PostMapping("/estimate")
+    public FareEstimateDTO getFareEstimate(@RequestBody FareEstimateRequestDTO request) {
+        return rideService.getFareEstimate(request);
+    }
+  
     @GetMapping("/analytics")
     public RideAnalyticsDTO getRideAnalytics(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
