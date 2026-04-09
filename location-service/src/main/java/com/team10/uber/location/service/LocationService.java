@@ -1,6 +1,9 @@
 package com.team10.uber.location.service;
 
 import com.team10.uber.location.dto.BatchLocationRequest;
+import com.team10.uber.location.dto.DriverMovementSummaryDTO;
+import com.team10.uber.location.dto.DriverMovementSummaryProjection;
+import com.team10.uber.location.dto.StationaryDriverDTO;
 import com.team10.uber.location.model.Location;
 import com.team10.uber.location.repository.LocationRepository;
 import org.springframework.http.HttpStatus;
@@ -9,11 +12,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Service
 public class LocationService {
@@ -28,6 +33,7 @@ public class LocationService {
 
     public Location createLocation(Location location) {
         locationRepository.driverExists(jdbcTemplate,location.getDriverId());
+        locationRepository.driverExists(jdbcTemplate, location.getDriverId());
         return locationRepository.save(location);
 
     }
@@ -46,6 +52,9 @@ public class LocationService {
     public Location updateLocation(Long id, Location updated) {
         Location existing = getLocationById(id);
         locationRepository.driverExists(jdbcTemplate,updated.getDriverId());
+
+        locationRepository.driverExists(jdbcTemplate, updated.getDriverId());
+
         existing.setDriverId(updated.getDriverId());
         existing.setLatitude(updated.getLatitude());
         existing.setLongitude(updated.getLongitude());
@@ -59,7 +68,21 @@ public class LocationService {
         Location existing = getLocationById(id);
         locationRepository.delete(existing);
     }
-    //S4-F4
+    
+
+    // S4-F1
+    public Location getLatestLocationByDriverId(Long driverId) {
+        locationRepository.driverExists(jdbcTemplate, driverId);
+
+        return locationRepository.findTopByDriverIdOrderByTimestampDesc(driverId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "No locations found for driver with id: " + driverId
+                ));
+    }
+  
+  
+  //S4-F4
     @Transactional
     public Map<String, Object> batchCreateLocations(BatchLocationRequest request) {
         if (request.getDriverId() == null) {
@@ -111,6 +134,158 @@ public class LocationService {
         if (longitude < -180 || longitude > 180) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Longitude must be between -180 and 180");
         }
+    }
+
+    // S4-F5
+    public List<Location> filterLocationsByMetadata(String key, String operator, String value) {
+        if (key == null || key.isBlank() || value == null || value.isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Key and value are required"
+            );
+        }
+
+        if (operator == null || operator.isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Operator is required"
+            );
+        }
+
+        return switch (operator.toLowerCase()) {
+            case "eq" -> locationRepository.findByMetadataEq(key, value);
+            case "gt" -> {
+                validateNumeric(value);
+                yield locationRepository.findByMetadataGt(key, value);
+            }
+            case "lt" -> {
+                validateNumeric(value);
+                yield locationRepository.findByMetadataLt(key, value);
+            }
+            default -> throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Invalid operator"
+            );
+        };
+    }
+
+    // S4-F5 helper
+    private void validateNumeric(String value) {
+        try {
+            Double.parseDouble(value);
+        } catch (NumberFormatException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Value must be numeric for gt or lt"
+            );
+        }
+    }
+
+    // S4-F6
+    public List<Location> getLocationsInDateRange(String startDate, String endDate, Long driverId) {
+        if (startDate == null || endDate == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Start and end dates are required"
+            );
+        }
+
+        LocalDate start;
+        LocalDate end;
+
+        try {
+            start = LocalDate.parse(startDate);
+            end = LocalDate.parse(endDate);
+        } catch (Exception e) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Invalid date format. Use YYYY-MM-DD"
+            );
+        }
+
+        if (start.isAfter(end)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Start date cannot be after end date"
+            );
+        }
+
+        LocalDateTime startDateTime = start.atStartOfDay();
+        LocalDateTime endDateTime = end.atTime(23, 59, 59);
+
+        if (driverId != null) {
+            return locationRepository.findByDriverIdAndTimestampBetweenOrderByTimestampAsc(
+                    driverId, startDateTime, endDateTime
+            );
+        }
+
+        return locationRepository.findByTimestampBetweenOrderByTimestampAsc(
+                startDateTime, endDateTime
+        );
+    }
+
+    // S4-F8
+    public DriverMovementSummaryDTO getDriverMovementSummary(
+            Long driverId,
+            LocalDate startDate,
+            LocalDate endDate
+    ) {
+        if (endDate.isBefore(startDate)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "endDate must be on or after startDate"
+            );
+        }
+
+        locationRepository.driverExists(jdbcTemplate, driverId);
+
+        LocalDateTime startDateTime = startDate.atStartOfDay();
+        LocalDateTime endDateTime = endDate.plusDays(1).atStartOfDay();
+
+        Optional<DriverMovementSummaryProjection> optionalSummary =
+                locationRepository.getDriverMovementSummary(driverId, startDateTime, endDateTime);
+
+        if (optionalSummary.isEmpty()) {
+            return new DriverMovementSummaryDTO(
+                    driverId,
+                    0L,
+                    0.0,
+                    0.0,
+                    null,
+                    null
+            );
+        }
+
+        DriverMovementSummaryProjection summary = optionalSummary.get();
+
+        return new DriverMovementSummaryDTO(
+                summary.getDriverId(),
+                summary.getTotalLocationPoints(),
+                summary.getAverageSpeed(),
+                summary.getMaxSpeed(),
+                summary.getFirstTimestamp(),
+                summary.getLastTimestamp()
+        );
+    }
+
+    // S4-F9
+    public List<StationaryDriverDTO> getStationaryDrivers(Double maxSpeed, Integer sinceMinutes) {
+        if (maxSpeed == null || maxSpeed < 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "maxSpeed must be >= 0"
+            );
+        }
+
+        if (sinceMinutes == null || sinceMinutes <= 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "sinceMinutes must be > 0"
+            );
+        }
+
+        LocalDateTime cutoffTime = LocalDateTime.now().minusMinutes(sinceMinutes);
+        return locationRepository.findStationaryDrivers(maxSpeed, cutoffTime);
     }
 
 
