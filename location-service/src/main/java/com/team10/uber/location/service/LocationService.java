@@ -26,7 +26,7 @@ public class LocationService {
 
     // CREATE
     public Location createLocation(Location location) {
-        driverExists(location.getDriverId());
+        locationRepository.driverExists(jdbcTemplate,location.getDriverId());
         return locationRepository.save(location);
     }
 
@@ -47,7 +47,7 @@ public class LocationService {
     public Location updateLocation(Long id, Location updated) {
         Location existing = getLocationById(id);
 
-        driverExists(updated.getDriverId());
+        locationRepository.driverExists(jdbcTemplate,updated.getDriverId());
 
         existing.setDriverId(updated.getDriverId());
         existing.setLatitude(updated.getLatitude());
@@ -65,52 +65,6 @@ public class LocationService {
 
     }
 
-    // required by spec (driver is not JPA-managed)
-    private void driverExists(Long driverId) {
-        Integer count = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM drivers WHERE id = ?",
-                Integer.class,
-                driverId
-        );
-
-        if (count == null || count == 0) {
-            throw new ResponseStatusException(
-                    HttpStatus.NOT_FOUND, "Driver not found"
-            );
-        }
-    }
-
-    public List<Location> getLocationsInDateRange(String startDate, String endDate, Long driverId) {
-
-        if (startDate == null || endDate == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Start and end dates are required");
-        }
-
-        LocalDate start;
-        LocalDate end;
-
-        try {
-            start = LocalDate.parse(startDate);
-            end = LocalDate.parse(endDate);
-        } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid date format. Use YYYY-MM-DD");
-        }
-
-        if (start.isAfter(end)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Start date cannot be after end date");
-        }
-
-        LocalDateTime startDateTime = start.atStartOfDay();
-        LocalDateTime endDateTime = end.atTime(23, 59, 59);
-
-        if (driverId != null) {
-            return locationRepository
-                    .findByDriverIdAndTimestampBetweenOrderByTimestampAsc(driverId, startDateTime, endDateTime);
-        }
-
-        return locationRepository
-                .findByTimestampBetweenOrderByTimestampAsc(startDateTime, endDateTime);
-    }
 
     @Transactional
     public int purgeOldLocations(int olderThanDays) {

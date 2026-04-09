@@ -75,14 +75,6 @@ public class LocationController {
         return Map.of("message", "Location deleted successfully");
     }
 
-    @GetMapping("/history")
-    public List<Location> getLocationsInDateRange(
-            @RequestParam String startDate,
-            @RequestParam String endDate,
-            @RequestParam(required = false) Long driverId
-    ) {
-        return locationService.getLocationsInDateRange(startDate, endDate, driverId);
-    }
     @DeleteMapping("/purge")
     public Map<String, Integer> purgeOldLocations(@RequestParam int olderThanDays) {
         int deletedCount = locationService.purgeOldLocations(olderThanDays);
