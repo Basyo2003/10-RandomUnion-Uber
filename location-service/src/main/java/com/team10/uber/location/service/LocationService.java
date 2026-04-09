@@ -1,15 +1,18 @@
 package com.team10.uber.location.service;
 import com.team10.uber.location.repository.LocationRepository;
 
+import com.team10.uber.location.dto.DriverMovementSummaryDTO;
+import com.team10.uber.location.dto.DriverMovementSummaryProjection;
 import com.team10.uber.location.model.Location;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.time.LocalDate;
+import java.util.Optional;
 
 @Service
 public class LocationService {
@@ -63,7 +66,7 @@ public class LocationService {
 
     }
 
-    // required by spec (driver is not JPA-managed)
+    
 
 
     //S4-F1
@@ -109,5 +112,46 @@ public class LocationService {
 
         return locationRepository
                 .findByTimestampBetweenOrderByTimestampAsc(startDateTime, endDateTime);
+    }
+    //S4-F8
+    public DriverMovementSummaryDTO getDriverMovementSummary(Long driverId, LocalDate startDate, LocalDate endDate) {
+
+        if (endDate.isBefore(startDate)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "endDate must be on or after startDate"
+            );
+        }
+        if (!locationRepository.driverExists(driverId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Driver not found");
+        }
+
+        LocalDateTime startDateTime = startDate.atStartOfDay();
+        LocalDateTime endDateTime = endDate.plusDays(1).atStartOfDay();
+
+        Optional<DriverMovementSummaryProjection> optionalSummary =
+                locationRepository.getDriverMovementSummary(driverId, startDateTime, endDateTime);
+
+        if (optionalSummary.isEmpty()) {
+            return new DriverMovementSummaryDTO(
+                    driverId,
+                    0L,
+                    0.0,
+                    0.0,
+                    null,
+                    null
+            );
+        }
+
+        DriverMovementSummaryProjection summary = optionalSummary.get();
+
+        return new DriverMovementSummaryDTO(
+                summary.getDriverId(),
+                summary.getTotalLocationPoints(),
+                summary.getAverageSpeed(),
+                summary.getMaxSpeed(),
+                summary.getFirstTimestamp(),
+                summary.getLastTimestamp()
+        );
     }
 }
