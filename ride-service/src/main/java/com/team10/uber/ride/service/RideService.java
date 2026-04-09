@@ -1,27 +1,28 @@
 package com.team10.uber.ride.service;
 
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.team10.uber.ride.enums.RideStatus;
+import com.team10.uber.ride.exception.DriverNotFoundException;
+import com.team10.uber.ride.exception.InvalidRideStatusException;
+import com.team10.uber.ride.exception.RideNotFoundException;
+import com.team10.uber.ride.model.Ride;
+import com.team10.uber.ride.repository.RideRepository;
 import com.team10.uber.ride.dto.RideStopRequestDTO;
 import com.team10.uber.ride.dto.RideWithStopsDTO;
-import com.team10.uber.ride.enums.RideStatus;
 import com.team10.uber.ride.enums.StopStatus;
 import com.team10.uber.ride.dto.FareEstimateDTO;
 import com.team10.uber.ride.dto.FareEstimateRequestDTO;
 import com.team10.uber.ride.dto.RideAnalyticsDTO;
-import com.team10.uber.ride.enums.RideStatus;
-import com.team10.uber.ride.model.Ride;
 import com.team10.uber.ride.model.RideStop;
 import com.team10.uber.ride.repository.RideRepository;
 import com.team10.uber.ride.repository.RideStopRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
-import org.springframework.http.HttpStatus;
-import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
-
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -48,7 +49,7 @@ public class RideService {
 
     public Ride getRideById(Long id) {
         return rideRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Ride not found with id: " + id));
+                .orElseThrow(() -> new RideNotFoundException("Ride not found with id: " + id));
     }
 
     public Ride updateRide(Long id, Ride updatedRide) {
@@ -71,6 +72,72 @@ public class RideService {
     }
 
     @Transactional
+    public Ride completeRide(Long rideId) {
+        // 1) Find ride
+        Ride ride = getRideById(rideId);
+
+        // 2) Validate status
+        if (ride.getStatus() != RideStatus.IN_PROGRESS) {
+            throw new InvalidRideStatusException(
+                    "Ride status must be IN_PROGRESS to complete. Current status: " + ride.getStatus()
+            );
+        }
+
+        // 3) Validate driver exists and is assigned to this ride
+        int driverExists = rideRepository.countDriverById(ride.getDriverId());
+        if (driverExists == 0) {
+            throw new DriverNotFoundException("Driver not found with id: " + ride.getDriverId());
+        }
+
+        int busyDriver = rideRepository.countBusyDriverById(ride.getDriverId());
+        if (busyDriver == 0) {
+            throw new InvalidRideStatusException(
+                    "Ride can only be completed when ride is IN_PROGRESS and driver is BUSY. Current driver status is not BUSY"
+            );
+        }
+
+        // 4) Set ride as completed
+        ride.setStatus(RideStatus.COMPLETED);
+        ride.setCompletedAt(LocalDateTime.now());
+
+        // 5) Calculate fare if unset
+        if (ride.getFare() == null) {
+            double calculatedFare = calculateFare(
+                    ride.getPickupLatitude(),
+                    ride.getPickupLongitude(),
+                    ride.getDropoffLatitude(),
+                    ride.getDropoffLongitude()
+            );
+            ride.setFare(calculatedFare);
+        }
+
+        // 6) Update driver status to AVAILABLE
+        int updatedRows = rideRepository.updateDriverStatusToAvailable(ride.getDriverId());
+        if (updatedRows == 0) {
+            throw new InvalidRideStatusException(
+                    "Ride can only be completed when ride is IN_PROGRESS and driver is BUSY"
+            );
+        }
+
+        // 7) Create payment
+        rideRepository.createPayment(
+                ride.getId(),
+                ride.getUserId(),
+                ride.getFare()
+        );
+
+        // 8) Save and return updated ride
+        return rideRepository.save(ride);
+    }
+
+    private double calculateFare(double pickupLat, double pickupLon, double dropoffLat, double dropoffLon) {
+        double distance = Math.sqrt(
+                Math.pow(dropoffLat - pickupLat, 2) +
+                Math.pow(dropoffLon - pickupLon, 2)
+        ) * 111;
+
+        return distance * 15.0;
+    }
     public RideWithStopsDTO addStops(Long rideId, List<RideStopRequestDTO> stopRequests) {
         Ride ride = rideRepository.findById(rideId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Ride not found"));
