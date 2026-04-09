@@ -266,9 +266,16 @@ public class PaymentService {
             Double totalDiscountGiven = ((Number) row[5]).doubleValue();
             Boolean active = (Boolean) row[6];
     
-            java.time.LocalDateTime expiryDate = ((java.sql.Timestamp) row[7]).toLocalDateTime();
+            java.time.LocalDateTime expiryDate;
+            if (row[7] instanceof java.sql.Timestamp) {
+                expiryDate = ((java.sql.Timestamp) row[7]).toLocalDateTime();
+            } else if (row[7] instanceof java.time.LocalDateTime) {
+                expiryDate = (java.time.LocalDateTime) row[7];
+            } else {
+                expiryDate = java.time.LocalDateTime.parse(row[7].toString());
+            }
             Boolean expired = expiryDate.isBefore(java.time.LocalDateTime.now());
-    
+
             return new CouponUsageDTO(couponId, code, discountType, discountValue, timesUsed, totalDiscountGiven, active, expired);}).collect(java.util.stream.Collectors.toList());
     }
 }
