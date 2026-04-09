@@ -72,6 +72,13 @@ public class RideService {
             throw new DriverNotFoundException("Driver not found with id: " + ride.getDriverId());
         }
 
+        int busyDriver = rideRepository.countBusyDriverById(ride.getDriverId());
+        if (busyDriver == 0) {
+            throw new InvalidRideStatusException(
+                    "Ride can only be completed when ride is IN_PROGRESS and driver is BUSY. Current driver status is not BUSY"
+            );
+        }
+
         // 4) Set ride as completed
         ride.setStatus(RideStatus.COMPLETED);
         ride.setCompletedAt(LocalDateTime.now());
@@ -90,7 +97,9 @@ public class RideService {
         // 6) Update driver status to AVAILABLE
         int updatedRows = rideRepository.updateDriverStatusToAvailable(ride.getDriverId());
         if (updatedRows == 0) {
-            throw new DriverNotFoundException("Driver not found with id: " + ride.getDriverId());
+            throw new InvalidRideStatusException(
+                    "Ride can only be completed when ride is IN_PROGRESS and driver is BUSY"
+            );
         }
 
         // 7) Create payment

@@ -14,10 +14,14 @@ public interface RideRepository extends JpaRepository<Ride, Long> {
     @Query(value = "SELECT COUNT(1) FROM drivers WHERE id = :driverId", nativeQuery = true)
     int countDriverById(@Param("driverId") Long driverId);
 
+    // 0.1) Check if driver is BUSY
+    @Query(value = "SELECT COUNT(1) FROM drivers WHERE id = :driverId AND status = 'BUSY'", nativeQuery = true)
+    int countBusyDriverById(@Param("driverId") Long driverId);
+
     // 1) Update driver status to AVAILABLE
     @Modifying
     @Transactional
-    @Query(value = "UPDATE drivers SET status = 'AVAILABLE' WHERE id = :driverId", nativeQuery = true)
+    @Query(value = "UPDATE drivers SET status = 'AVAILABLE' WHERE id = :driverId AND status = 'BUSY'", nativeQuery = true)
     int updateDriverStatusToAvailable(@Param("driverId") Long driverId);
 
 
