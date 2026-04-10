@@ -40,6 +40,17 @@ public class RideService {
     }
 
     public Ride createRide(Ride ride) {
+        if (ride.getUserId() == null || ride.getPickupLatitude() == null || ride.getPickupLongitude() == null
+                || ride.getDropoffLatitude() == null || ride.getDropoffLongitude() == null || ride.getStatus() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Missing required fields: userId, pickupLatitude, pickupLongitude, dropoffLatitude, dropoffLongitude, status");
+        }
+        if (rideRepository.countUsersById(ride.getUserId()) == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found with id: " + ride.getUserId());
+        }
+        if (ride.getDriverId() != null && rideRepository.countDriversById(ride.getDriverId()) == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Driver not found with id: " + ride.getDriverId());
+        }
         return rideRepository.save(ride);
     }
 
@@ -53,6 +64,17 @@ public class RideService {
     }
 
     public Ride updateRide(Long id, Ride updatedRide) {
+        if (updatedRide.getUserId() == null || updatedRide.getPickupLatitude() == null || updatedRide.getPickupLongitude() == null
+                || updatedRide.getDropoffLatitude() == null || updatedRide.getDropoffLongitude() == null || updatedRide.getStatus() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Missing required fields: userId, pickupLatitude, pickupLongitude, dropoffLatitude, dropoffLongitude, status");
+        }
+        if (rideRepository.countUsersById(updatedRide.getUserId()) == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found with id: " + updatedRide.getUserId());
+        }
+        if (updatedRide.getDriverId() != null && rideRepository.countDriversById(updatedRide.getDriverId()) == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Driver not found with id: " + updatedRide.getDriverId());
+        }
         Ride existing = getRideById(id);
         existing.setUserId(updatedRide.getUserId());
         existing.setDriverId(updatedRide.getDriverId());

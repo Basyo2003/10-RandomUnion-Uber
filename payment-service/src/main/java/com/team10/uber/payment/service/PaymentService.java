@@ -9,16 +9,19 @@ import com.team10.uber.payment.enums.PaymentStatus;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
-import org.springframework.transaction.annotation.Transactional;
 import com.team10.uber.payment.dto.UserPaymentSummaryDTO;
+import com.team10.uber.payment.dto.ProcessPaymentDTO;
+import com.team10.uber.payment.enums.PaymentMethod;
+import java.util.Optional;
+import org.springframework.transaction.annotation.Transactional;
+import com.team10.uber.payment.enums.PaymentStatus;
+import java.util.Map;
+import java.util.HashMap;
 import com.team10.uber.payment.model.Coupon;
 import com.team10.uber.payment.model.PaymentCoupon;
 import com.team10.uber.payment.repository.CouponRepository;
 import com.team10.uber.payment.repository.PaymentCouponRepository;
 import com.team10.uber.payment.enums.DiscountType;
-import java.util.Optional;
-import org.springframework.transaction.annotation.Transactional;
-import com.team10.uber.payment.enums.PaymentStatus;
 import java.time.LocalDateTime;
 
 
@@ -46,6 +49,25 @@ public class PaymentService {
     }
 
     public Payment createPayment(Payment payment) {
+
+        // Check user exists
+        if (paymentRepository.countUserById(payment.getUserId()) == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "User not found with id: " + payment.getUserId());
+        }
+
+        // Check ride exists
+        if (paymentRepository.countRideById(payment.getRideId()) == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "Ride not found with id: " + payment.getRideId());
+        }
+
+        // Check ride does not already have a payment
+        if (paymentRepository.countPaymentsByRideId(payment.getRideId()) > 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "A payment already exists for ride id: " + payment.getRideId());
+        }
+
         return paymentRepository.save(payment);
     }
 
@@ -131,6 +153,66 @@ public class PaymentService {
     }
 
     @Transactional
+    public Payment processPaymentForRide(Long rideId, ProcessPaymentDTO dto) {
+
+        // a) Verify ride exists
+        String rideStatus = paymentRepository.findRideStatusById(rideId);
+        if (rideStatus == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Ride not found with id: " + rideId);
+        }
+
+        // b) Verify ride is COMPLETED
+        if (!rideStatus.equals("COMPLETED")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Ride is not completed. Current status: " + rideStatus);
+        }
+
+        // c) Check no COMPLETED payment exists for this ride
+        Optional<Payment> existingPayment = paymentRepository.findByRideIdAndStatus(rideId, PaymentStatus.COMPLETED);
+        if (existingPayment.isPresent()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "already paid");
+        }
+
+        // d) Validate cardLastFour
+        if (dto.getMethod().equals("CREDIT_CARD")) {
+            String cardLastFour = dto.getCardLastFour();
+            if (cardLastFour == null || cardLastFour.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "cardLastFour is required for CREDIT_CARD payments");
+            }
+            if (cardLastFour.length() != 4 || !cardLastFour.matches("\\d{4}")) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "cardLastFour must be exactly 4 digits");
+            }
+        } else {
+            if (dto.getCardLastFour() != null && !dto.getCardLastFour().isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "cardLastFour should not be provided for " + dto.getMethod() + " payments");
+            }
+        }
+
+        // e) Get ride details
+        Double fare = paymentRepository.findRideFareById(rideId);
+        Long userId = paymentRepository.findRideUserIdById(rideId);
+
+        // f) Build JSONB transactionDetails
+        Map<String, Object> transactionDetails = new HashMap<>();
+        transactionDetails.put("gatewayResponse", "success");
+        transactionDetails.put("cardLastFour", dto.getCardLastFour());
+        transactionDetails.put("receiptUrl", "https://receipts.com/" + rideId);
+        transactionDetails.put("failureReason", null);
+
+        // g) Create and save payment
+        Payment payment = new Payment();
+        payment.setRideId(rideId);
+        payment.setUserId(userId);
+        payment.setAmount(fare != null ? fare : 0.0);
+        payment.setMethod(PaymentMethod.valueOf(dto.getMethod()));
+        payment.setStatus(PaymentStatus.COMPLETED);
+        payment.setTransactionDetails(transactionDetails);
+
+        return paymentRepository.save(payment);
+    }
     public PaymentDetailsDTO applyCoupon(Long paymentId, Long couponId) {
         Payment payment = getPaymentById(paymentId);
 

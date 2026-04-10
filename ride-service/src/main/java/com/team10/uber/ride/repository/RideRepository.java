@@ -13,6 +13,9 @@ import java.util.Optional;
 
 public interface RideRepository extends JpaRepository<Ride, Long> {
 
+	@Query(value = "SELECT COUNT(*) FROM users WHERE id = :userId", nativeQuery = true)
+	int countUsersById(@Param("userId") Long userId);
+
 	@Query(value = "SELECT COUNT(*) FROM drivers WHERE id = :driverId", nativeQuery = true)
 	int countDriversById(@Param("driverId") Long driverId);
 

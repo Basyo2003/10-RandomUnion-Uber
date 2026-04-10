@@ -55,6 +55,26 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
             @Param("startDate") LocalDateTime startDate,
             @Param("endDate") LocalDateTime endDate);
 
+    // Check ride exists and get its status
+    @Query(value = "SELECT status FROM rides WHERE id = :rideId", nativeQuery = true)
+    String findRideStatusById(@Param("rideId") Long rideId);
+
+    // Get ride fare
+    @Query(value = "SELECT fare FROM rides WHERE id = :rideId", nativeQuery = true)
+    Double findRideFareById(@Param("rideId") Long rideId);
+
+    // Get ride userId
+    @Query(value = "SELECT user_id FROM rides WHERE id = :rideId", nativeQuery = true)
+    Long findRideUserIdById(@Param("rideId") Long rideId);
+
     @Query(value = "SELECT COUNT(*) FROM users WHERE id = :userId", nativeQuery = true)
     int countUserById(@Param("userId") Long userId);
+
+    // Check ride exists
+    @Query(value = "SELECT COUNT(*) FROM rides WHERE id = :rideId", nativeQuery = true)
+    int countRideById(@Param("rideId") Long rideId);
+
+    // Check ride already has a payment
+    @Query(value = "SELECT COUNT(*) FROM payments WHERE ride_id = :rideId", nativeQuery = true)
+    int countPaymentsByRideId(@Param("rideId") Long rideId);
 }
