@@ -51,8 +51,21 @@ public class LocationController {
     }
 
     @GetMapping("/{id}")
-    public Location getLocationById(@PathVariable Long id) {
-        return locationService.getLocationById(id);
+    public ResponseEntity<?> getLocationById(@PathVariable Long id) {
+        try {
+            Location location = locationService.getLocationById(id);
+            return ResponseEntity.ok(location);
+
+        } catch (ResponseStatusException ex) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("timestamp", LocalDateTime.now());
+            error.put("status", ex.getStatusCode().value());
+            error.put("error", ex.getStatusCode().toString());
+            error.put("message", ex.getReason());
+            error.put("path", "/api/locations/" + id);
+
+            return ResponseEntity.status(ex.getStatusCode()).body(error);
+        }
     }
 
     @GetMapping
@@ -96,8 +109,7 @@ public class LocationController {
 
     //S4-F2
     @PostMapping("/driver/{driverId}")
-    @ResponseStatus(HttpStatus.CREATED)
-    public Location createLocationForDriver(
+    public ResponseEntity<Location> createLocationForDriver(
             @PathVariable Long driverId,
             @RequestBody Map<String, Object> body
     ) {
@@ -111,7 +123,9 @@ public class LocationController {
         location.setLongitude(longitude);
         location.setMetadata(metadata);
 
-        return locationService.createLocationForDriver(driverId, location);
+        Location created = locationService.createLocationForDriver(driverId, location);
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
   
     //S4-F3
