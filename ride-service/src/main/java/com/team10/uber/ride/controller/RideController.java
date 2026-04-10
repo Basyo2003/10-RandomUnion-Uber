@@ -94,6 +94,11 @@ public class RideController {
     ) {
         return rideService.getRideAnalytics(startDate, endDate);
     }
+
+    @PutMapping("/{rideId}/assign")
+    public Ride assignDriver(@PathVariable Long rideId,
+                             @RequestParam(name = "driverId") Long driverId) {
+        return rideService.assignDriver(rideId, driverId);
     @GetMapping("/search")
     public List<Ride> GetRidesByStatusandDateRange(
             @RequestParam(required = false,name = "status") RideStatus status,

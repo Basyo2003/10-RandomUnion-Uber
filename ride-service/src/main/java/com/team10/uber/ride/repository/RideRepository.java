@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 
 import com.team10.uber.ride.model.Ride;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -47,6 +48,15 @@ public interface RideRepository extends JpaRepository<Ride, Long> {
                                  @Param("minLon") Double minLon, @Param("maxLon") Double maxLon);
   List<Ride> findByRequestedAtBetween(LocalDateTime startDateTime, LocalDateTime endDateTime);
 
+    @Query(value = "SELECT COUNT(*) > 0 FROM drivers WHERE id = :driverId", nativeQuery = true)
+    boolean driverexists(@Param("driverId") Long driverId);
+
+    @Query(value = "SELECT COUNT(*) FROM drivers WHERE id = :driverId AND status = 'AVAILABLE'", nativeQuery = true)
+    int countAvailableDriversById(@Param("driverId") Long driverId);
+
+    @Modifying
+    @Query(value = "UPDATE drivers SET status = 'BUSY' WHERE id = :driverId AND status = 'AVAILABLE'", nativeQuery = true)
+    int updateDriverStatusToBusy(@Param("driverId") Long driverId);
     @Query(value = "SELECT * FROM rides " +
             "WHERE requested_at BETWEEN :startDate AND :endDate " +
             "AND (:status IS NULL OR status::text = :status) " +

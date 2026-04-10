@@ -296,6 +296,41 @@ public class RideService {
                 completionRate
         );
     }
+    @Transactional
+    public Ride assignDriver(Long rideId, Long driverId) {
+
+
+        Ride ride = rideRepository.findById(rideId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Ride not found with id: " + rideId));
+
+
+        if (ride.getStatus() != RideStatus.REQUESTED) {
+            throw new InvalidRideStatusException(
+                    "Ride " + rideId + " cannot be assigned. " +
+                            "Expected REQUESTED but was: " + ride.getStatus()
+            );
+        }
+
+
+        if (!rideRepository.driverexists(driverId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "Driver not found with id: " + driverId);
+        }
+
+        if (rideRepository.countAvailableDriversById(driverId) == 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Driver is not available");
+        }
+
+        ride.setDriverId(driverId);
+        ride.setStatus(RideStatus.ACCEPTED);
+        rideRepository.save(ride);
+
+        rideRepository.updateDriverStatusToBusy(driverId);
+
+        return ride;
+}
 
     public List<Ride> GetRidesByStatusandDateRange(RideStatus status, LocalDateTime startDate, LocalDateTime endDate) {
         String statusName = status != null ? status.name() : null;
