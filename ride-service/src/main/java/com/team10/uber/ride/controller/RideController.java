@@ -16,6 +16,7 @@ import com.team10.uber.ride.dto.RideWithStopsDTO;
 import com.team10.uber.ride.dto.FareEstimateDTO;
 import com.team10.uber.ride.dto.FareEstimateRequestDTO;
 import com.team10.uber.ride.dto.RideAnalyticsDTO;
+import com.team10.uber.ride.dto.RideDetailsDTO;
 import com.team10.uber.ride.model.Ride;
 import com.team10.uber.ride.service.RideService;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -86,10 +87,8 @@ public class RideController {
     }
 
     @PostMapping("/api/rides/{rideId}/details")
-    public RideDetailsDTO GetRideDetailsWithStops(
-            @PathVariable Long rideId
-    ){
-        return rideService.getRideDetailsWithStops(rideId);
+    public RideDetailsDTO GetRideDetailsWithStops(@PathVariable Long rideId){
+        return rideService.GetRideDetailsWithStops(rideId);
     }
   
     @GetMapping("/analytics")

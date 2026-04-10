@@ -21,6 +21,7 @@ import com.team10.uber.ride.repository.RideStopRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+import com.team10.uber.ride.dto.RideDetailsDTO;
 
 import java.util.ArrayList;
 import java.time.LocalDate;
@@ -284,6 +285,6 @@ public class RideService {
         // Fetch stops ordered by stopOrder ascending at the DB level
         List<RideStop> stops = rideStopRepository.findByRideIdOrderByStopOrderAsc(rideId);
 
-        return new RideDetailsDTO(ride, stops);
+        return new RideDetailsDTO(ride,stops);
     }
 }
