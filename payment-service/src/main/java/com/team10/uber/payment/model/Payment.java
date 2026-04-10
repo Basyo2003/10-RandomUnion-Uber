@@ -34,6 +34,7 @@ public class Payment {
     private PaymentMethod method;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(nullable = false)
     private PaymentStatus status;
 
