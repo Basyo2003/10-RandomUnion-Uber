@@ -88,11 +88,9 @@ public class DriverService {
         existingDriver.setVehicleDetails(merged);
         return driverRepository.save(existingDriver);
     }
-    public List<Driver> filterByVehicleType(String type, DriverStatus status) {
+    public List<Driver> filterByVehicleType(String type, String status) {
 
-    System.out.println("TYPE = " + type);
-    System.out.println("STATUS = " + status);
-
+    // 🔴 Validate type
     if (type == null || type.isBlank()) {
         throw new ResponseStatusException(
                 HttpStatus.BAD_REQUEST,
@@ -100,7 +98,22 @@ public class DriverService {
         );
     }
 
-    String statusValue = (status != null) ? status.name() : null;
+    // 🔴 Convert status (if exists)
+    DriverStatus driverStatus = null;
+
+    if (status != null) {
+        try {
+            driverStatus = DriverStatus.valueOf(status);
+        } catch (Exception e) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Invalid status value"
+            );
+        }
+    }
+
+    // 🔴 Convert enum to string for query
+    String statusValue = (driverStatus != null) ? driverStatus.name() : null;
 
     return driverRepository.findByVehicleType(type, statusValue);
 }
