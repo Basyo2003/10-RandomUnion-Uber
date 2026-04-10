@@ -74,13 +74,13 @@ public class PaymentController {
         Payment payment = paymentService.processPaymentForRide(rideId, dto);
         return ResponseEntity.status(HttpStatus.CREATED).body(payment);
     }
-  
+
     @PostMapping("/{paymentId}/coupons/{couponId}")
     public ResponseEntity<PaymentDetailsDTO> applyCoupon(
             @PathVariable Long paymentId,
             @PathVariable Long couponId) {
         PaymentDetailsDTO result = paymentService.applyCoupon(paymentId, couponId);
-        return ResponseEntity.status(HttpStatus.CREATED).body(result);
+        return ResponseEntity.ok(result);
     }
 
     @GetMapping("/search")
