@@ -89,17 +89,26 @@ public class PaymentController {
             @RequestParam String startDate,
             @RequestParam String endDate) {
 
-        LocalDateTime start = LocalDateTime.parse(startDate + "T00:00:00");
-        LocalDateTime end = LocalDateTime.parse(endDate + "T23:59:59");
+        LocalDateTime start;
+        LocalDateTime end;
+
+        try {
+            start = startDate.contains("T") ? LocalDateTime.parse(startDate) : LocalDateTime.parse(startDate + "T00:00:00");
+            end = endDate.contains("T") ? LocalDateTime.parse(endDate) : LocalDateTime.parse(endDate + "T23:59:59");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().build();
+        }
 
         List<Payment> payments = paymentService.searchPayments(status, start, end);
         return ResponseEntity.ok(payments);
     }
 
     @GetMapping("/reports/revenue")
-    public ResponseEntity<RevenueReportDTO> getRevenueReport(@RequestParam String startDate, @RequestParam String endDate) {
-        LocalDateTime start = LocalDateTime.parse(startDate + "T00:00:00");
-        LocalDateTime end   = LocalDateTime.parse(endDate   + "T23:59:59");
+    public ResponseEntity<RevenueReportDTO> getRevenueReport(
+            @RequestParam String startDate,
+            @RequestParam String endDate) {
+        LocalDateTime start = startDate.contains("T") ? LocalDateTime.parse(startDate) : LocalDateTime.parse(startDate + "T00:00:00");
+        LocalDateTime end = endDate.contains("T") ? LocalDateTime.parse(endDate) : LocalDateTime.parse(endDate + "T23:59:59");
         return ResponseEntity.ok(paymentService.getRevenueReport(start, end));
     }
 
