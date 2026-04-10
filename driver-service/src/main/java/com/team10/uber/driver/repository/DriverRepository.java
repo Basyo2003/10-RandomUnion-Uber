@@ -1,6 +1,5 @@
 package com.team10.uber.driver.repository;
 
-import com.team10.uber.driver.dto.TopRatedDriverDTO;
 import com.team10.uber.driver.enums.DriverStatus;
 import com.team10.uber.driver.model.Driver;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -60,7 +59,7 @@ public interface DriverRepository extends JpaRepository<Driver, Long> {
 
     @Query(value = """
             SELECT * FROM drivers
-            WHERE LOWER((CAST(vehicle_details AS jsonb) ->> 'type')) = LOWER(:type)
+            WHERE LOWER(COALESCE((CAST(vehicle_details AS jsonb) ->> 'vehicleType'), (CAST(vehicle_details AS jsonb) ->> 'type'))) = LOWER(:type)
             AND (:status IS NULL OR status = :status)
             """, nativeQuery = true)
     List<Driver> findByVehicleType(
