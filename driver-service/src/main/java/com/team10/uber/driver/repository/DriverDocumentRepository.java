@@ -17,6 +17,10 @@ public interface DriverDocumentRepository extends JpaRepository<DriverDocument, 
 
     @Query("SELECT dd FROM DriverDocument dd WHERE dd.expiryDate < CURRENT_DATE")
     List<DriverDocument> findExpiredDocuments();
+
+    @Query("SELECT dd FROM DriverDocument dd WHERE dd.driver.id = :driverId")
+    List<DriverDocument> findByDriverId(@Param("driverId") Long driverId);
+
     // Check if a user exists and is ADMIN
     @Query(value = "SELECT role FROM users WHERE id = :userId", nativeQuery = true)
     Optional<String> findUserRoleById(@Param("userId") Long userId);
