@@ -21,6 +21,7 @@ import com.team10.uber.ride.repository.RideStopRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+import com.team10.uber.ride.dto.RideDetailsDTO;
 
 import java.util.ArrayList;
 import java.time.LocalDate;
@@ -296,6 +297,17 @@ public class RideService {
                 completionRate
         );
     }
+
+
+    public RideDetailsDTO GetRideDetailsWithStops(Long rideId) {
+        Ride ride = rideRepository.findById(rideId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Ride not found with id: " + rideId));
+
+
+        List<RideStop> stops = rideStopRepository.findByRideIdOrderByStopOrderAsc(rideId);
+
+        return new RideDetailsDTO(ride,stops);
     @Transactional
     public Ride assignDriver(Long rideId, Long driverId) {
 

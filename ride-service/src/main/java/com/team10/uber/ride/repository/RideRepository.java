@@ -48,6 +48,7 @@ public interface RideRepository extends JpaRepository<Ride, Long> {
                                  @Param("minLon") Double minLon, @Param("maxLon") Double maxLon);
   List<Ride> findByRequestedAtBetween(LocalDateTime startDateTime, LocalDateTime endDateTime);
 
+
     @Query(value = "SELECT COUNT(*) > 0 FROM drivers WHERE id = :driverId", nativeQuery = true)
     boolean driverexists(@Param("driverId") Long driverId);
 
@@ -67,3 +68,4 @@ public interface RideRepository extends JpaRepository<Ride, Long> {
                                             @Param("status") String status);
 
 }
+
