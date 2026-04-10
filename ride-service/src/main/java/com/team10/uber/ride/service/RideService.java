@@ -307,7 +307,9 @@ public class RideService {
 
         List<RideStop> stops = rideStopRepository.findByRideIdOrderByStopOrderAsc(rideId);
 
-        return new RideDetailsDTO(ride,stops);
+        return new RideDetailsDTO(ride, stops);
+    }
+
     @Transactional
     public Ride assignDriver(Long rideId, Long driverId) {
 
