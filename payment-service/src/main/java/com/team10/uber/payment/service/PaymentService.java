@@ -174,20 +174,11 @@ public class PaymentService {
         }
 
         // d) Validate cardLastFour
-        if (dto.getMethod().equals("CREDIT_CARD")) {
+        if (dto.getMethod().equals("CREDIT_CARD") && dto.getCardLastFour() != null) {
             String cardLastFour = dto.getCardLastFour();
-            if (cardLastFour == null || cardLastFour.isEmpty()) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "cardLastFour is required for CREDIT_CARD payments");
-            }
             if (cardLastFour.length() != 4 || !cardLastFour.matches("\\d{4}")) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "cardLastFour must be exactly 4 digits");
-            }
-        } else {
-            if (dto.getCardLastFour() != null && !dto.getCardLastFour().isEmpty()) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "cardLastFour should not be provided for " + dto.getMethod() + " payments");
             }
         }
 
