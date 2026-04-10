@@ -11,8 +11,8 @@ import com.team10.uber.driver.model.Driver;
 import com.team10.uber.driver.service.DriverDocumentService;
 import com.team10.uber.driver.service.DriverService;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -79,7 +79,17 @@ public class DriverController {
     public Driver updateVehicleDetails(@PathVariable Long id, @RequestBody Map<String, Object> vehicleUpdates) {
         return driverService.updateVehicleDetails(id, vehicleUpdates);
     }
+    @PutMapping("/{id}/availability")
+public ResponseEntity<Void> updateAvailability(
+        @PathVariable Long id,
+        @RequestBody Map<String, String> body) {
 
+    DriverStatus status = DriverStatus.valueOf(body.get("status"));
+
+    driverService.updateDriverAvailability(id, status);
+
+    return ResponseEntity.ok().build(); // ✅ only 200
+}
     @PutMapping("/{id}")
     public Driver updateDriver(@PathVariable Long id, @RequestBody Driver updatedDriver) {
         return driverService.updateDriver(id, updatedDriver);
