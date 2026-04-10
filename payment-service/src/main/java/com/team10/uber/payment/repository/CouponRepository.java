@@ -16,11 +16,13 @@ public interface CouponRepository extends JpaRepository<Coupon, Long> {
 
     List<Coupon> findByActiveTrue();
 
-    @Query(value = "SELECT c.*, COALESCE(SUM(pc.discount_applied), 0) as total_discount, " +
-            "c.current_uses as times_used " +
+    @Query(value = "SELECT c.id, c.code, c.discount_type, c.discount_value, " +
+            "c.current_uses as times_used, COALESCE(SUM(pc.discount_applied), 0) as total_discount, " +
+            "c.active, c.expiry_date " +
             "FROM coupons c " +
             "LEFT JOIN payment_coupons pc ON c.id = pc.coupon_id " +
-            "GROUP BY c.id " +
+            "GROUP BY c.id, c.code, c.discount_type, c.discount_value, " +
+            "c.current_uses, c.active, c.expiry_date " +
             "ORDER BY c.current_uses DESC " +
             "LIMIT :limit",
             nativeQuery = true)

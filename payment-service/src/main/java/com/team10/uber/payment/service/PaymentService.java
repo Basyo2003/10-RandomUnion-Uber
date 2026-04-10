@@ -337,17 +337,17 @@ public class PaymentService {
     }
 
     public List<CouponUsageDTO> getTopUsedCoupons(int limit) {
-        List<Object[]> rows = paymentCouponRepository.findTopUsedCoupons(limit);
-    
+        List<Object[]> rows = couponRepository.findTopUsedCoupons(limit);
+
         return rows.stream().map(row -> {
             Long couponId = ((Number) row[0]).longValue();
-            String code = (String)  row[1];
-            String discountType = (String)  row[2];
+            String code = (String) row[1];
+            String discountType = (String) row[2];
             Double discountValue = ((Number) row[3]).doubleValue();
             Integer timesUsed = ((Number) row[4]).intValue();
             Double totalDiscountGiven = ((Number) row[5]).doubleValue();
             Boolean active = (Boolean) row[6];
-    
+
             java.time.LocalDateTime expiryDate;
             if (row[7] instanceof java.sql.Timestamp) {
                 expiryDate = ((java.sql.Timestamp) row[7]).toLocalDateTime();
@@ -358,6 +358,7 @@ public class PaymentService {
             }
             Boolean expired = expiryDate.isBefore(java.time.LocalDateTime.now());
 
-            return new CouponUsageDTO(couponId, code, discountType, discountValue, timesUsed, totalDiscountGiven, active, expired);}).collect(java.util.stream.Collectors.toList());
+            return new CouponUsageDTO(couponId, code, discountType, discountValue, timesUsed, totalDiscountGiven, active, expired);
+        }).collect(java.util.stream.Collectors.toList());
     }
 }
