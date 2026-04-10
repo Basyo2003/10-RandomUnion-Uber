@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
 import com.team10.uber.payment.dto.UserPaymentSummaryDTO;
+import com.team10.uber.payment.dto.ProcessPaymentDTO;
 import com.team10.uber.payment.dto.CouponUsageDTO;
 import com.team10.uber.payment.dto.PaymentDetailsDTO;
 import com.team10.uber.payment.dto.RevenueReportDTO;
@@ -66,6 +67,14 @@ public class PaymentController {
         return ResponseEntity.ok(paymentService.getUserPaymentSummary(userId));
     }
 
+    @PostMapping("/ride/{rideId}")
+    public ResponseEntity<Payment> processPaymentForRide(
+            @PathVariable Long rideId,
+            @RequestBody ProcessPaymentDTO dto) {
+        Payment payment = paymentService.processPaymentForRide(rideId, dto);
+        return ResponseEntity.status(HttpStatus.CREATED).body(payment);
+    }
+  
     @PostMapping("/{paymentId}/coupons/{couponId}")
     public ResponseEntity<PaymentDetailsDTO> applyCoupon(
             @PathVariable Long paymentId,
