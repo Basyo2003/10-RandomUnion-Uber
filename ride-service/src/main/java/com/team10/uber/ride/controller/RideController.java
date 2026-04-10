@@ -95,13 +95,13 @@ public class RideController {
         return rideService.getRideAnalytics(startDate, endDate);
     }
     @GetMapping("/search/")
-    public List<Ride> GetRidesByStatusandDateRange(
+    public List<Ride> getRidesByStatusAndDateRange(
             @RequestParam(required = false,name = "status") RideStatus status,
             @RequestParam(name = "startDate") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(name = "endDate") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
 
         LocalDateTime start = startDate.atStartOfDay();
         LocalDateTime end   = endDate.atTime(23, 59, 59);
-        return rideService.GetRidesByStatusandDateRange(status, start, end);
+        return rideService.getRidesByStatusAndDateRange(status, start, end);
     }
 }

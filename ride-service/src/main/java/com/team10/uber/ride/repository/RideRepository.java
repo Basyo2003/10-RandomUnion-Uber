@@ -49,7 +49,7 @@ public interface RideRepository extends JpaRepository<Ride, Long> {
             "AND (:status IS NULL OR status::text = :status) " +
             "ORDER BY requested_at DESC",
             nativeQuery = true)
-    List<Ride> GetRidesByStatusandDateRange(@Param("startDate") LocalDateTime startDate,
+    List<Ride> getRidesByStatuscleaAndDateRange(@Param("startDate") LocalDateTime startDate,
                                             @Param("endDate") LocalDateTime endDate,
                                             @Param("status") String status);
 
