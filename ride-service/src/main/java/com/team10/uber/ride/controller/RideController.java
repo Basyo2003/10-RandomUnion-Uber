@@ -86,7 +86,7 @@ public class RideController {
         return rideService.getFareEstimate(request);
     }
 
-    @PostMapping("/api/rides/{rideId}/details")
+    @GetMapping("/{rideId}/details")
     public RideDetailsDTO GetRideDetailsWithStops(@PathVariable Long rideId){
         return rideService.GetRideDetailsWithStops(rideId);
     }
