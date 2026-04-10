@@ -4,12 +4,12 @@ import com.team10.uber.ride.enums.RideStatus;
 import com.team10.uber.ride.enums.StopStatus;
 import com.team10.uber.ride.model.Ride;
 import com.team10.uber.ride.model.RideStop;
-import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.List;
 import java.util.Map;
 
 public class RideDetailsDTO {
-    @JsonProperty("rideId")
+
     private Long id;
     private Long userId;
     private Long driverId;
