@@ -291,13 +291,6 @@ public class RideService {
         }
 
 
-        boolean driverExists = rideRepository.existsByDriverId(driverId);
-        if (!driverExists) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
-                    "Driver not found with id: " + driverId);
-        }
-
-
         boolean driverIsBusy = rideRepository.findActiveRideByDriverId(driverId).isPresent();
         if (driverIsBusy) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -309,5 +302,5 @@ public class RideService {
         ride.setStatus(RideStatus.ACCEPTED);
 
         return rideRepository.save(ride);
-}
+    }
 }
