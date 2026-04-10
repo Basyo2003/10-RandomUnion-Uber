@@ -1,5 +1,6 @@
 package com.team10.uber.driver.controller;
 
+import com.team10.uber.driver.dto.TopRatedDriverDTO;
 import com.team10.uber.driver.dto.DriverDocumentAlertDTO;
 import com.team10.uber.driver.dto.DriverEarningsDTO;
 import com.team10.uber.driver.dto.DriverWithDocumentsDTO;
@@ -38,6 +39,29 @@ public class DriverController {
         return driverService.getAllDrivers();
     }
 
+    @GetMapping("/search")
+    public List<Driver> searchDrivers(
+            @RequestParam(required = false) DriverStatus status,
+            @RequestParam(required = false) Double minRating,
+            @RequestParam(required = false) Double maxRating) {
+        return driverService.searchDrivers(status, minRating, maxRating);
+    }
+
+    @GetMapping("/vehicle-type")
+    public List<Driver> filterByVehicleType(
+            @RequestParam String type,
+            @RequestParam(required = false) String status) {
+
+        return driverService.filterByVehicleType(type, status);
+    }
+
+    @GetMapping("/reports/top-rated")
+    public List<TopRatedDriverDTO> getTopRatedDrivers(
+            @RequestParam(defaultValue = "5") int limit) {
+
+        return driverService.getTopRatedDrivers(limit);
+    }
+
     @GetMapping("/{id}")
     public Driver getDriverById(@PathVariable Long id) {
         return driverService.getDriverById(id);
@@ -49,14 +73,6 @@ public class DriverController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
         return driverService.getDriverEarningsSummary(id, startDate, endDate);
-    }
-
-    @GetMapping("/search")
-    public List<Driver> searchDrivers(
-            @RequestParam(required = false) DriverStatus status,
-            @RequestParam(required = false) Double minRating,
-            @RequestParam(required = false) Double maxRating) {
-        return driverService.searchDrivers(status, minRating, maxRating);
     }
 
     @PutMapping("/{id}/vehicle")
