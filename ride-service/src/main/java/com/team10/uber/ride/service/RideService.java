@@ -274,4 +274,40 @@ public class RideService {
                 completionRate
         );
     }
+    @Transactional
+    public Ride assignDriver(Long rideId, Long driverId) {
+
+
+        Ride ride = rideRepository.findById(rideId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Ride not found with id: " + rideId));
+
+
+        if (ride.getStatus() != RideStatus.REQUESTED) {
+            throw new InvalidRideStatusException(
+                    "Ride " + rideId + " cannot be assigned. " +
+                            "Expected REQUESTED but was: " + ride.getStatus()
+            );
+        }
+
+
+        boolean driverExists = rideRepository.existsByDriverId(driverId);
+        if (!driverExists) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "Driver not found with id: " + driverId);
+        }
+
+
+        boolean driverIsBusy = rideRepository.findActiveRideByDriverId(driverId).isPresent();
+        if (driverIsBusy) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Driver is not available");
+        }
+
+
+        ride.setDriverId(driverId);
+        ride.setStatus(RideStatus.ACCEPTED);
+
+        return rideRepository.save(ride);
+}
 }

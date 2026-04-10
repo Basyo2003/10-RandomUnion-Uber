@@ -9,6 +9,7 @@ import com.team10.uber.ride.model.Ride;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 public interface RideRepository extends JpaRepository<Ride, Long> {
 
@@ -43,5 +44,9 @@ public interface RideRepository extends JpaRepository<Ride, Long> {
   int countActiveRidesNearPickup(@Param("minLat") Double minLat, @Param("maxLat") Double maxLat,
                                  @Param("minLon") Double minLon, @Param("maxLon") Double maxLon);
   List<Ride> findByRequestedAtBetween(LocalDateTime startDateTime, LocalDateTime endDateTime);
+    @Query("SELECT COUNT(r) > 0 FROM Ride r WHERE r.driverId = :driverId")
+    boolean existsByDriverId(@Param("driverId") Long driverId);
 
+    @Query("SELECT r FROM Ride r WHERE r.driverId = :driverId AND r.status = com.team10.uber.ride.enums.RideStatus.ACCEPTED")
+    Optional<Ride> findActiveRideByDriverId(@Param("driverId") Long driverId);
 }
