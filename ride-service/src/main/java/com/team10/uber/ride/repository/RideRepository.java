@@ -8,10 +8,8 @@ import org.springframework.data.repository.query.Param;
 import com.team10.uber.ride.model.Ride;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.sql.Driver;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 
 public interface RideRepository extends JpaRepository<Ride, Long> {
 
@@ -53,7 +51,10 @@ public interface RideRepository extends JpaRepository<Ride, Long> {
     @Query(value = "SELECT COUNT(*) > 0 FROM drivers WHERE id = :driverId", nativeQuery = true)
     boolean driverexists(@Param("driverId") Long driverId);
 
+    @Query(value = "SELECT COUNT(*) FROM drivers WHERE id = :driverId AND status = 'AVAILABLE'", nativeQuery = true)
+    int countAvailableDriversById(@Param("driverId") Long driverId);
 
-    @Query("SELECT r FROM Ride r WHERE r.driverId = :driverId AND r.status = com.team10.uber.ride.enums.RideStatus.ACCEPTED")
-    Optional<Ride> findActiveRideByDriverId(@Param("driverId") Long driverId);
+    @Modifying
+    @Query(value = "UPDATE drivers SET status = 'BUSY' WHERE id = :driverId AND status = 'AVAILABLE'", nativeQuery = true)
+    int updateDriverStatusToBusy(@Param("driverId") Long driverId);
 }

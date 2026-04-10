@@ -313,23 +313,22 @@ public class RideService {
         }
 
 
-        boolean driverExists = rideRepository.driverexists(driverId);
-        if (!driverExists) {
+        if (!rideRepository.driverexists(driverId)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,
                     "Driver not found with id: " + driverId);
         }
 
-
-        boolean driverIsBusy = rideRepository.findActiveRideByDriverId(driverId).isPresent();
-        if (driverIsBusy) {
+        if (rideRepository.countAvailableDriversById(driverId) == 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Driver is not available");
         }
 
-
         ride.setDriverId(driverId);
         ride.setStatus(RideStatus.ACCEPTED);
+        rideRepository.save(ride);
 
-        return rideRepository.save(ride);
+        rideRepository.updateDriverStatusToBusy(driverId);
+
+        return ride;
 }
 }
