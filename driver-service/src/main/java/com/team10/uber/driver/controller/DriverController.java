@@ -1,5 +1,6 @@
 package com.team10.uber.driver.controller;
 
+import com.team10.uber.driver.dto.TopRatedDriverDTO;
 import com.team10.uber.driver.dto.DriverDocumentAlertDTO;
 import com.team10.uber.driver.dto.DriverEarningsDTO;
 import com.team10.uber.driver.dto.DriverWithDocumentsDTO;
@@ -10,8 +11,8 @@ import com.team10.uber.driver.model.Driver;
 import com.team10.uber.driver.service.DriverDocumentService;
 import com.team10.uber.driver.service.DriverService;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -38,6 +39,29 @@ public class DriverController {
         return driverService.getAllDrivers();
     }
 
+    @GetMapping("/search")
+    public List<Driver> searchDrivers(
+            @RequestParam(required = false) DriverStatus status,
+            @RequestParam(required = false) Double minRating,
+            @RequestParam(required = false) Double maxRating) {
+        return driverService.searchDrivers(status, minRating, maxRating);
+    }
+
+    @GetMapping("/vehicle-type")
+    public List<Driver> filterByVehicleType(
+            @RequestParam String type,
+            @RequestParam(required = false) String status) {
+
+        return driverService.filterByVehicleType(type, status);
+    }
+
+    @GetMapping("/reports/top-rated")
+    public List<TopRatedDriverDTO> getTopRatedDrivers(
+            @RequestParam(defaultValue = "5") int limit) {
+
+        return driverService.getTopRatedDrivers(limit);
+    }
+
     @GetMapping("/{id}")
     public Driver getDriverById(@PathVariable Long id) {
         return driverService.getDriverById(id);
@@ -51,19 +75,21 @@ public class DriverController {
         return driverService.getDriverEarningsSummary(id, startDate, endDate);
     }
 
-    @GetMapping("/search")
-    public List<Driver> searchDrivers(
-            @RequestParam(required = false) DriverStatus status,
-            @RequestParam(required = false) Double minRating,
-            @RequestParam(required = false) Double maxRating) {
-        return driverService.searchDrivers(status, minRating, maxRating);
-    }
-
     @PutMapping("/{id}/vehicle")
     public Driver updateVehicleDetails(@PathVariable Long id, @RequestBody Map<String, Object> vehicleUpdates) {
         return driverService.updateVehicleDetails(id, vehicleUpdates);
     }
+    @PutMapping("/{id}/availability")
+public ResponseEntity<Void> updateAvailability(
+        @PathVariable Long id,
+        @RequestBody Map<String, String> body) {
 
+    DriverStatus status = DriverStatus.valueOf(body.get("status"));
+
+    driverService.updateDriverAvailability(id, status);
+
+    return ResponseEntity.ok().build(); // ✅ only 200
+}
     @PutMapping("/{id}")
     public Driver updateDriver(@PathVariable Long id, @RequestBody Driver updatedDriver) {
         return driverService.updateDriver(id, updatedDriver);
