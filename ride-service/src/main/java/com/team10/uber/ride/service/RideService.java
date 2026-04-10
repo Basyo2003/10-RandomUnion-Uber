@@ -331,4 +331,9 @@ public class RideService {
 
         return ride;
 }
+
+    public List<Ride> GetRidesByStatusandDateRange(RideStatus status, LocalDateTime startDate, LocalDateTime endDate) {
+        String statusName = status != null ? status.name() : null;
+        return rideRepository.GetRidesByStatusandDateRange(startDate, endDate, statusName);
+    }
 }

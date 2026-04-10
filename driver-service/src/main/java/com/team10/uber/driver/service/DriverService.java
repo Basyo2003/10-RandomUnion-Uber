@@ -2,6 +2,7 @@ package com.team10.uber.driver.service;
 
 import com.team10.uber.driver.dto.DriverDocumentAlertDTO;
 import com.team10.uber.driver.dto.DriverEarningsDTO;
+import com.team10.uber.driver.dto.TopRatedDriverDTO;
 import com.team10.uber.driver.enums.DriverStatus;
 import com.team10.uber.driver.model.Driver;
 import com.team10.uber.driver.model.DriverDocument;
@@ -88,6 +89,35 @@ public class DriverService {
         existingDriver.setVehicleDetails(merged);
         return driverRepository.save(existingDriver);
     }
+    public List<Driver> filterByVehicleType(String type, String status) {
+
+    // 🔴 Validate type
+    if (type == null || type.isBlank()) {
+        throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Vehicle type is required"
+        );
+    }
+
+    // 🔴 Convert status (if exists)
+    DriverStatus driverStatus = null;
+
+    if (status != null) {
+        try {
+            driverStatus = DriverStatus.valueOf(status);
+        } catch (Exception e) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Invalid status value"
+            );
+        }
+    }
+
+    // 🔴 Convert enum to string for query
+    String statusValue = (driverStatus != null) ? driverStatus.name() : null;
+
+    return driverRepository.findByVehicleType(type, statusValue);
+}
 
     public DriverEarningsDTO getDriverEarningsSummary(Long driverId, LocalDate startDate, LocalDate endDate) {
         Driver driver = getDriverById(driverId); // 404 if not found
@@ -112,6 +142,23 @@ public class DriverService {
         Driver driver = getDriverById(id);
         driverRepository.delete(driver);
     }
+public List<TopRatedDriverDTO> getTopRatedDrivers(int limit) {
+
+    List<Object[]> rows = driverRepository.findTopDriversWithRideCount(limit);
+
+    List<TopRatedDriverDTO> result = new ArrayList<>();
+
+    for (Object[] row : rows) {
+        result.add(new TopRatedDriverDTO(
+                ((Number) row[0]).longValue(),   // driverId
+                (String) row[1],                // name
+                ((Number) row[2]).doubleValue(), // rating
+                ((Number) row[3]).longValue()   // totalRides
+        ));
+    }
+
+    return result;
+}
 
     @Transactional
     public Driver rateDriver(Long id, Long rideId, Double rating) {
@@ -149,6 +196,26 @@ public class DriverService {
         return driverRepository.save(driver);
 
     }
+@Transactional
+public void updateDriverAvailability(Long driverId, DriverStatus newStatus) {
+
+    Driver driver = getDriverById(driverId); // already throws 404
+
+    // 🔴 IMPORTANT CHECK
+    if (newStatus == DriverStatus.OFFLINE) {
+        int activeRides = driverRepository.countActiveRides(driverId);
+
+        if (activeRides > 0) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Driver has active rides and cannot go OFFLINE"
+            );
+        }
+    }
+
+    driver.setStatus(newStatus);
+    driverRepository.save(driver);
+}
 
     public List<DriverDocumentAlertDTO> getDriversWithExpiredDocuments() {
         List<DriverDocument> expiredDocuments = driverDocumentRepository.findExpiredDocuments();

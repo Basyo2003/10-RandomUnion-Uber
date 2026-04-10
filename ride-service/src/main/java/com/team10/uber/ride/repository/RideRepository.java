@@ -57,4 +57,13 @@ public interface RideRepository extends JpaRepository<Ride, Long> {
     @Modifying
     @Query(value = "UPDATE drivers SET status = 'BUSY' WHERE id = :driverId AND status = 'AVAILABLE'", nativeQuery = true)
     int updateDriverStatusToBusy(@Param("driverId") Long driverId);
+    @Query(value = "SELECT * FROM rides " +
+            "WHERE requested_at BETWEEN :startDate AND :endDate " +
+            "AND (:status IS NULL OR status::text = :status) " +
+            "ORDER BY requested_at DESC",
+            nativeQuery = true)
+    List<Ride> GetRidesByStatusandDateRange(@Param("startDate") LocalDateTime startDate,
+                                            @Param("endDate") LocalDateTime endDate,
+                                            @Param("status") String status);
+
 }
