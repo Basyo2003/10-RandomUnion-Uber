@@ -21,6 +21,7 @@ import com.team10.uber.ride.repository.RideStopRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+import com.team10.uber.ride.dto.RideDetailsDTO;
 
 import java.util.ArrayList;
 import java.time.LocalDate;
@@ -295,5 +296,58 @@ public class RideService {
                 averageFare,
                 completionRate
         );
+    }
+
+
+    public RideDetailsDTO GetRideDetailsWithStops(Long rideId) {
+        Ride ride = rideRepository.findById(rideId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Ride not found with id: " + rideId));
+
+
+        List<RideStop> stops = rideStopRepository.findByRideIdOrderByStopOrderAsc(rideId);
+
+        return new RideDetailsDTO(ride, stops);
+    }
+
+    @Transactional
+    public Ride assignDriver(Long rideId, Long driverId) {
+
+
+        Ride ride = rideRepository.findById(rideId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Ride not found with id: " + rideId));
+
+
+        if (ride.getStatus() != RideStatus.REQUESTED) {
+            throw new InvalidRideStatusException(
+                    "Ride " + rideId + " cannot be assigned. " +
+                            "Expected REQUESTED but was: " + ride.getStatus()
+            );
+        }
+
+
+        if (!rideRepository.driverexists(driverId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "Driver not found with id: " + driverId);
+        }
+
+        if (rideRepository.countAvailableDriversById(driverId) == 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Driver is not available");
+        }
+
+        ride.setDriverId(driverId);
+        ride.setStatus(RideStatus.ACCEPTED);
+        rideRepository.save(ride);
+
+        rideRepository.updateDriverStatusToBusy(driverId);
+
+        return ride;
+}
+
+    public List<Ride> GetRidesByStatusandDateRange(RideStatus status, LocalDateTime startDate, LocalDateTime endDate) {
+        String statusName = status != null ? status.name() : null;
+        return rideRepository.GetRidesByStatusandDateRange(startDate, endDate, statusName);
     }
 }
