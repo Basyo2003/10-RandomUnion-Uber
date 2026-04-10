@@ -19,4 +19,16 @@ public interface PaymentCouponRepository extends JpaRepository<PaymentCoupon, Lo
     @Query(value = "SELECT * FROM payment_coupons WHERE payment_id = :paymentId",
             nativeQuery = true)
     List<PaymentCoupon> findAllByPaymentId(@Param("paymentId") Long paymentId);
+
+    @Query(value = "SELECT c.id, c.code, c.discount_type, c.discount_value, " +
+               "c.current_uses, COALESCE(SUM(pc.discount_applied), 0) AS total_discount, " +
+               "c.active, c.expiry_date " +
+               "FROM coupons c " +
+               "JOIN payment_coupons pc ON pc.coupon_id = c.id " +
+               "GROUP BY c.id, c.code, c.discount_type, c.discount_value, " +
+               "c.current_uses, c.active, c.expiry_date " +
+               "ORDER BY c.current_uses DESC " +
+               "LIMIT :limit",
+       nativeQuery = true)
+    List<Object[]> findTopUsedCoupons(@Param("limit") int limit);
 }

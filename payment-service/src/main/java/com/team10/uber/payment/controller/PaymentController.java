@@ -8,11 +8,12 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
 import com.team10.uber.payment.dto.UserPaymentSummaryDTO;
-import com.team10.uber.payment.dto.PaymentWithCouponsDTO;
-import java.time.LocalDateTime;
-import java.util.List;
-import org.springframework.web.bind.annotation.RequestParam;
+import com.team10.uber.payment.dto.ProcessPaymentDTO;
+import com.team10.uber.payment.dto.CouponUsageDTO;
+import com.team10.uber.payment.dto.PaymentDetailsDTO;
+import com.team10.uber.payment.dto.RevenueReportDTO;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @RestController
@@ -66,11 +67,19 @@ public class PaymentController {
         return ResponseEntity.ok(paymentService.getUserPaymentSummary(userId));
     }
 
+    @PostMapping("/ride/{rideId}")
+    public ResponseEntity<Payment> processPaymentForRide(
+            @PathVariable Long rideId,
+            @RequestBody ProcessPaymentDTO dto) {
+        Payment payment = paymentService.processPaymentForRide(rideId, dto);
+        return ResponseEntity.status(HttpStatus.CREATED).body(payment);
+    }
+  
     @PostMapping("/{paymentId}/coupons/{couponId}")
-    public ResponseEntity<PaymentWithCouponsDTO> applyCoupon(
+    public ResponseEntity<PaymentDetailsDTO> applyCoupon(
             @PathVariable Long paymentId,
             @PathVariable Long couponId) {
-        PaymentWithCouponsDTO result = paymentService.applyCoupon(paymentId, couponId);
+        PaymentDetailsDTO result = paymentService.applyCoupon(paymentId, couponId);
         return ResponseEntity.status(HttpStatus.CREATED).body(result);
     }
 
@@ -85,5 +94,28 @@ public class PaymentController {
 
         List<Payment> payments = paymentService.searchPayments(status, start, end);
         return ResponseEntity.ok(payments);
+    }
+
+    @GetMapping("/reports/revenue")
+    public ResponseEntity<RevenueReportDTO> getRevenueReport(@RequestParam String startDate, @RequestParam String endDate) {
+        LocalDateTime start = LocalDateTime.parse(startDate + "T00:00:00");
+        LocalDateTime end   = LocalDateTime.parse(endDate   + "T23:59:59");
+        return ResponseEntity.ok(paymentService.getRevenueReport(start, end));
+    }
+
+    @PutMapping("/{id}/retry")
+    public ResponseEntity<Payment> retryPayment(@PathVariable Long id) {
+        return ResponseEntity.ok(paymentService.retryPayment(id));
+    }
+
+    @GetMapping("/{paymentId}/details")
+    public ResponseEntity<PaymentDetailsDTO> getPaymentDetails(@PathVariable Long paymentId) {
+        return ResponseEntity.ok(paymentService.getPaymentDetails(paymentId));
+    }
+
+    @GetMapping("/coupons/top-used")
+    public ResponseEntity<List<CouponUsageDTO>> getTopUsedCoupons(
+            @RequestParam int limit) {
+        return ResponseEntity.ok(paymentService.getTopUsedCoupons(limit));
     }
 }
