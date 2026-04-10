@@ -8,6 +8,7 @@ import com.team10.uber.driver.dto.RateDriverDTO;
 import com.team10.uber.driver.dto.VerifyDriverDTO;
 import com.team10.uber.driver.enums.DriverStatus;
 import com.team10.uber.driver.model.Driver;
+import com.team10.uber.driver.model.DriverDocument;
 import com.team10.uber.driver.service.DriverDocumentService;
 import com.team10.uber.driver.service.DriverService;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -79,17 +80,19 @@ public class DriverController {
     public Driver updateVehicleDetails(@PathVariable Long id, @RequestBody Map<String, Object> vehicleUpdates) {
         return driverService.updateVehicleDetails(id, vehicleUpdates);
     }
+
     @PutMapping("/{id}/availability")
-public ResponseEntity<Void> updateAvailability(
-        @PathVariable Long id,
-        @RequestBody Map<String, String> body) {
+    public ResponseEntity<Void> updateAvailability(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> body) {
 
-    DriverStatus status = DriverStatus.valueOf(body.get("status"));
+        DriverStatus status = DriverStatus.valueOf(body.get("status"));
 
-    driverService.updateDriverAvailability(id, status);
+        driverService.updateDriverAvailability(id, status);
 
-    return ResponseEntity.ok().build(); // ✅ only 200
-}
+        return ResponseEntity.ok().build(); // ✅ only 200
+    }
+
     @PutMapping("/{id}")
     public Driver updateDriver(@PathVariable Long id, @RequestBody Driver updatedDriver) {
         return driverService.updateDriver(id, updatedDriver);
@@ -104,6 +107,22 @@ public ResponseEntity<Void> updateAvailability(
     @PostMapping("/{id}/rate")
     public Driver rateDriver(@PathVariable Long id, @RequestBody RateDriverDTO rateDriverDTO) {
         return driverService.rateDriver(id, rateDriverDTO.getRideId(), rateDriverDTO.getRating());
+    }
+
+    @PostMapping("/{driverId}/documents")
+    public DriverDocument createDocument(@PathVariable Long driverId, @RequestBody DriverDocument document) {
+        return driverDocumentService.createDriverDocument(driverId, document);
+    }
+
+    @GetMapping("/{driverId}/documents")
+    public List<DriverDocument> getDriverDocuments(@PathVariable Long driverId) {
+        return driverDocumentService.getDriverDocumentsByDriverId(driverId);
+    }
+
+    @DeleteMapping("/{driverId}/documents/{documentId}")
+    public ResponseEntity<Void> deleteDocument(@PathVariable Long driverId, @PathVariable Long documentId) {
+        driverDocumentService.deleteDriverDocument(documentId);
+        return ResponseEntity.ok().build();
     }
 
     @GetMapping("/documents/expired")

@@ -40,6 +40,14 @@ public class DriverDocumentService {
         return driverDocumentRepository.findAll();
     }
 
+    public List<DriverDocument> getDriverDocumentsByDriverId(Long driverId) {
+        // Verify driver exists
+        driverRepository.findById(driverId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Driver not found with id: " + driverId));
+        return driverDocumentRepository.findByDriverId(driverId);
+    }
+
     public DriverDocument getDriverDocumentById(Long id) {
         return driverDocumentRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
