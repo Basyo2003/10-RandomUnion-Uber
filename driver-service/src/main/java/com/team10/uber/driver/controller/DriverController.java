@@ -1,5 +1,6 @@
 package com.team10.uber.driver.controller;
 
+import com.team10.uber.driver.dto.TopRatedDriverDTO;
 import com.team10.uber.driver.dto.DriverDocumentAlertDTO;
 import com.team10.uber.driver.dto.DriverEarningsDTO;
 import com.team10.uber.driver.dto.DriverWithDocumentsDTO;
@@ -37,6 +38,7 @@ public class DriverController {
     public List<Driver> getAllDrivers() {
         return driverService.getAllDrivers();
     }
+
     @GetMapping("/search")
     public List<Driver> searchDrivers(
             @RequestParam(required = false) DriverStatus status,
@@ -44,13 +46,21 @@ public class DriverController {
             @RequestParam(required = false) Double maxRating) {
         return driverService.searchDrivers(status, minRating, maxRating);
     }
-@GetMapping("/vehicle-type")
-public List<Driver> filterByVehicleType(
-        @RequestParam String type,
-        @RequestParam(required = false) String status) {
 
-    return driverService.filterByVehicleType(type, status);
-}
+    @GetMapping("/vehicle-type")
+    public List<Driver> filterByVehicleType(
+            @RequestParam String type,
+            @RequestParam(required = false) String status) {
+
+        return driverService.filterByVehicleType(type, status);
+    }
+
+    @GetMapping("/reports/top-rated")
+    public List<TopRatedDriverDTO> getTopRatedDrivers(
+            @RequestParam(defaultValue = "5") int limit) {
+
+        return driverService.getTopRatedDrivers(limit);
+    }
 
     @GetMapping("/{id}")
     public Driver getDriverById(@PathVariable Long id) {
@@ -64,9 +74,6 @@ public List<Driver> filterByVehicleType(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
         return driverService.getDriverEarningsSummary(id, startDate, endDate);
     }
-
-    
-
 
     @PutMapping("/{id}/vehicle")
     public Driver updateVehicleDetails(@PathVariable Long id, @RequestBody Map<String, Object> vehicleUpdates) {
