@@ -72,7 +72,6 @@ public class Ride {
     @PrePersist
     protected void onCreate() {
             this.requestedAt = LocalDateTime.now();
-            this.completedAt = LocalDateTime.now();
     }
 
     // Getters and Setters
