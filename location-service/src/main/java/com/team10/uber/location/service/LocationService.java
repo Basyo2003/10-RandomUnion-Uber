@@ -51,16 +51,32 @@ public class LocationService {
     }
 
     public Location updateLocation(Long id, Location updated) {
-        Location existing = getLocationById(id);
-      
-        locationRepository.driverExists(jdbcTemplate,updated.getDriverId());
+        Location existing = locationRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Location not found"
+                ));
 
+        if (updated.getDriverId() != null) {
+            locationRepository.driverExists(jdbcTemplate, updated.getDriverId());
+            existing.setDriverId(updated.getDriverId());
+        }
 
-        existing.setDriverId(updated.getDriverId());
-        existing.setLatitude(updated.getLatitude());
-        existing.setLongitude(updated.getLongitude());
-        existing.setTimestamp(LocalDateTime.now());
-        existing.setMetadata(updated.getMetadata());
+        if (updated.getLatitude() != null) {
+            existing.setLatitude(updated.getLatitude());
+        }
+
+        if (updated.getLongitude() != null) {
+            existing.setLongitude(updated.getLongitude());
+        }
+
+        if (updated.getTimestamp() != null) {
+            existing.setTimestamp(updated.getTimestamp());
+        }
+
+        if (updated.getMetadata() != null) {
+            existing.setMetadata(updated.getMetadata());
+        }
 
         return locationRepository.save(existing);
     }
