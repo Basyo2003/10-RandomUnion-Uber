@@ -49,8 +49,23 @@ public interface RideRepository extends JpaRepository<Ride, Long> {
             "AND (:status IS NULL OR status::text = :status) " +
             "ORDER BY requested_at DESC",
             nativeQuery = true)
-    List<Ride> getRidesByStatuscleaAndDateRange(@Param("startDate") LocalDateTime startDate,
+    List<Ride> getRidesByStatusAndDateRange(@Param("startDate") LocalDateTime startDate,
                                             @Param("endDate") LocalDateTime endDate,
                                             @Param("status") String status);
+
+    @Query(value = "SELECT COUNT(*) > 0 FROM drivers WHERE id = :driverId", nativeQuery = true)
+    boolean driverexists(@Param("driverId") Long driverId);
+
+    @Query(value = "SELECT status FROM drivers WHERE id = :driverId",
+            nativeQuery = true)
+    String findStatusByDriverId(@Param("driverId") Long driverId);
+
+
+
+    @Modifying
+    @Query(value = "UPDATE drivers SET status = 'BUSY' WHERE id = :driverId AND status = 'AVAILABLE'", nativeQuery = true)
+    int updateDriverStatusToBusy(@Param("driverId") Long driverId);
+
+
 
 }

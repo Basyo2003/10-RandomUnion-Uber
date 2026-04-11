@@ -17,6 +17,7 @@ import com.team10.uber.ride.dto.FareEstimateRequestDTO;
 import com.team10.uber.ride.dto.RideAnalyticsDTO;
 import com.team10.uber.ride.model.RideStop;
 import com.team10.uber.ride.repository.RideRepository;
+import com.team10.uber.ride.dto.RideDetailsDTO;
 import com.team10.uber.ride.repository.RideStopRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -279,4 +280,52 @@ public class RideService {
         String statusName = status != null ? status.name() : null;
         return rideRepository.getRidesByStatusAndDateRange(startDate, endDate, statusName);
     }
+
+    @Transactional
+    public Ride assignDriver(Long rideId, Long driverId) {
+
+
+        Ride ride = rideRepository.findById(rideId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Ride not found with id: " + rideId));
+
+
+        if (ride.getStatus() != RideStatus.REQUESTED) {
+            throw new InvalidRideStatusException(
+                    "Ride " + rideId + " cannot be assigned. " +
+                            "Expected REQUESTED but was: " + ride.getStatus()
+            );
+        }
+
+        String staus = rideRepository.findStatusByDriverId(driverId);
+        boolean driverExists = rideRepository.driverexists(driverId);
+        if (!driverExists) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "Driver not found with id: " + driverId);
+        }
+
+        if (staus.equals("OFFLINE")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Driver is not available");
+        }
+        if (staus.equals("BUSY")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Driver with id: " + driverId +" is OFFLINE");
+        }
+
+        ride.setDriverId(driverId);
+        ride.setStatus(RideStatus.ACCEPTED);
+        rideRepository.updateDriverStatusToBusy(driverId);
+        return rideRepository.save(ride);
+    }
+    public RideDetailsDTO GetRideDetailsWithStops(Long rideId) {
+        Ride ride = rideRepository.findById(rideId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Ride not found with id: " + rideId));
+
+
+        List<RideStop> stops = rideStopRepository.findByRideIdOrderByStopOrderAsc(rideId);
+
+        return new RideDetailsDTO(ride,stops);}
+
 }
