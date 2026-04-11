@@ -42,7 +42,7 @@ public class Payment {
     @Column(columnDefinition = "jsonb")
     private Map<String, Object> transactionDetails;
 
-    @Column(nullable = false)
+    @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     @OneToMany(mappedBy = "payment", cascade = CascadeType.ALL)
