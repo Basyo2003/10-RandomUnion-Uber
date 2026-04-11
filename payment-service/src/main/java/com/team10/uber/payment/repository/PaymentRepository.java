@@ -21,8 +21,16 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     Optional<Payment> findByRideIdAndStatus(Long rideId, PaymentStatus status);
 
     @Query(value = "SELECT * FROM payments WHERE " +
-            "(:status IS NULL OR status = :status) AND " +
-            "created_at BETWEEN :startDate AND :endDate " +
+            "created_at >= :startDate AND created_at <= :endDate " +
+            "ORDER BY created_at DESC",
+            nativeQuery = true)
+    List<Payment> findByDateRange(
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDate") LocalDateTime endDate);
+
+    @Query(value = "SELECT * FROM payments WHERE " +
+            "CAST(status AS TEXT) = :status AND " +
+            "created_at >= :startDate AND created_at <= :endDate " +
             "ORDER BY created_at DESC",
             nativeQuery = true)
     List<Payment> findByStatusAndDateRange(
