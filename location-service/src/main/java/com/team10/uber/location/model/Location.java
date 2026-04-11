@@ -5,6 +5,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.Map;
 
 @Entity
@@ -35,7 +36,12 @@ public class Location {
 
     @PrePersist
     protected void onCreate() {
-        this.timestamp = LocalDateTime.now();
+        if (this.timestamp == null) {
+            this.timestamp = LocalDateTime.now();
+        }
+        if (this.metadata == null) {
+            this.metadata = new HashMap<>();
+        }
     }
 
     // Getters and Setters
