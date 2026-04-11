@@ -1,5 +1,7 @@
 package com.team10.uber.location.controller;
 
+import com.team10.uber.location.dto.BatchLocationRequest;
+
 import com.team10.uber.location.dto.DriverMovementSummaryDTO;
 import com.team10.uber.location.model.Location;
 import com.team10.uber.location.service.LocationService;
@@ -7,6 +9,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+import com.team10.uber.location.dto.NearbyDriverDTO;
+
+
 import com.team10.uber.location.dto.StationaryDriverDTO;
 
 
@@ -46,8 +51,21 @@ public class LocationController {
     }
 
     @GetMapping("/{id}")
-    public Location getLocationById(@PathVariable Long id) {
-        return locationService.getLocationById(id);
+    public ResponseEntity<?> getLocationById(@PathVariable Long id) {
+        try {
+            Location location = locationService.getLocationById(id);
+            return ResponseEntity.ok(location);
+
+        } catch (ResponseStatusException ex) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("timestamp", LocalDateTime.now());
+            error.put("status", ex.getStatusCode().value());
+            error.put("error", ex.getStatusCode().toString());
+            error.put("message", ex.getReason());
+            error.put("path", "/api/locations/" + id);
+
+            return ResponseEntity.status(ex.getStatusCode()).body(error);
+        }
     }
 
     @GetMapping
@@ -79,10 +97,64 @@ public class LocationController {
         return Map.of("message", "Location deleted successfully");
     }
 
+    
+
+
     //S4-F1
     @GetMapping("/driver/{driverId}/latest")
     public Location getLatestLocationByDriverId(@PathVariable Long driverId) {
         return locationService.getLatestLocationByDriverId(driverId);
+    }
+
+
+    //S4-F2
+    @PostMapping("/driver/{driverId}")
+    public ResponseEntity<Location> createLocationForDriver(
+            @PathVariable Long driverId,
+            @RequestBody Map<String, Object> body
+    ) {
+        Double latitude = Double.valueOf(body.get("latitude").toString());
+        Double longitude = Double.valueOf(body.get("longitude").toString());
+        Map<String, Object> metadata = (Map<String, Object>) body.get("metadata");
+
+        Location location = new Location();
+        location.setDriverId(driverId);
+        location.setLatitude(latitude);
+        location.setLongitude(longitude);
+        location.setMetadata(metadata);
+
+        Location created = locationService.createLocationForDriver(driverId, location);
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(created);
+    }
+  
+    //S4-F3
+    @GetMapping("/nearby")
+    public List<NearbyDriverDTO> getNearbyDrivers(
+            @RequestParam Double lat,
+            @RequestParam Double lon,
+            @RequestParam Double radiusKm
+    ) {
+        return locationService.findNearbyAvailableDrivers(lat, lon, radiusKm);
+    }
+
+
+
+    //S4-F4
+    @PostMapping("/batch")
+    @ResponseStatus(HttpStatus.CREATED)
+    public Map<String, Object> batchCreateLocations(@RequestBody BatchLocationRequest request) {
+        return locationService.batchCreateLocations(request);
+    }
+
+    //S4-F5
+    @GetMapping("/metadata/search")
+    public List<Location> filterLocationsByMetadata(
+            @RequestParam String key,
+            @RequestParam String operator,
+            @RequestParam String value
+    ) {
+        return locationService.filterLocationsByMetadata(key, operator, value);
     }
 
 
@@ -96,6 +168,13 @@ public class LocationController {
         return locationService.getLocationsInDateRange(startDate, endDate, driverId);
     }
   
+    //S4-F7
+    @DeleteMapping("/purge")
+    public Map<String, Integer> purgeOldLocations(@RequestParam int olderThanDays) {
+        int deletedCount = locationService.purgeOldLocations(olderThanDays);
+        return Map.of("deletedCount", deletedCount);
+    }
+
     //S4-F8
     @GetMapping("/driver/{driverId}/summary")
     public DriverMovementSummaryDTO getDriverMovementSummary(
@@ -105,8 +184,8 @@ public class LocationController {
     ) {
         return locationService.getDriverMovementSummary(driverId, startDate, endDate);
     }
-  
-  //S4-F9
+
+    //S4-F9
     @GetMapping("/stationary")
     public ResponseEntity<?> getStationaryDrivers(
             @RequestParam Double maxSpeed,

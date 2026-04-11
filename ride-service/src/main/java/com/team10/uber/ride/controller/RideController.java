@@ -67,7 +67,7 @@ public class RideController {
         rideService.deleteRide(id);
         return "Ride deleted successfully";
     }
-     @PutMapping("/{id}/complete")
+    @PutMapping("/{id}/complete")
     public Ride completeRide(@PathVariable Long id) {
         return rideService.completeRide(id);
     }
@@ -77,17 +77,17 @@ public class RideController {
     public RideWithStopsDTO addStops(@PathVariable Long rideId, @RequestBody List<RideStopRequestDTO> stops) {
         return rideService.addStops(rideId, stops);
     }
-  
+
     @GetMapping("/metadata/search")
     public List<Ride> filterByMetadata(@RequestParam String key, @RequestParam String value) {
         return rideService.filterByMetadata(key, value);
     }
-  
+
     @PostMapping("/estimate")
     public FareEstimateDTO getFareEstimate(@RequestBody FareEstimateRequestDTO request) {
         return rideService.getFareEstimate(request);
     }
-  
+
     @GetMapping("/analytics")
     public RideAnalyticsDTO getRideAnalytics(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,

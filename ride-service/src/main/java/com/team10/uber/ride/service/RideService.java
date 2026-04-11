@@ -80,8 +80,8 @@ public class RideService {
         RideStatus currentStatus = ride.getStatus();
         if (currentStatus != RideStatus.REQUESTED && currentStatus != RideStatus.ACCEPTED) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                "Ride can only be cancelled when status is REQUESTED or ACCEPTED. Current status: "
-                    + currentStatus);
+                    "Ride can only be cancelled when status is REQUESTED or ACCEPTED. Current status: "
+                            + currentStatus);
         }
 
         if (ride.getDriverId() == null) {
@@ -166,7 +166,7 @@ public class RideService {
     private double calculateFare(double pickupLat, double pickupLon, double dropoffLat, double dropoffLon) {
         double distance = Math.sqrt(
                 Math.pow(dropoffLat - pickupLat, 2) +
-                Math.pow(dropoffLon - pickupLon, 2)
+                        Math.pow(dropoffLon - pickupLon, 2)
         ) * 111;
 
         return distance * 15.0;
@@ -205,18 +205,18 @@ public class RideService {
         List<RideStop> allStops = rideStopRepository.findByRideIdOrderByStopOrderAsc(rideId);
         return new RideWithStopsDTO(ride, allStops);
     }
-  
+
     public List<Ride> filterByMetadata(String key, String value) {
         if (key == null || key.isBlank() || value == null || value.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "key and value must not be blank");
         }
         return rideRepository.findByMetadataField(key, value);
     }
-  
+
     public FareEstimateDTO getFareEstimate(FareEstimateRequestDTO request) {
         double distance = Math.sqrt(
                 Math.pow(request.getDropoffLatitude() - request.getPickupLatitude(), 2) +
-                Math.pow(request.getDropoffLongitude() - request.getPickupLongitude(), 2)
+                        Math.pow(request.getDropoffLongitude() - request.getPickupLongitude(), 2)
         ) * 111;
 
         double duration = (distance / 40) * 60;

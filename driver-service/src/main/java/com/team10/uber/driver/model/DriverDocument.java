@@ -2,6 +2,7 @@ package com.team10.uber.driver.model;
 
 import com.team10.uber.driver.enums.DocumentType;
 import jakarta.persistence.*;
+import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -35,17 +36,13 @@ public class DriverDocument {
     @Column(columnDefinition = "jsonb")
     private Map<String, Object> metadata = new HashMap<>();
 
+    @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime uploadedAt;
 
     @ManyToOne
     @JoinColumn(name = "driver_id", nullable = false)
     private Driver driver;
-
-    @PrePersist
-    protected void onUpload() {
-        this.uploadedAt = LocalDateTime.now();
-    }
 
     // Getters and Setters
     public Long getId() {

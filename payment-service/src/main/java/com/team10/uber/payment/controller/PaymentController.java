@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
 import com.team10.uber.payment.dto.UserPaymentSummaryDTO;
+import com.team10.uber.payment.dto.ProcessPaymentDTO;
 import com.team10.uber.payment.dto.CouponUsageDTO;
 import com.team10.uber.payment.dto.PaymentDetailsDTO;
 import com.team10.uber.payment.dto.RevenueReportDTO;
@@ -66,31 +67,41 @@ public class PaymentController {
         return ResponseEntity.ok(paymentService.getUserPaymentSummary(userId));
     }
 
-    @PostMapping("/{paymentId}/coupons/{couponId}")
-    public ResponseEntity<PaymentDetailsDTO> applyCoupon(
-            @PathVariable Long paymentId,
-            @PathVariable Long couponId) {
-        PaymentDetailsDTO result = paymentService.applyCoupon(paymentId, couponId);
-        return ResponseEntity.status(HttpStatus.CREATED).body(result);
+    @PostMapping("/ride/{rideId}")
+    public ResponseEntity<Payment> processPaymentForRide(
+            @PathVariable Long rideId,
+            @RequestBody ProcessPaymentDTO dto) {
+        Payment payment = paymentService.processPaymentForRide(rideId, dto);
+        return ResponseEntity.status(HttpStatus.CREATED).body(payment);
     }
+
 
     @GetMapping("/search")
     public ResponseEntity<List<Payment>> searchPayments(
             @RequestParam(required = false) String status,
-            @RequestParam String startDate,
-            @RequestParam String endDate) {
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
 
-        LocalDateTime start = LocalDateTime.parse(startDate + "T00:00:00");
-        LocalDateTime end = LocalDateTime.parse(endDate + "T23:59:59");
+        if (startDate == null || endDate == null) {
+            return ResponseEntity.ok(List.of());
+        }
 
-        List<Payment> payments = paymentService.searchPayments(status, start, end);
-        return ResponseEntity.ok(payments);
+        try {
+            LocalDateTime start = paymentService.parseDate(startDate, false);
+            LocalDateTime end = paymentService.parseDate(endDate, true);
+            List<Payment> payments = paymentService.searchPayments(status, start, end);
+            return ResponseEntity.ok(payments);
+        } catch (Exception e) {
+            return ResponseEntity.ok(List.of());
+        }
     }
 
     @GetMapping("/reports/revenue")
-    public ResponseEntity<RevenueReportDTO> getRevenueReport(@RequestParam String startDate, @RequestParam String endDate) {
-        LocalDateTime start = LocalDateTime.parse(startDate + "T00:00:00");
-        LocalDateTime end   = LocalDateTime.parse(endDate   + "T23:59:59");
+    public ResponseEntity<RevenueReportDTO> getRevenueReport(
+            @RequestParam String startDate,
+            @RequestParam String endDate) {
+        LocalDateTime start = paymentService.parseDate(startDate, false);
+        LocalDateTime end = paymentService.parseDate(endDate, true);
         return ResponseEntity.ok(paymentService.getRevenueReport(start, end));
     }
 
@@ -106,7 +117,15 @@ public class PaymentController {
 
     @GetMapping("/coupons/top-used")
     public ResponseEntity<List<CouponUsageDTO>> getTopUsedCoupons(
-            @RequestParam int limit) {
+            @RequestParam(required = false, defaultValue = "10") int limit) {
         return ResponseEntity.ok(paymentService.getTopUsedCoupons(limit));
+    }
+
+    @PostMapping("/{paymentId}/coupons/{couponId}")
+    public ResponseEntity<PaymentDetailsDTO> applyCoupon(
+            @PathVariable Long paymentId,
+            @PathVariable Long couponId) {
+        PaymentDetailsDTO result = paymentService.applyCoupon(paymentId, couponId);
+        return ResponseEntity.ok(result);
     }
 }

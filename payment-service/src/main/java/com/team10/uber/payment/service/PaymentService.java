@@ -9,16 +9,19 @@ import com.team10.uber.payment.enums.PaymentStatus;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
-import org.springframework.transaction.annotation.Transactional;
 import com.team10.uber.payment.dto.UserPaymentSummaryDTO;
+import com.team10.uber.payment.dto.ProcessPaymentDTO;
+import com.team10.uber.payment.enums.PaymentMethod;
+import java.util.Optional;
+import org.springframework.transaction.annotation.Transactional;
+import com.team10.uber.payment.enums.PaymentStatus;
+import java.util.Map;
+import java.util.HashMap;
 import com.team10.uber.payment.model.Coupon;
 import com.team10.uber.payment.model.PaymentCoupon;
 import com.team10.uber.payment.repository.CouponRepository;
 import com.team10.uber.payment.repository.PaymentCouponRepository;
 import com.team10.uber.payment.enums.DiscountType;
-import java.util.Optional;
-import org.springframework.transaction.annotation.Transactional;
-import com.team10.uber.payment.enums.PaymentStatus;
 import java.time.LocalDateTime;
 
 
@@ -46,6 +49,25 @@ public class PaymentService {
     }
 
     public Payment createPayment(Payment payment) {
+
+        // Check user exists
+        if (paymentRepository.countUserById(payment.getUserId()) == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "User not found with id: " + payment.getUserId());
+        }
+
+        // Check ride exists
+        if (paymentRepository.countRideById(payment.getRideId()) == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "Ride not found with id: " + payment.getRideId());
+        }
+
+        // Check ride does not already have a payment
+        if (paymentRepository.countPaymentsByRideId(payment.getRideId()) > 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "A payment already exists for ride id: " + payment.getRideId());
+        }
+
         return paymentRepository.save(payment);
     }
 
@@ -100,6 +122,16 @@ public class PaymentService {
         return paymentRepository.save(payment);
     }
 
+    public LocalDateTime parseDate(String date, boolean endOfDay) {
+        if (date == null) return null;
+        if (date.contains("T")) {
+            return LocalDateTime.parse(date);
+        }
+        return endOfDay
+                ? LocalDateTime.parse(date + "T23:59:59.999999999")
+                : LocalDateTime.parse(date + "T00:00:00");
+    }
+
     public UserPaymentSummaryDTO getUserPaymentSummary(Long userId) {
         // a) Verify user exists via native SQL
         int userCount = paymentRepository.countUserById(userId);
@@ -131,6 +163,57 @@ public class PaymentService {
     }
 
     @Transactional
+    public Payment processPaymentForRide(Long rideId, ProcessPaymentDTO dto) {
+
+        // a) Verify ride exists
+        String rideStatus = paymentRepository.findRideStatusById(rideId);
+        if (rideStatus == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Ride not found with id: " + rideId);
+        }
+
+        // b) Verify ride is COMPLETED
+        if (!rideStatus.equals("COMPLETED")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Ride is not completed. Current status: " + rideStatus);
+        }
+
+        // c) Check no COMPLETED payment exists for this ride
+        Optional<Payment> existingPayment = paymentRepository.findByRideIdAndStatus(rideId, PaymentStatus.COMPLETED);
+        if (existingPayment.isPresent()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "already paid");
+        }
+
+        // d) Validate cardLastFour
+        if (dto.getMethod().equals("CREDIT_CARD") && dto.getCardLastFour() != null) {
+            String cardLastFour = dto.getCardLastFour();
+            if (cardLastFour.length() != 4 || !cardLastFour.matches("\\d{4}")) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "cardLastFour must be exactly 4 digits");
+            }
+        }
+
+        // e) Get ride details
+        Double fare = paymentRepository.findRideFareById(rideId);
+        Long userId = paymentRepository.findRideUserIdById(rideId);
+
+        // f) Build JSONB transactionDetails
+        Map<String, Object> transactionDetails = new HashMap<>();
+        transactionDetails.put("gatewayResponse", "success");
+        transactionDetails.put("cardLastFour", dto.getCardLastFour());
+        transactionDetails.put("receiptUrl", "https://receipts.com/" + rideId);
+        transactionDetails.put("failureReason", null);
+
+        // g) Create and save payment
+        Payment payment = new Payment();
+        payment.setRideId(rideId);
+        payment.setUserId(userId);
+        payment.setAmount(fare != null ? fare : 0.0);
+        payment.setMethod(PaymentMethod.valueOf(dto.getMethod()));
+        payment.setStatus(PaymentStatus.COMPLETED);
+        payment.setTransactionDetails(transactionDetails);
+
+        return paymentRepository.save(payment);
+    }
     public PaymentDetailsDTO applyCoupon(Long paymentId, Long couponId) {
         Payment payment = getPaymentById(paymentId);
 
@@ -183,7 +266,15 @@ public class PaymentService {
     }
 
     public List<Payment> searchPayments(String status, LocalDateTime startDate, LocalDateTime endDate) {
-        return paymentRepository.findByStatusAndDateRange(status, startDate, endDate);
+        List<Payment> result;
+        if (status == null || status.isEmpty()) {
+            result = paymentRepository.findByDateRange(startDate, endDate);
+        } else {
+            result = paymentRepository.findByStatusAndDateRange(status, startDate, endDate);
+        }
+
+        System.out.println("Result size: " + result.size());
+        return result;
     }
 
     public RevenueReportDTO getRevenueReport(LocalDateTime startDate, LocalDateTime endDate) {
@@ -255,17 +346,17 @@ public class PaymentService {
     }
 
     public List<CouponUsageDTO> getTopUsedCoupons(int limit) {
-        List<Object[]> rows = paymentCouponRepository.findTopUsedCoupons(limit);
-    
+        List<Object[]> rows = couponRepository.findTopUsedCoupons(limit);
+
         return rows.stream().map(row -> {
             Long couponId = ((Number) row[0]).longValue();
-            String code = (String)  row[1];
-            String discountType = (String)  row[2];
+            String code = (String) row[1];
+            String discountType = (String) row[2];
             Double discountValue = ((Number) row[3]).doubleValue();
             Integer timesUsed = ((Number) row[4]).intValue();
             Double totalDiscountGiven = ((Number) row[5]).doubleValue();
             Boolean active = (Boolean) row[6];
-    
+
             java.time.LocalDateTime expiryDate;
             if (row[7] instanceof java.sql.Timestamp) {
                 expiryDate = ((java.sql.Timestamp) row[7]).toLocalDateTime();
@@ -276,6 +367,7 @@ public class PaymentService {
             }
             Boolean expired = expiryDate.isBefore(java.time.LocalDateTime.now());
 
-            return new CouponUsageDTO(couponId, code, discountType, discountValue, timesUsed, totalDiscountGiven, active, expired);}).collect(java.util.stream.Collectors.toList());
+            return new CouponUsageDTO(couponId, code, discountType, discountValue, timesUsed, totalDiscountGiven, active, expired);
+        }).collect(java.util.stream.Collectors.toList());
     }
 }
