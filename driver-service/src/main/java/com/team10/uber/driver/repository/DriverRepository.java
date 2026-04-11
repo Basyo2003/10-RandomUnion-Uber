@@ -16,19 +16,20 @@ public interface DriverRepository extends JpaRepository<Driver, Long> {
 
     interface EarningsAggregate {
         Long getTotalRides();
+
         Double getTotalEarnings();
     }
 
     @Query(value = """
-            SELECT
-              COUNT(*) AS totalRides,
-              COALESCE(SUM(fare), 0) AS totalEarnings
-            FROM rides
-            WHERE driver_id = :driverId
-              AND status = 'COMPLETED'
-              AND completed_at >= :startTs
-              AND completed_at < :endExclusive
-            """, nativeQuery = true)
+                  SELECT
+                    COUNT(*) AS totalRides,
+                    COALESCE(SUM(fare), 0) AS totalEarnings
+                  FROM rides
+                  WHERE driver_id = :driverId
+                    AND status = 'COMPLETED'
+               AND requested_at >= :startTs
+            AND requested_at < :endExclusive
+                  """, nativeQuery = true)
     EarningsAggregate getEarningsAggregate(
             @Param("driverId") Long driverId,
             @Param("startTs") LocalDateTime startTs,
@@ -55,4 +56,33 @@ public interface DriverRepository extends JpaRepository<Driver, Long> {
     // Get ride status directly as a String — no Ride class needed
     @Query(value = "SELECT status FROM rides WHERE id = :rideId", nativeQuery = true)
     Optional<String> findRideStatusById(@Param("rideId") Long rideId);
+
+    @Query(value = """
+            SELECT * FROM drivers
+            WHERE LOWER(COALESCE((CAST(vehicle_details AS jsonb) ->> 'vehicleType'), (CAST(vehicle_details AS jsonb) ->> 'type'))) = LOWER(:type)
+            AND (:status IS NULL OR status = :status)
+            """, nativeQuery = true)
+    List<Driver> findByVehicleType(
+            @Param("type") String type,
+            @Param("status") String status);
+
+    @Query(value = """
+                SELECT d.id, d.name, d.rating, COUNT(r.id)
+                FROM drivers d
+                LEFT JOIN rides r
+                    ON d.id = r.driver_id
+                    AND r.status = 'COMPLETED'
+                GROUP BY d.id, d.name, d.rating
+                ORDER BY d.rating DESC, COUNT(r.id) DESC
+                LIMIT :limit
+            """, nativeQuery = true)
+    List<Object[]> findTopDriversWithRideCount(@Param("limit") int limit);
+
+    @Query(value = """
+            SELECT COUNT(*)
+            FROM rides
+            WHERE driver_id = :driverId
+            AND status IN ('REQUESTED', 'ACCEPTED', 'IN_PROGRESS')
+            """, nativeQuery = true)
+    int countActiveRides(@Param("driverId") Long driverId);
 }

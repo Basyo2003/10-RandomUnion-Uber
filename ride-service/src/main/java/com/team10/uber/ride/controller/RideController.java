@@ -1,7 +1,10 @@
 package com.team10.uber.ride.controller;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
+import com.team10.uber.ride.enums.RideStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -16,6 +19,7 @@ import com.team10.uber.ride.dto.RideWithStopsDTO;
 import com.team10.uber.ride.dto.FareEstimateDTO;
 import com.team10.uber.ride.dto.FareEstimateRequestDTO;
 import com.team10.uber.ride.dto.RideAnalyticsDTO;
+import com.team10.uber.ride.dto.RideDetailsDTO;
 import com.team10.uber.ride.model.Ride;
 import com.team10.uber.ride.service.RideService;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -63,6 +67,7 @@ public class RideController {
         rideService.deleteRide(id);
         return "Ride deleted successfully";
     }
+
      @PutMapping("/{id}/complete")
     public Ride completeRide(@PathVariable Long id) {
         return rideService.completeRide(id);
@@ -83,6 +88,11 @@ public class RideController {
     public FareEstimateDTO getFareEstimate(@RequestBody FareEstimateRequestDTO request) {
         return rideService.getFareEstimate(request);
     }
+
+    @GetMapping("/{rideId}/details")
+    public RideDetailsDTO GetRideDetailsWithStops(@PathVariable Long rideId){
+        return rideService.GetRideDetailsWithStops(rideId);
+    }
   
     @GetMapping("/analytics")
     public RideAnalyticsDTO getRideAnalytics(
@@ -91,4 +101,21 @@ public class RideController {
     ) {
         return rideService.getRideAnalytics(startDate, endDate);
     }
+
+    @PutMapping("/{rideId}/assign")
+    public Ride assignDriver(@PathVariable Long rideId,
+                             @RequestParam(name = "driverId") Long driverId) {
+        return rideService.assignDriver(rideId, driverId);
+    }
+    @GetMapping("/search")
+    public List<Ride> GetRidesByStatusandDateRange(
+            @RequestParam(required = false,name = "status") RideStatus status,
+            @RequestParam(name = "startDate") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(name = "endDate") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+
+        LocalDateTime start = startDate.atStartOfDay();
+        LocalDateTime end   = endDate.atTime(23, 59, 59);
+        return rideService.GetRidesByStatusandDateRange(status, start, end);
+    }
 }
+
