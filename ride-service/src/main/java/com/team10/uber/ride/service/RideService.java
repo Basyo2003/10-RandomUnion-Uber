@@ -17,11 +17,11 @@ import com.team10.uber.ride.dto.FareEstimateRequestDTO;
 import com.team10.uber.ride.dto.RideAnalyticsDTO;
 import com.team10.uber.ride.model.RideStop;
 import com.team10.uber.ride.repository.RideRepository;
+import com.team10.uber.ride.dto.RideDetailsDTO;
 import com.team10.uber.ride.repository.RideStopRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
-import com.team10.uber.ride.dto.RideDetailsDTO;
 
 import java.util.ArrayList;
 import java.time.LocalDate;
@@ -41,17 +41,6 @@ public class RideService {
     }
 
     public Ride createRide(Ride ride) {
-        if (ride.getUserId() == null || ride.getPickupLatitude() == null || ride.getPickupLongitude() == null
-                || ride.getDropoffLatitude() == null || ride.getDropoffLongitude() == null || ride.getStatus() == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Missing required fields: userId, pickupLatitude, pickupLongitude, dropoffLatitude, dropoffLongitude, status");
-        }
-        if (rideRepository.countUsersById(ride.getUserId()) == 0) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found with id: " + ride.getUserId());
-        }
-        if (ride.getDriverId() != null && rideRepository.countDriversById(ride.getDriverId()) == 0) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Driver not found with id: " + ride.getDriverId());
-        }
         return rideRepository.save(ride);
     }
 
@@ -65,17 +54,6 @@ public class RideService {
     }
 
     public Ride updateRide(Long id, Ride updatedRide) {
-        if (updatedRide.getUserId() == null || updatedRide.getPickupLatitude() == null || updatedRide.getPickupLongitude() == null
-                || updatedRide.getDropoffLatitude() == null || updatedRide.getDropoffLongitude() == null || updatedRide.getStatus() == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Missing required fields: userId, pickupLatitude, pickupLongitude, dropoffLatitude, dropoffLongitude, status");
-        }
-        if (rideRepository.countUsersById(updatedRide.getUserId()) == 0) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found with id: " + updatedRide.getUserId());
-        }
-        if (updatedRide.getDriverId() != null && rideRepository.countDriversById(updatedRide.getDriverId()) == 0) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Driver not found with id: " + updatedRide.getDriverId());
-        }
         Ride existing = getRideById(id);
         existing.setUserId(updatedRide.getUserId());
         existing.setDriverId(updatedRide.getDriverId());
@@ -102,8 +80,8 @@ public class RideService {
         RideStatus currentStatus = ride.getStatus();
         if (currentStatus != RideStatus.REQUESTED && currentStatus != RideStatus.ACCEPTED) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                "Ride can only be cancelled when status is REQUESTED or ACCEPTED. Current status: "
-                    + currentStatus);
+                    "Ride can only be cancelled when status is REQUESTED or ACCEPTED. Current status: "
+                            + currentStatus);
         }
 
         if (ride.getDriverId() == null) {
@@ -188,7 +166,7 @@ public class RideService {
     private double calculateFare(double pickupLat, double pickupLon, double dropoffLat, double dropoffLon) {
         double distance = Math.sqrt(
                 Math.pow(dropoffLat - pickupLat, 2) +
-                Math.pow(dropoffLon - pickupLon, 2)
+                        Math.pow(dropoffLon - pickupLon, 2)
         ) * 111;
 
         return distance * 15.0;
@@ -227,18 +205,18 @@ public class RideService {
         List<RideStop> allStops = rideStopRepository.findByRideIdOrderByStopOrderAsc(rideId);
         return new RideWithStopsDTO(ride, allStops);
     }
-  
+
     public List<Ride> filterByMetadata(String key, String value) {
         if (key == null || key.isBlank() || value == null || value.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "key and value must not be blank");
         }
         return rideRepository.findByMetadataField(key, value);
     }
-  
+
     public FareEstimateDTO getFareEstimate(FareEstimateRequestDTO request) {
         double distance = Math.sqrt(
                 Math.pow(request.getDropoffLatitude() - request.getPickupLatitude(), 2) +
-                Math.pow(request.getDropoffLongitude() - request.getPickupLongitude(), 2)
+                        Math.pow(request.getDropoffLongitude() - request.getPickupLongitude(), 2)
         ) * 111;
 
         double duration = (distance / 40) * 60;
@@ -298,16 +276,9 @@ public class RideService {
         );
     }
 
-
-    public RideDetailsDTO GetRideDetailsWithStops(Long rideId) {
-        Ride ride = rideRepository.findById(rideId)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "Ride not found with id: " + rideId));
-
-
-        List<RideStop> stops = rideStopRepository.findByRideIdOrderByStopOrderAsc(rideId);
-
-        return new RideDetailsDTO(ride, stops);
+    public List<Ride> getRidesByStatusAndDateRange(RideStatus status, LocalDateTime startDate, LocalDateTime endDate) {
+        String statusName = status != null ? status.name() : null;
+        return rideRepository.getRidesByStatusAndDateRange(startDate, endDate, statusName);
     }
 
     @Transactional
@@ -326,28 +297,35 @@ public class RideService {
             );
         }
 
-
-        if (!rideRepository.driverexists(driverId)) {
+        String staus = rideRepository.findStatusByDriverId(driverId);
+        boolean driverExists = rideRepository.driverexists(driverId);
+        if (!driverExists) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,
                     "Driver not found with id: " + driverId);
         }
 
-        if (rideRepository.countAvailableDriversById(driverId) == 0) {
+        if (staus.equals("OFFLINE")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Driver is not available");
+        }
+        if (staus.equals("BUSY")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Driver with id: " + driverId +" is OFFLINE");
         }
 
         ride.setDriverId(driverId);
         ride.setStatus(RideStatus.ACCEPTED);
-        rideRepository.save(ride);
-
         rideRepository.updateDriverStatusToBusy(driverId);
-
-        return ride;
-}
-
-    public List<Ride> GetRidesByStatusandDateRange(RideStatus status, LocalDateTime startDate, LocalDateTime endDate) {
-        String statusName = status != null ? status.name() : null;
-        return rideRepository.GetRidesByStatusandDateRange(startDate, endDate, statusName);
+        return rideRepository.save(ride);
     }
+    public RideDetailsDTO GetRideDetailsWithStops(Long rideId) {
+        Ride ride = rideRepository.findById(rideId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Ride not found with id: " + rideId));
+
+
+        List<RideStop> stops = rideStopRepository.findByRideIdOrderByStopOrderAsc(rideId);
+
+        return new RideDetailsDTO(ride,stops);}
+
 }

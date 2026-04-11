@@ -4,12 +4,12 @@ import com.team10.uber.ride.enums.RideStatus;
 import com.team10.uber.ride.enums.StopStatus;
 import com.team10.uber.ride.model.Ride;
 import com.team10.uber.ride.model.RideStop;
-
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 import java.util.Map;
-
+import java.util.HashMap;
 public class RideDetailsDTO {
-
+    @JsonProperty("rideId")
     private Long id;
     private Long userId;
     private Long driverId;
@@ -26,7 +26,7 @@ public class RideDetailsDTO {
         this.driverId       = ride.getDriverId();
         this.status         = ride.getStatus();
         this.fare           = ride.getFare();
-        this.metadata       = ride.getMetadata();
+        this.metadata       = ride.getMetadata() != null ? ride.getMetadata() : new HashMap<>();
         this.stops          = stops;
         this.totalStops     = (long) stops.size();
         this.completedStops = stops.stream()
