@@ -41,6 +41,9 @@ public class RideService {
     }
 
     public Ride createRide(Ride ride) {
+        if (ride.getStatus() == null) {
+            ride.setStatus(RideStatus.REQUESTED);
+        }
         return rideRepository.save(ride);
     }
 
@@ -75,7 +78,8 @@ public class RideService {
     @Transactional
     public Ride cancelRide(Long rideId) {
         Ride ride = rideRepository.findById(rideId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Ride not found with id: " + rideId));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Ride not found with id: " + rideId));
 
         RideStatus currentStatus = ride.getStatus();
         if (currentStatus != RideStatus.REQUESTED && currentStatus != RideStatus.ACCEPTED) {
@@ -84,27 +88,17 @@ public class RideService {
                             + currentStatus);
         }
 
-        if (ride.getDriverId() == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Ride can only be cancelled when status is REQUESTED or ACCEPTED and driver is BUSY");
-        }
-
-        int busyDriver = rideRepository.countBusyDriversById(ride.getDriverId());
-        if (busyDriver == 0) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Ride can only be cancelled when status is REQUESTED or ACCEPTED and driver is BUSY");
-        }
-
         ride.setStatus(RideStatus.CANCELLED);
 
-        int updatedRows = rideRepository.updateDriverStatusToAvailable(ride.getDriverId());
-        if (updatedRows == 0) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Ride can only be cancelled when status is REQUESTED or ACCEPTED and driver is BUSY");
+        // Only update driver if one is assigned
+        if (ride.getDriverId() != null) {
+            rideRepository.updateDriverStatusToAvailable(ride.getDriverId());
         }
 
         return rideRepository.save(ride);
     }
+
+    @Transactional
     public Ride completeRide(Long rideId) {
         // 1) Find ride
         Ride ride = getRideById(rideId);
@@ -145,22 +139,18 @@ public class RideService {
         }
 
         // 6) Update driver status to AVAILABLE
-        int updatedRows = rideRepository.updateDriverStatusToAvailable(ride.getDriverId());
-        if (updatedRows == 0) {
-            throw new InvalidRideStatusException(
-                    "Ride can only be completed when ride is IN_PROGRESS and driver is BUSY"
-            );
+        rideRepository.updateDriverStatusToAvailable(ride.getDriverId());
+
+        // 7) Save ride first
+        Ride saved = rideRepository.save(ride);
+
+        // 8) Create payment record in its own transaction (best-effort)
+        try {
+            rideRepository.createPayment(saved.getId(), saved.getUserId(), saved.getFare());
+        } catch (Exception ignored) {
         }
 
-        // 7) Create payment
-        rideRepository.createPayment(
-                ride.getId(),
-                ride.getUserId(),
-                ride.getFare()
-        );
-
-        // 8) Save and return updated ride
-        return rideRepository.save(ride);
+        return saved;
     }
 
     private double calculateFare(double pickupLat, double pickupLon, double dropoffLat, double dropoffLon) {

@@ -25,7 +25,7 @@ public interface RideRepository extends JpaRepository<Ride, Long> {
 
     // 2) Insert payment record
     @Modifying
-    @Transactional
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     @Query(value = """
       INSERT INTO payments (ride_id, user_id, amount, method, status, transaction_details, created_at)
       VALUES (:rideId, :userId, :amount, 'CASH', 'PENDING', '{}'::jsonb, CURRENT_TIMESTAMP)
