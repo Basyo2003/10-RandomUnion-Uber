@@ -87,8 +87,8 @@ public class PaymentController {
         }
 
         try {
-            LocalDateTime start = paymentService.parseDate(startDate, false);
-            LocalDateTime end = paymentService.parseDate(endDate, true);
+            LocalDateTime start = parseDate(startDate, false);
+            LocalDateTime end = parseDate(endDate, true);
             List<Payment> payments = paymentService.searchPayments(status, start, end);
             return ResponseEntity.ok(payments);
         } catch (Exception e) {
@@ -100,9 +100,23 @@ public class PaymentController {
     public ResponseEntity<RevenueReportDTO> getRevenueReport(
             @RequestParam String startDate,
             @RequestParam String endDate) {
-        LocalDateTime start = paymentService.parseDate(startDate, false);
-        LocalDateTime end = paymentService.parseDate(endDate, true);
-        return ResponseEntity.ok(paymentService.getRevenueReport(start, end));
+        try {
+            LocalDateTime start = parseDate(startDate, false);
+            LocalDateTime end = parseDate(endDate, true);
+            return ResponseEntity.ok(paymentService.getRevenueReport(start, end));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    private LocalDateTime parseDate(String date, boolean endOfDay) {
+        if (date == null) return null;
+        if (date.contains("T")) {
+            return LocalDateTime.parse(date);
+        }
+        return endOfDay
+                ? LocalDateTime.parse(date + "T23:59:59")
+                : LocalDateTime.parse(date + "T00:00:00");
     }
 
     @PutMapping("/{id}/retry")

@@ -122,16 +122,6 @@ public class PaymentService {
         return paymentRepository.save(payment);
     }
 
-    public LocalDateTime parseDate(String date, boolean endOfDay) {
-        if (date == null) return null;
-        if (date.contains("T")) {
-            return LocalDateTime.parse(date);
-        }
-        return endOfDay
-                ? LocalDateTime.parse(date + "T23:59:59.999999999")
-                : LocalDateTime.parse(date + "T00:00:00");
-    }
-
     public UserPaymentSummaryDTO getUserPaymentSummary(Long userId) {
         // a) Verify user exists via native SQL
         int userCount = paymentRepository.countUserById(userId);
@@ -266,15 +256,7 @@ public class PaymentService {
     }
 
     public List<Payment> searchPayments(String status, LocalDateTime startDate, LocalDateTime endDate) {
-        List<Payment> result;
-        if (status == null || status.isEmpty()) {
-            result = paymentRepository.findByDateRange(startDate, endDate);
-        } else {
-            result = paymentRepository.findByStatusAndDateRange(status, startDate, endDate);
-        }
-
-        System.out.println("Result size: " + result.size());
-        return result;
+        return paymentRepository.findByStatusAndDateRange(status, startDate, endDate);
     }
 
     public RevenueReportDTO getRevenueReport(LocalDateTime startDate, LocalDateTime endDate) {
