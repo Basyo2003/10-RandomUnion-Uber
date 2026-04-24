@@ -40,7 +40,7 @@ services:
     depends_on:
       - postgres
   postgres:
-    image: postgres:latest
+    image: postgres:17
     container_name: uber-db
     ports:
       - "5432:5432"
