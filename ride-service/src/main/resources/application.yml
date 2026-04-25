@@ -14,12 +14,12 @@ spring:
       host: redis
       port: 6379
       password: redispass
-    mongodb:
-      uri: mongodb://root:rootpass@mongo:27017/ubermongo?authSource=admin
     neo4j:
       uri: bolt://neo4j:7687
       username: neo4j
       password: neo4jpass
+  mongodb:
+    uri: mongodb://root:rootpass@mongo:27017/ubermongo?authSource=admin
 
 server:
   port: 8080
