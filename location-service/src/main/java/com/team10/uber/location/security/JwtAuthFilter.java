@@ -23,6 +23,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         this.jwtService = jwtService;
     }
 
+    // 5.4 Security Configuration - JWT filter intercepts protected requests
     @Override
     protected void doFilterInternal(
             HttpServletRequest request,
@@ -32,13 +33,14 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         String path = request.getServletPath();
 
+        // 5.4 Security Configuration - allow health endpoints without JWT
         if (isPublicEndpoint(path)) {
             filterChain.doFilter(request, response);
             return;
         }
 
         String authHeader = request.getHeader("Authorization");
-
+        // 5.2 JWT Token - require Authorization: Bearer <token>
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.getWriter().write("Missing or invalid Authorization header");
@@ -46,7 +48,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         }
 
         String token = authHeader.substring(7);
-
+        
+        // 5.2 JWT Token - reject invalid or expired tokens
         if (!jwtService.isTokenValid(token)) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.getWriter().write("Invalid or expired JWT token");

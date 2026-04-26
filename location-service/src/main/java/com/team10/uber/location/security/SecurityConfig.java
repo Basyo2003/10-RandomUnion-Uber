@@ -17,17 +17,25 @@ public class SecurityConfig {
         this.jwtAuthFilter = jwtAuthFilter;
     }
 
+    // 5.4 Security Configuration - stateless JWT security for Location Service
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
+                // 5.4 Security Configuration - CSRF disabled for token-based API
                 .csrf(AbstractHttpConfigurer::disable)
+
+                // 5.4 Security Configuration - no server-side sessions
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
+
+                // 5.4 Security Configuration - health is public, all other endpoints require JWT
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/health", "/actuator/**").permitAll()
                         .anyRequest().authenticated()
                 )
+
+                // 5.4 Security Configuration - register custom JWT filter
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }

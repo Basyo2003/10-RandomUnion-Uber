@@ -15,11 +15,13 @@ public class JwtService {
     @Value("${jwt.secret}")
     private String jwtSecret;
 
+    // 5.2 JWT Token - build signing key from shared secret
     private SecretKey getSigningKey() {
         byte[] keyBytes = Decoders.BASE64.decode(jwtSecret);
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
+    // 5.2 JWT Token - extract token payload claims
     public Claims extractAllClaims(String token) {
         return Jwts.parser()
                 .verifyWith(getSigningKey())
@@ -28,6 +30,7 @@ public class JwtService {
                 .getPayload();
     }
 
+    // 5.2 JWT Token - validate signature, expiration, and required claims
     public boolean isTokenValid(String token) {
         try {
             Claims claims = extractAllClaims(token);
