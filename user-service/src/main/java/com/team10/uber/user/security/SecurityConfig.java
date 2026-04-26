@@ -28,7 +28,6 @@ public class SecurityConfig {
 
     @Bean
     public UserDetailsService userDetailsService() {
-        // Return empty to suppress Spring's default inMemoryUserDetailsManager
         return username -> null;
     }
 
@@ -46,7 +45,6 @@ public class SecurityConfig {
                 )
                 .addFilterBefore(new JwtAuthenticationFilter(jwtUtil),
                         UsernamePasswordAuthenticationFilter.class);
-
         return http.build();
     }
 }
