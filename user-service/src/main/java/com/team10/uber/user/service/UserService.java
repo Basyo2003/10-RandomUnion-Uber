@@ -7,8 +7,11 @@ import com.team10.uber.user.dto.UserRideSummaryDTO;
 import com.team10.uber.user.enums.Status;
 import com.team10.uber.user.model.SavedAddress;
 import com.team10.uber.user.model.User;
+import com.team10.uber.user.observer.AbstractObservableService;
+import com.team10.uber.user.observer.MongoEventLogger;
 import com.team10.uber.user.repository.SavedAddressRepository;
 import com.team10.uber.user.repository.UserRepository;
+import jakarta.annotation.PostConstruct;
 import jakarta.transaction.Transactional;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -22,18 +25,28 @@ import java.util.List;
 import java.util.Map;
 
 @Service
-public class UserService {
+public class UserService extends AbstractObservableService {
 
     private final UserRepository userRepository;
     private final SavedAddressRepository savedAddressRepository;
+    private final MongoEventLogger mongoEventLogger;
 
-    public UserService(UserRepository userRepository, SavedAddressRepository savedAddressRepository) {
+    public UserService(UserRepository userRepository, SavedAddressRepository savedAddressRepository,
+                       MongoEventLogger mongoEventLogger) {
         this.userRepository = userRepository;
         this.savedAddressRepository = savedAddressRepository;
+        this.mongoEventLogger = mongoEventLogger;
+    }
+
+    @PostConstruct
+    public void initObservers() {
+        register(mongoEventLogger);
     }
 
     public User createUser(User user) {
-        return userRepository.save(user);
+        User saved = userRepository.save(user);
+        notifyObservers("USER_CREATED", saved);
+        return saved;
     }
 
     public List<User> getAllUsers() {
@@ -55,12 +68,15 @@ public class UserService {
         existingUser.setStatus(updatedUser.getStatus());
         existingUser.setPreferences(updatedUser.getPreferences());
 
-        return userRepository.save(existingUser);
+        User saved = userRepository.save(existingUser);
+        notifyObservers("USER_UPDATED", saved);
+        return saved;
     }
 
     public void deleteUser(Long id) {
         User user = findUserByIdOrThrow(id);
         userRepository.delete(user);
+        notifyObservers("USER_DELETED", id);
     }
 
     public List<User> searchUsers(String name, String email, String role) {
@@ -78,7 +94,9 @@ public class UserService {
         merged.putAll(newPreferences);
         user.setPreferences(merged);
 
-        return userRepository.save(user);
+        User saved = userRepository.save(user);
+        notifyObservers("USER_UPDATED", saved);
+        return saved;
     }
 
     public UserProfileDTO getUserProfile(Long id) {
@@ -187,7 +205,9 @@ public class UserService {
         }
 
         user.setStatus(Status.DEACTIVATED);
-        return userRepository.save(user);
+        User saved = userRepository.save(user);
+        notifyObservers("USER_DEACTIVATED", saved);
+        return saved;
     }
 
     @Transactional
@@ -207,6 +227,7 @@ public class UserService {
 
         targetAddress.setIsDefault(true);
         userRepository.save(user);
+        notifyObservers("DEFAULT_ADDRESS_SET", user);
 
         return getUserProfile(userId);
     }

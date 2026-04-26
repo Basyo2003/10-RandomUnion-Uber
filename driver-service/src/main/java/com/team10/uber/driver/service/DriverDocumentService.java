@@ -3,8 +3,11 @@ package com.team10.uber.driver.service;
 import com.team10.uber.driver.model.Driver;
 import com.team10.uber.driver.model.DriverDocument;
 import com.team10.uber.driver.dto.DriverWithDocumentsDTO;
+import com.team10.uber.driver.observer.AbstractObservableService;
+import com.team10.uber.driver.observer.MongoEventLogger;
 import com.team10.uber.driver.repository.DriverDocumentRepository;
 import com.team10.uber.driver.repository.DriverRepository;
+import jakarta.annotation.PostConstruct;
 import jakarta.transaction.Transactional;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -17,14 +20,22 @@ import java.util.List;
 import java.util.Map;
 
 @Service
-public class DriverDocumentService {
+public class DriverDocumentService extends AbstractObservableService {
 
     private final DriverDocumentRepository driverDocumentRepository;
     private final DriverRepository driverRepository;
+    private final MongoEventLogger mongoEventLogger;
 
-    public DriverDocumentService(DriverDocumentRepository driverDocumentRepository, DriverRepository driverRepository) {
+    public DriverDocumentService(DriverDocumentRepository driverDocumentRepository, DriverRepository driverRepository,
+                                 MongoEventLogger mongoEventLogger) {
         this.driverDocumentRepository = driverDocumentRepository;
         this.driverRepository = driverRepository;
+        this.mongoEventLogger = mongoEventLogger;
+    }
+
+    @PostConstruct
+    public void initObservers() {
+        register(mongoEventLogger);
     }
 
     public DriverDocument createDriverDocument(Long driverId, DriverDocument driverDocument) {
@@ -135,6 +146,8 @@ public class DriverDocumentService {
 
         // Persist the document
         driverDocumentRepository.save(document);
+
+        notifyObservers("DOCUMENT_VERIFIED", driver);
 
         // Step 8: Return the full driver with all documents
         return new DriverWithDocumentsDTO(driver, driver.getDriverDocuments());

@@ -8,6 +8,8 @@ import com.team10.uber.ride.exception.DriverNotFoundException;
 import com.team10.uber.ride.exception.InvalidRideStatusException;
 import com.team10.uber.ride.exception.RideNotFoundException;
 import com.team10.uber.ride.model.Ride;
+import com.team10.uber.ride.observer.AbstractObservableService;
+import com.team10.uber.ride.observer.MongoEventLogger;
 import com.team10.uber.ride.repository.RideRepository;
 import com.team10.uber.ride.dto.RideStopRequestDTO;
 import com.team10.uber.ride.dto.RideWithStopsDTO;
@@ -19,6 +21,7 @@ import com.team10.uber.ride.model.RideStop;
 import com.team10.uber.ride.repository.RideRepository;
 import com.team10.uber.ride.dto.RideDetailsDTO;
 import com.team10.uber.ride.repository.RideStopRepository;
+import jakarta.annotation.PostConstruct;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -30,21 +33,31 @@ import java.time.LocalTime;
 import java.util.List;
 
 @Service
-public class RideService {
+public class RideService extends AbstractObservableService {
 
     private final RideRepository rideRepository;
     private final RideStopRepository rideStopRepository;
+    private final MongoEventLogger mongoEventLogger;
 
-    public RideService(RideRepository rideRepository, RideStopRepository rideStopRepository) {
+    public RideService(RideRepository rideRepository, RideStopRepository rideStopRepository,
+                       MongoEventLogger mongoEventLogger) {
         this.rideRepository = rideRepository;
         this.rideStopRepository = rideStopRepository;
+        this.mongoEventLogger = mongoEventLogger;
+    }
+
+    @PostConstruct
+    public void initObservers() {
+        register(mongoEventLogger);
     }
 
     public Ride createRide(Ride ride) {
         if (ride.getStatus() == null) {
             ride.setStatus(RideStatus.REQUESTED);
         }
-        return rideRepository.save(ride);
+        Ride saved = rideRepository.save(ride);
+        notifyObservers("RIDE_CREATED", saved);
+        return saved;
     }
 
     public List<Ride> getAllRides() {
@@ -67,12 +80,15 @@ public class RideService {
         existing.setStatus(updatedRide.getStatus());
         existing.setFare(updatedRide.getFare());
         existing.setMetadata(updatedRide.getMetadata());
-        return rideRepository.save(existing);
+        Ride saved = rideRepository.save(existing);
+        notifyObservers("RIDE_UPDATED", saved);
+        return saved;
     }
 
     public void deleteRide(Long id) {
         Ride ride = getRideById(id);
         rideRepository.delete(ride);
+        notifyObservers("RIDE_DELETED", id);
     }
 
     @Transactional
@@ -95,7 +111,9 @@ public class RideService {
             rideRepository.updateDriverStatusToAvailable(ride.getDriverId());
         }
 
-        return rideRepository.save(ride);
+        Ride saved = rideRepository.save(ride);
+        notifyObservers("RIDE_CANCELLED", saved);
+        return saved;
     }
 
     @Transactional
@@ -150,6 +168,7 @@ public class RideService {
         } catch (Exception ignored) {
         }
 
+        notifyObservers("RIDE_COMPLETED", saved);
         return saved;
     }
 
@@ -193,6 +212,7 @@ public class RideService {
         rideStopRepository.saveAll(newStops);
 
         List<RideStop> allStops = rideStopRepository.findByRideIdOrderByStopOrderAsc(rideId);
+        notifyObservers("STOPS_ADDED", ride);
         return new RideWithStopsDTO(ride, allStops);
     }
 
@@ -306,7 +326,9 @@ public class RideService {
         ride.setDriverId(driverId);
         ride.setStatus(RideStatus.ACCEPTED);
         rideRepository.updateDriverStatusToBusy(driverId);
-        return rideRepository.save(ride);
+        Ride saved = rideRepository.save(ride);
+        notifyObservers("DRIVER_ASSIGNED", saved);
+        return saved;
     }
     public RideDetailsDTO GetRideDetailsWithStops(Long rideId) {
         Ride ride = rideRepository.findById(rideId)

@@ -6,8 +6,11 @@ import com.team10.uber.driver.dto.TopRatedDriverDTO;
 import com.team10.uber.driver.enums.DriverStatus;
 import com.team10.uber.driver.model.Driver;
 import com.team10.uber.driver.model.DriverDocument;
+import com.team10.uber.driver.observer.AbstractObservableService;
+import com.team10.uber.driver.observer.MongoEventLogger;
 import com.team10.uber.driver.repository.DriverDocumentRepository;
 import com.team10.uber.driver.repository.DriverRepository;
+import jakarta.annotation.PostConstruct;
 import jakarta.transaction.Transactional;
 
 import org.springframework.dao.DataIntegrityViolationException;
@@ -23,19 +26,29 @@ import java.util.List;
 import java.util.Map;
 
 @Service
-public class DriverService {
+public class DriverService extends AbstractObservableService {
 
     private final DriverRepository driverRepository;
     private final DriverDocumentRepository driverDocumentRepository;
+    private final MongoEventLogger mongoEventLogger;
 
-    public DriverService(DriverRepository driverRepository, DriverDocumentRepository driverDocumentRepository) {
+    public DriverService(DriverRepository driverRepository, DriverDocumentRepository driverDocumentRepository,
+                         MongoEventLogger mongoEventLogger) {
         this.driverRepository = driverRepository;
         this.driverDocumentRepository = driverDocumentRepository;
+        this.mongoEventLogger = mongoEventLogger;
+    }
+
+    @PostConstruct
+    public void initObservers() {
+        register(mongoEventLogger);
     }
 
     public Driver createDriver(Driver driver) {
         try {
-            return driverRepository.save(driver);
+            Driver saved = driverRepository.save(driver);
+            notifyObservers("DRIVER_CREATED", saved);
+            return saved;
         } catch (DataIntegrityViolationException ex) {
             String message = ex.getMessage();
 
@@ -94,7 +107,9 @@ public class DriverService {
         existingDriver.setVehicleDetails(updatedDriver.getVehicleDetails());
         existingDriver.setDriverDocuments(updatedDriver.getDriverDocuments());
 
-        return driverRepository.save(existingDriver);
+        Driver saved = driverRepository.save(existingDriver);
+        notifyObservers("UPDATED", saved);
+        return saved;
     }
 
     public Driver updateVehicleDetails(Long id, Map<String, Object> vehicleUpdates) {
@@ -109,7 +124,9 @@ public class DriverService {
         }
 
         existingDriver.setVehicleDetails(merged);
-        return driverRepository.save(existingDriver);
+        Driver saved = driverRepository.save(existingDriver);
+        notifyObservers("VEHICLE_DETAILS_UPDATED", saved);
+        return saved;
     }
 
     public List<Driver> filterByVehicleType(String type, String status) {
@@ -162,6 +179,7 @@ public class DriverService {
     public void deleteDriver(Long id) {
         Driver driver = getDriverById(id);
         driverRepository.delete(driver);
+        notifyObservers("DRIVER_DELETED", id);
     }
 
     public List<TopRatedDriverDTO> getTopRatedDrivers(int limit) {
@@ -215,8 +233,9 @@ public class DriverService {
         driver.setTotalRatings(updatedTotalRatings);
         driver.setRating(totalRatingScore / updatedTotalRatings);
 
-        return driverRepository.save(driver);
-
+        Driver saved = driverRepository.save(driver);
+        notifyObservers("RATING_RECORDED", saved);
+        return saved;
     }
 
     @Transactional
@@ -236,7 +255,8 @@ public class DriverService {
         }
 
         driver.setStatus(newStatus);
-        driverRepository.save(driver);
+        Driver saved = driverRepository.save(driver);
+        notifyObservers("AVAILABILITY_UPDATED", saved);
     }
 
     public List<DriverDocumentAlertDTO> getDriversWithExpiredDocuments() {
