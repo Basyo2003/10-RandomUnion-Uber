@@ -87,4 +87,5 @@ public class User {
 
     public List<SavedAddress> getSavedAddresses() { return savedAddresses; }
     public void setSavedAddresses(List<SavedAddress> savedAddresses) { this.savedAddresses = savedAddresses; }
+
 }
