@@ -5,7 +5,10 @@ import com.team10.uber.location.dto.DriverMovementSummaryDTO;
 import com.team10.uber.location.dto.DriverMovementSummaryProjection;
 import com.team10.uber.location.dto.StationaryDriverDTO;
 import com.team10.uber.location.model.Location;
+import com.team10.uber.location.observer.AbstractObservableService;
+import com.team10.uber.location.observer.MongoEventLogger;
 import com.team10.uber.location.repository.LocationRepository;
+import jakarta.annotation.PostConstruct;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -23,20 +26,29 @@ import java.util.Map;
 import java.util.Optional;
 
 @Service
-public class LocationService {
+public class LocationService extends AbstractObservableService {
 
     private final LocationRepository locationRepository;
     private final JdbcTemplate jdbcTemplate;
+    private final MongoEventLogger mongoEventLogger;
 
-    public LocationService(LocationRepository locationRepository, JdbcTemplate jdbcTemplate) {
+    public LocationService(LocationRepository locationRepository, JdbcTemplate jdbcTemplate,
+                           MongoEventLogger mongoEventLogger) {
         this.locationRepository = locationRepository;
         this.jdbcTemplate = jdbcTemplate;
+        this.mongoEventLogger = mongoEventLogger;
+    }
+
+    @PostConstruct
+    public void initObservers() {
+        register(mongoEventLogger);
     }
 
     public Location createLocation(Location location) {
         locationRepository.driverExists(jdbcTemplate,location.getDriverId());
-        return locationRepository.save(location);
-
+        Location saved = locationRepository.save(location);
+        notifyObservers("LOCATION_UPDATED", saved);
+        return saved;
     }
 
     public Location getLocationById(Long id) {
@@ -78,12 +90,15 @@ public class LocationService {
             existing.setMetadata(updated.getMetadata());
         }
 
-        return locationRepository.save(existing);
+        Location saved = locationRepository.save(existing);
+        notifyObservers("LOCATION_UPDATED", saved);
+        return saved;
     }
 
     public void deleteLocation(Long id) {
         Location existing = getLocationById(id);
         locationRepository.delete(existing);
+        notifyObservers("LOCATION_DELETED", existing.getDriverId());
     }
     
 
@@ -103,7 +118,9 @@ public class LocationService {
         locationRepository.driverExists(jdbcTemplate,driverId);
 
         location.setDriverId(driverId);
-        return locationRepository.save(location);
+        Location saved = locationRepository.save(location);
+        notifyObservers("LOCATION_UPDATED", saved);
+        return saved;
     }
   
   
@@ -179,7 +196,9 @@ public class LocationService {
         Map<String, Object> response = new HashMap<>();
         response.put("count", locationsToSave.size());
         response.put("message", "Batch locations created successfully");
+        response.put("driverId", request.getDriverId());
 
+        notifyObservers("BATCH_LOCATIONS_UPDATED", Map.of("driverId", request.getDriverId(), "count", locationsToSave.size()));
         return response;
     }
 
@@ -286,6 +305,7 @@ public class LocationService {
         int count = locationRepository.countLocationsOlderThan(cutoff);
         locationRepository.deleteLocationsOlderThan(cutoff);
 
+        notifyObservers("OLD_LOCATIONS_PURGED", Map.of("count", count, "olderThanDays", olderThanDays));
         return count;
     }
 

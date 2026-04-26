@@ -1,7 +1,10 @@
 package com.team10.uber.payment.service;
 
 import com.team10.uber.payment.model.Payment;
+import com.team10.uber.payment.observer.AbstractObservableService;
+import com.team10.uber.payment.observer.MongoEventLogger;
 import com.team10.uber.payment.repository.PaymentRepository;
+import jakarta.annotation.PostConstruct;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -34,18 +37,26 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
-public class PaymentService {
+public class PaymentService extends AbstractObservableService {
 
     private final PaymentRepository paymentRepository;
     private final CouponRepository couponRepository;
     private final PaymentCouponRepository paymentCouponRepository;
+    private final MongoEventLogger mongoEventLogger;
 
     public PaymentService(PaymentRepository paymentRepository,
             CouponRepository couponRepository,
-            PaymentCouponRepository paymentCouponRepository) {
+            PaymentCouponRepository paymentCouponRepository,
+            MongoEventLogger mongoEventLogger) {
         this.paymentRepository = paymentRepository;
         this.couponRepository = couponRepository;
         this.paymentCouponRepository = paymentCouponRepository;
+        this.mongoEventLogger = mongoEventLogger;
+    }
+
+    @PostConstruct
+    public void initObservers() {
+        register(mongoEventLogger);
     }
 
     public Payment createPayment(Payment payment) {
@@ -68,7 +79,9 @@ public class PaymentService {
                     "A payment already exists for ride id: " + payment.getRideId());
         }
 
-        return paymentRepository.save(payment);
+        Payment saved = paymentRepository.save(payment);
+        notifyObservers("CREATED", saved);
+        return saved;
     }
 
     public List<Payment> getAllPayments() {
@@ -89,15 +102,15 @@ public class PaymentService {
         existing.setMethod(updatedPayment.getMethod());
         existing.setStatus(updatedPayment.getStatus());
         existing.setTransactionDetails(updatedPayment.getTransactionDetails());
-        return paymentRepository.save(existing);
+        Payment saved = paymentRepository.save(existing);
+        notifyObservers("UPDATED", saved);
+        return saved;
     }
 
     public void deletePayment(Long id) {
-        if (!paymentRepository.existsById(id)) {
-            throw new ResponseStatusException(
-                    HttpStatus.NOT_FOUND, "Payment not found with id: " + id);
-        }
+        Payment payment = getPaymentById(id);
         paymentRepository.deleteById(id);
+        notifyObservers("PAYMENT_DELETED", payment);
     }
 
     @Transactional
@@ -119,7 +132,9 @@ public class PaymentService {
         details.put("refundedAt", LocalDateTime.now().toString());
         payment.setTransactionDetails(details);
 
-        return paymentRepository.save(payment);
+        Payment saved = paymentRepository.save(payment);
+        notifyObservers("REFUNDED", saved);
+        return saved;
     }
 
     public LocalDateTime parseDate(String date, boolean endOfDay) {
@@ -212,7 +227,9 @@ public class PaymentService {
         payment.setStatus(PaymentStatus.COMPLETED);
         payment.setTransactionDetails(transactionDetails);
 
-        return paymentRepository.save(payment);
+        Payment saved = paymentRepository.save(payment);
+        notifyObservers("COMPLETED", saved);
+        return saved;
     }
     public PaymentDetailsDTO applyCoupon(Long paymentId, Long couponId) {
         Payment payment = getPaymentById(paymentId);
@@ -262,6 +279,7 @@ public class PaymentService {
         paymentCouponRepository.save(paymentCoupon);
         couponRepository.save(coupon);
 
+        notifyObservers("COUPON_APPLIED", payment);
         return getPaymentDetails(paymentId);
     }
 
@@ -322,8 +340,10 @@ public class PaymentService {
         details.put("retryAttempt", retryAttempt);
         details.put("gatewayResponse", "approved");
         payment.setTransactionDetails(details);
-    
-        return paymentRepository.save(payment);
+
+        Payment saved = paymentRepository.save(payment);
+        notifyObservers("RETRY_ATTEMPTED", saved);
+        return saved;
     }
 
     public PaymentDetailsDTO getPaymentDetails(Long paymentId) {
