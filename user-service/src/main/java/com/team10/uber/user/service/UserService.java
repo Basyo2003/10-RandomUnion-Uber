@@ -10,7 +10,9 @@ import com.team10.uber.user.model.User;
 import com.team10.uber.user.repository.SavedAddressRepository;
 import com.team10.uber.user.repository.UserRepository;
 import jakarta.transaction.Transactional;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -35,6 +37,10 @@ public class UserService {
         return userRepository.findByEmail(email);
     }
 
+    @Caching(evict = {
+            @CacheEvict(value = "user-service::S1-F1", allEntries = true),
+            @CacheEvict(value = "user-service::S1-F6", allEntries = true)
+    })
     public User createUser(User user) {
         return userRepository.save(user);
     }
@@ -47,6 +53,12 @@ public class UserService {
         return findUserByIdOrThrow(id);
     }
 
+    @Caching(evict = {
+            @CacheEvict(value = "user-service::S1-F8", key = "#id"),
+            @CacheEvict(value = "user-service::S1-F3", key = "#id"),
+            @CacheEvict(value = "user-service::S1-F1", allEntries = true),
+            @CacheEvict(value = "user-service::S1-F6", allEntries = true)
+    })
     public User updateUser(Long id, User updatedUser) {
         User existingUser = findUserByIdOrThrow(id);
         existingUser.setName(updatedUser.getName());
@@ -59,6 +71,12 @@ public class UserService {
         return userRepository.save(existingUser);
     }
 
+    @Caching(evict = {
+            @CacheEvict(value = "user-service::S1-F8", key = "#id"),
+            @CacheEvict(value = "user-service::S1-F3", key = "#id"),
+            @CacheEvict(value = "user-service::S1-F1", allEntries = true),
+            @CacheEvict(value = "user-service::S1-F6", allEntries = true)
+    })
     public void deleteUser(Long id) {
         User user = findUserByIdOrThrow(id);
         userRepository.delete(user);
@@ -72,6 +90,11 @@ public class UserService {
         return userRepository.searchUsers(searchName, searchEmail, searchRole);
     }
 
+    @Caching(evict = {
+            @CacheEvict(value = "user-service::S1-F8", key = "#id"),
+            @CacheEvict(value = "user-service::S1-F3", key = "#id"),
+            @CacheEvict(value = "user-service::S1-F1", allEntries = true)
+    })
     public User updatePreferences(Long id, Map<String, Object> newPreferences) {
         User user = findUserByIdOrThrow(id);
         Map<String, Object> merged = new HashMap<>(user.getPreferences());
@@ -171,6 +194,10 @@ public class UserService {
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "user-service::S1-F8", key = "#id"),
+            @CacheEvict(value = "user-service::S1-F1", allEntries = true)
+    })
     public User deactivateUser(Long id) {
         User user = findUserByIdOrThrow(id);
         if (userRepository.hasActiveRides(id)) {
@@ -181,6 +208,10 @@ public class UserService {
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "user-service::S1-F8", key = "#userId"),
+            @CacheEvict(value = "user-service::S1-F1", allEntries = true)
+    })
     public UserProfileDTO setDefaultSavedAddress(Long userId, Long addressId) {
         User user = findUserByIdOrThrow(userId);
         SavedAddress targetAddress = savedAddressRepository.findById(addressId)
