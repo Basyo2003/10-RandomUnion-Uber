@@ -1,6 +1,11 @@
 package com.team10.uber.location.security;
 
-import io.jsonwebtoken.Claims;
+import com.team10.uber.location.security.chain.AuthContext;
+import com.team10.uber.location.security.chain.AuthResult;
+import com.team10.uber.location.security.chain.RoleAuthorizationHandler;
+import com.team10.uber.location.security.chain.SignatureValidationHandler;
+import com.team10.uber.location.security.chain.TokenExtractionHandler;
+import com.team10.uber.location.security.chain.UserLoaderHandler;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -14,16 +19,30 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.List;
 
+
+//Updated jwt auth filter from 3.4
+
 @Component
 public class JwtAuthFilter extends OncePerRequestFilter {
 
-    private final JwtService jwtService;
+    private final TokenExtractionHandler tokenExtractionHandler;
+    private final SignatureValidationHandler signatureValidationHandler;
+    private final UserLoaderHandler userLoaderHandler;
+    private final RoleAuthorizationHandler roleAuthorizationHandler;
 
-    public JwtAuthFilter(JwtService jwtService) {
-        this.jwtService = jwtService;
+    public JwtAuthFilter(
+            TokenExtractionHandler tokenExtractionHandler,
+            SignatureValidationHandler signatureValidationHandler,
+            UserLoaderHandler userLoaderHandler,
+            RoleAuthorizationHandler roleAuthorizationHandler
+    ) {
+        this.tokenExtractionHandler = tokenExtractionHandler;
+        this.signatureValidationHandler = signatureValidationHandler;
+        this.userLoaderHandler = userLoaderHandler;
+        this.roleAuthorizationHandler = roleAuthorizationHandler;
     }
 
-    // 5.4 Security Configuration - JWT filter intercepts protected requests
+    // 3.4 Chain of Responsibility - Spring Security calls this filter, then this filter calls the custom AuthHandler chain
     @Override
     protected void doFilterInternal(
             HttpServletRequest request,
@@ -33,47 +52,41 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         String path = request.getServletPath();
 
-        // 5.4 Security Configuration - allow health endpoints without JWT
         if (isPublicEndpoint(path)) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        String authHeader = request.getHeader("Authorization");
-        // 5.2 JWT Token - require Authorization: Bearer <token>
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.getWriter().write("Missing or invalid Authorization header");
+        AuthContext ctx = new AuthContext(request);
+
+        // Location Service has no ADMIN-only endpoints, so requiredRole stays null.
+        // If later you add an ADMIN-only endpoint, set ctx.setRequiredRole("ADMIN") based on path/method.
+
+        tokenExtractionHandler
+                .setNext(signatureValidationHandler)
+                .setNext(userLoaderHandler)
+                .setNext(roleAuthorizationHandler);
+
+        AuthResult result = tokenExtractionHandler.handle(ctx);
+
+        if (!result.isSuccess()) {
+            response.setStatus(result.getStatus());
+            response.getWriter().write(result.getMessage());
             return;
         }
-
-        String token = authHeader.substring(7);
-        
-        // 5.2 JWT Token - reject invalid or expired tokens
-        if (!jwtService.isTokenValid(token)) {
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.getWriter().write("Invalid or expired JWT token");
-            return;
-        }
-
-        Claims claims = jwtService.extractAllClaims(token);
-
-        String email = claims.getSubject();
-        String role = claims.get("role", String.class);
-        Object uid = claims.get("uid");
 
         UsernamePasswordAuthenticationToken authentication =
                 new UsernamePasswordAuthenticationToken(
-                        email,
+                        ctx.getEmail(),
                         null,
-                        List.of(new SimpleGrantedAuthority("ROLE_" + role))
+                        List.of(new SimpleGrantedAuthority("ROLE_" + ctx.getRole()))
                 );
 
         SecurityContextHolder.getContext().setAuthentication(authentication);
 
-        request.setAttribute("userEmail", email);
-        request.setAttribute("userId", uid);
-        request.setAttribute("userRole", role);
+        request.setAttribute("userEmail", ctx.getEmail());
+        request.setAttribute("userId", ctx.getUserId());
+        request.setAttribute("userRole", ctx.getRole());
 
         filterChain.doFilter(request, response);
     }
