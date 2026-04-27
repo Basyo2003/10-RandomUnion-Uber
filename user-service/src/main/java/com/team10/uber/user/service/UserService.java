@@ -7,6 +7,8 @@ import com.team10.uber.user.dto.UserRideSummaryDTO;
 import com.team10.uber.user.enums.Status;
 import com.team10.uber.user.model.SavedAddress;
 import com.team10.uber.user.model.User;
+import com.team10.uber.user.model.mongo.AuthEvent;
+import com.team10.uber.user.repository.mongo.AuthEventRepository;
 import com.team10.uber.user.repository.SavedAddressRepository;
 import com.team10.uber.user.repository.UserRepository;
 import jakarta.transaction.Transactional;
@@ -26,11 +28,14 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final SavedAddressRepository savedAddressRepository;
+    private final AuthEventRepository authEventRepository;
 
     public UserService(UserRepository userRepository,
-                       SavedAddressRepository savedAddressRepository) {
+                       SavedAddressRepository savedAddressRepository,
+                       AuthEventRepository authEventRepository) {
         this.userRepository = userRepository;
         this.savedAddressRepository = savedAddressRepository;
+        this.authEventRepository = authEventRepository;
     }
 
     public Optional<User> findByEmail(String email) {
@@ -42,7 +47,9 @@ public class UserService {
             @CacheEvict(value = "user-service::S1-F6", allEntries = true)
     })
     public User createUser(User user) {
-        return userRepository.save(user);
+        User saved = userRepository.save(user);
+        logEvent(saved.getId(), "USER_CREATED", Map.of("email", saved.getEmail()));
+        return saved;
     }
 
     public List<User> getAllUsers() {
@@ -68,7 +75,9 @@ public class UserService {
         existingUser.setRole(updatedUser.getRole());
         existingUser.setStatus(updatedUser.getStatus());
         existingUser.setPreferences(updatedUser.getPreferences());
-        return userRepository.save(existingUser);
+        User saved = userRepository.save(existingUser);
+        logEvent(id, "USER_UPDATED", Map.of("userId", id));
+        return saved;
     }
 
     @Caching(evict = {
@@ -80,6 +89,7 @@ public class UserService {
     public void deleteUser(Long id) {
         User user = findUserByIdOrThrow(id);
         userRepository.delete(user);
+        logEvent(id, "USER_DELETED", Map.of("userId", id));
     }
 
     @Cacheable(value = "user-service::S1-F1", key = "#name + '_' + #email + '_' + #role")
@@ -100,7 +110,9 @@ public class UserService {
         Map<String, Object> merged = new HashMap<>(user.getPreferences());
         merged.putAll(newPreferences);
         user.setPreferences(merged);
-        return userRepository.save(user);
+        User saved = userRepository.save(user);
+        logEvent(id, "USER_UPDATED", Map.of("updatedFields", "preferences"));
+        return saved;
     }
 
     @Cacheable(value = "user-service::S1-F8", key = "#id")
@@ -204,7 +216,9 @@ public class UserService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User has active rides");
         }
         user.setStatus(Status.DEACTIVATED);
-        return userRepository.save(user);
+        User saved = userRepository.save(user);
+        logEvent(id, "USER_DEACTIVATED", Map.of("userId", id));
+        return saved;
     }
 
     @Transactional
@@ -224,7 +238,16 @@ public class UserService {
         }
         targetAddress.setIsDefault(true);
         userRepository.save(user);
+        logEvent(userId, "DEFAULT_ADDRESS_SET", Map.of("addressId", addressId));
         return getUserProfile(userId);
+    }
+
+    private void logEvent(Long userId, String action, Map<String, Object> details) {
+        try {
+            authEventRepository.save(new AuthEvent(userId, action, details));
+        } catch (Exception e) {
+            // Don't fail the main operation if logging fails
+        }
     }
 
     private User findUserByIdOrThrow(Long id) {
