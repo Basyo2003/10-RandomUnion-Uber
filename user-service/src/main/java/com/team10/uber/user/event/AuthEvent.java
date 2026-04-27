@@ -25,6 +25,13 @@ public class AuthEvent implements MongoEvent {
         this.details = details;
     }
 
+    public AuthEvent(Long userId, String action, Map<String, Object> details) {
+        this.userId = userId;
+        this.action = action;
+        this.timestamp = LocalDateTime.now();
+        this.details = details;
+    }
+
     @Override public String getId() { return id; }
     @Override public LocalDateTime getTimestamp() { return timestamp; }
     @Override public String getAction() { return action; }

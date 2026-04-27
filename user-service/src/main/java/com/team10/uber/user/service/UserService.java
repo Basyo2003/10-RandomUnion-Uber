@@ -7,7 +7,7 @@ import com.team10.uber.user.dto.UserRideSummaryDTO;
 import com.team10.uber.user.enums.Status;
 import com.team10.uber.user.model.SavedAddress;
 import com.team10.uber.user.model.User;
-import com.team10.uber.user.model.mongo.AuthEvent;
+import com.team10.uber.user.event.AuthEvent;
 import com.team10.uber.user.repository.mongo.AuthEventRepository;
 import com.team10.uber.user.repository.SavedAddressRepository;
 import com.team10.uber.user.repository.UserRepository;
