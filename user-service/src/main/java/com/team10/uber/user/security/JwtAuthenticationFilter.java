@@ -31,20 +31,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
-                                    HttpServletResponse response,
-                                    FilterChain filterChain)
+            HttpServletResponse response,
+            FilterChain filterChain)
             throws ServletException, IOException {
 
         AuthHandler tokenExtractor = new TokenExtractionHandler();
-        AuthHandler sigValidator   = new SignatureValidationHandler();
-        AuthHandler userLoader     = new UserLoaderHandler(jdbcTemplate);
+        AuthHandler sigValidator = new SignatureValidationHandler();
+        AuthHandler userLoader = new UserLoaderHandler(jdbcTemplate);
         AuthHandler roleAuthorizer = new RoleAuthorizationHandler();
 
         tokenExtractor.setNext(sigValidator);
         sigValidator.setNext(userLoader);
         userLoader.setNext(roleAuthorizer);
 
-        AuthContext ctx    = new AuthContext(request, response);
+        AuthContext ctx = new AuthContext(request, response);
         AuthContext result = tokenExtractor.handle(ctx);
 
         if (!result.isPassed()) {
@@ -53,17 +53,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
-        UsernamePasswordAuthenticationToken auth =
-                new UsernamePasswordAuthenticationToken(
-                        result.getUserEmail(),
-                        null,
-                        List.of(new SimpleGrantedAuthority("ROLE_" + result.getRole()))
-                );
+        UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
+                result.getUserEmail(),
+                null,
+                List.of(new SimpleGrantedAuthority("ROLE_" + result.getRole())));
         SecurityContextHolder.getContext().setAuthentication(auth);
 
         request.setAttribute("userEmail", result.getUserEmail());
-        request.setAttribute("userId",    result.getUserId());
-        request.setAttribute("userRole",  result.getRole());
+        request.setAttribute("userId", result.getUserId());
+        request.setAttribute("userRole", result.getRole());
 
         filterChain.doFilter(request, response);
     }

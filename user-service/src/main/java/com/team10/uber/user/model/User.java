@@ -1,6 +1,7 @@
 package com.team10.uber.user.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.team10.uber.user.enums.Role;
 import com.team10.uber.user.enums.Status;
 import jakarta.persistence.*;
@@ -27,6 +28,7 @@ public class User {
     @Column(nullable = false, unique = true)
     private String email;
 
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     @Column(nullable = false)
     private String password;
 
@@ -35,7 +37,7 @@ public class User {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private Role role;
+    private Role role = Role.RIDER;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -85,4 +87,5 @@ public class User {
 
     public List<SavedAddress> getSavedAddresses() { return savedAddresses; }
     public void setSavedAddresses(List<SavedAddress> savedAddresses) { this.savedAddresses = savedAddresses; }
+
 }
