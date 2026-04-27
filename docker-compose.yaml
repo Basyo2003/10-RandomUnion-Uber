@@ -14,7 +14,14 @@ services:
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/uberdb
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
   ride-service:
     build: ./ride-service
     ports:
@@ -85,7 +92,7 @@ services:
       timeout: 5s
       retries: 5
   elasticsearch:
-    image: elasticsearch:8.19.12
+    image: elasticsearch:9.0.3
     container_name: uber-elasticsearch
     ports:
       - "9200:9200"
