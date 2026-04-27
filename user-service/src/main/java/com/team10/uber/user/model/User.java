@@ -1,5 +1,6 @@
 package com.team10.uber.user.model;
 
+
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.team10.uber.user.enums.Role;
