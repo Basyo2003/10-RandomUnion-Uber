@@ -1,10 +1,14 @@
 package com.team10.uber.user.singleton;
 
+import io.jsonwebtoken.security.Keys;
+import java.util.Base64;
+import javax.crypto.SecretKey;
+
 public class JwtConfigurationManager {
 
     private static volatile JwtConfigurationManager instance;
 
-    private String secretKey;
+    private SecretKey secretKey;
     private long expirationMs;
     private final String algorithm = "HS256";
 
@@ -26,11 +30,11 @@ public class JwtConfigurationManager {
     // §3.6 — Bridge method: called by Spring @Configuration bean during @PostConstruct
     public static void initConfig(String secret, long expirationMs) {
         JwtConfigurationManager mgr = getInstance();
-        mgr.secretKey = secret;
+        mgr.secretKey = Keys.hmacShaKeyFor(Base64.getDecoder().decode(secret));
         mgr.expirationMs = expirationMs;
     }
 
-    public String getSecretKey() { return secretKey; }
-    public long getExpirationMs() { return expirationMs; }
-    public String getAlgorithm() { return algorithm; }
+    public SecretKey getSecretKey() { return secretKey; }
+    public long getExpirationMs()   { return expirationMs; }
+    public String getAlgorithm()    { return algorithm; }
 }
