@@ -27,8 +27,8 @@ public class DriverDocumentService extends AbstractObservableService {
     private final MongoEventLogger mongoEventLogger;
 
     public DriverDocumentService(DriverDocumentRepository driverDocumentRepository,
-                                 DriverRepository driverRepository,
-                                 MongoEventLogger mongoEventLogger) {
+            DriverRepository driverRepository,
+            MongoEventLogger mongoEventLogger) {
         this.driverDocumentRepository = driverDocumentRepository;
         this.driverRepository = driverRepository;
         this.mongoEventLogger = mongoEventLogger;
@@ -44,7 +44,9 @@ public class DriverDocumentService extends AbstractObservableService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Driver not found with id: " + driverId));
         driverDocument.setDriver(driver);
-        return driverDocumentRepository.save(driverDocument);
+        DriverDocument saved = driverDocumentRepository.save(driverDocument);
+        notifyObservers("DRIVER_CREATED", driver);
+        return saved;
     }
 
     public List<DriverDocument> getAllDriverDocuments() {
@@ -78,12 +80,19 @@ public class DriverDocumentService extends AbstractObservableService {
                             "Driver not found with id: " + updatedDriverDocument.getDriver().getId()));
             existingDriverDocument.setDriver(driver);
         }
-        return driverDocumentRepository.save(existingDriverDocument);
+
+        DriverDocument saved = driverDocumentRepository.save(existingDriverDocument);
+        notifyObservers("UPDATED", saved.getDriver());
+        return saved;
     }
 
     public void deleteDriverDocument(Long id) {
         DriverDocument driverDocument = getDriverDocumentById(id);
+        Long driverId = driverDocument.getDriver() != null
+                ? driverDocument.getDriver().getId()
+                : null;
         driverDocumentRepository.delete(driverDocument);
+        notifyObservers("DRIVER_DELETED", driverId);
     }
 
     @Transactional
@@ -120,7 +129,8 @@ public class DriverDocumentService extends AbstractObservableService {
 
         document.setVerified(true);
         Map<String, Object> metadata = document.getMetadata();
-        if (metadata == null) metadata = new HashMap<>();
+        if (metadata == null)
+            metadata = new HashMap<>();
         metadata.put("verifiedAt", LocalDateTime.now().toString());
         metadata.put("verifiedBy", verifiedBy);
         document.setMetadata(metadata);
