@@ -30,7 +30,7 @@ public class SecurityConfig {
                 // 5.4 Security Configuration - health is public, all other endpoints require
                 // JWT
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/health", "/actuator/**").permitAll()
+                        .requestMatchers("/api/locations/health", "/actuator/**", "/error").permitAll()
                         .anyRequest().authenticated())
 
                 // 5.4 Security Configuration - register custom JWT filter
