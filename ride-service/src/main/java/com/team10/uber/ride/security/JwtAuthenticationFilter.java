@@ -50,6 +50,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (!result.isPassed()) {
             response.setStatus(result.getErrorStatus());
             response.getWriter().write(result.getErrorMessage());
+            response.getWriter().flush();
             return;
         }
 
@@ -71,6 +72,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getServletPath();
-        return path.startsWith("/actuator");
+        return path.startsWith("/actuator") || path.equals("/api/rides/health");
     }
 }
