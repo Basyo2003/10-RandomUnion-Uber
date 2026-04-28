@@ -22,18 +22,16 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
                 // 5.4 Security Configuration - CSRF disabled for token-based API
-                .csrf(AbstractHttpConfigurer::disable)
+                .csrf(c -> c.disable())
 
                 // 5.4 Security Configuration - no server-side sessions
-                .sessionManagement(session ->
-                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-                )
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
-                // 5.4 Security Configuration - health is public, all other endpoints require JWT
+                // 5.4 Security Configuration - health is public, all other endpoints require
+                // JWT
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/health", "/actuator/**", "/error").permitAll()
-                        .anyRequest().authenticated()
-                )
+                        .requestMatchers("/api/locations/health", "/actuator/**", "/error").permitAll()
+                        .anyRequest().authenticated())
 
                 // 5.4 Security Configuration - register custom JWT filter
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
