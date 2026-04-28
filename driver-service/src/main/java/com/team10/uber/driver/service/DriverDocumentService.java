@@ -44,7 +44,9 @@ public class DriverDocumentService extends AbstractObservableService {
                         "Driver not found with id: " + driverId));
 
         driverDocument.setDriver(driver);
-        return driverDocumentRepository.save(driverDocument);
+        DriverDocument saved = driverDocumentRepository.save(driverDocument);
+        notifyObservers("DRIVER_CREATED", driver);
+        return saved;
     }
 
     public List<DriverDocument> getAllDriverDocuments() {
@@ -81,12 +83,18 @@ public class DriverDocumentService extends AbstractObservableService {
             existingDriverDocument.setDriver(driver);
         }
 
-        return driverDocumentRepository.save(existingDriverDocument);
+        DriverDocument saved = driverDocumentRepository.save(existingDriverDocument);
+        notifyObservers("UPDATED", saved.getDriver());
+        return saved;
     }
 
     public void deleteDriverDocument(Long id) {
         DriverDocument driverDocument = getDriverDocumentById(id);
+        Long driverId = driverDocument.getDriver() != null
+                ? driverDocument.getDriver().getId()
+                : null;
         driverDocumentRepository.delete(driverDocument);
+        notifyObservers("DRIVER_DELETED", driverId);
     }
 
     @Transactional
