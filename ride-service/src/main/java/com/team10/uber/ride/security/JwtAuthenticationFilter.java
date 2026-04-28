@@ -14,13 +14,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.List;
 
-@Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JdbcTemplate jdbcTemplate;
@@ -50,6 +48,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (!result.isPassed()) {
             response.setStatus(result.getErrorStatus());
             response.getWriter().write(result.getErrorMessage());
+            response.getWriter().flush();
             return;
         }
 
@@ -71,6 +70,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getServletPath();
-        return path.startsWith("/actuator");
+        return path.startsWith("/actuator") || path.equals("/api/rides/health");
     }
 }
