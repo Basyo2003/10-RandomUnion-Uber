@@ -93,7 +93,7 @@ services:
       timeout: 5s
       retries: 5
   elasticsearch:
-    image: elasticsearch:8.19.12
+    image: elasticsearch:9.0.3
     container_name: uber-elasticsearch
     ports:
       - "9200:9200"
