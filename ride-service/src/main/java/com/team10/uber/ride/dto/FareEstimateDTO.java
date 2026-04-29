@@ -1,6 +1,10 @@
 package com.team10.uber.ride.dto;
 
-public class FareEstimateDTO {
+import java.io.Serializable;
+
+public class FareEstimateDTO implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     private Double estimatedDistance;
     private Double estimatedDuration;
@@ -17,6 +21,38 @@ public class FareEstimateDTO {
         this.surgeMultiplier = surgeMultiplier;
     }
 
+
+    public Double getEstimatedDistance() {
+        return estimatedDistance;
+    }
+
+    public void setEstimatedDistance(Double estimatedDistance) {
+        this.estimatedDistance = estimatedDistance;
+    }
+
+    public Double getEstimatedDuration() {
+        return estimatedDuration;
+    }
+
+    public void setEstimatedDuration(Double estimatedDuration) {
+        this.estimatedDuration = estimatedDuration;
+    }
+
+    public Double getEstimatedFare() {
+        return estimatedFare;
+    }
+
+    public void setEstimatedFare(Double estimatedFare) {
+        this.estimatedFare = estimatedFare;
+    }
+
+    public Double getSurgeMultiplier() {
+        return surgeMultiplier;
+    }
+
+    public void setSurgeMultiplier(Double surgeMultiplier) {
+        this.surgeMultiplier = surgeMultiplier;
+    }
     // §3.5 — Builder
     public static Builder builder() { return new Builder(); }
 
@@ -36,8 +72,5 @@ public class FareEstimateDTO {
         }
     }
 
-    public Double getEstimatedDistance() { return estimatedDistance; }
-    public Double getEstimatedDuration() { return estimatedDuration; }
-    public Double getEstimatedFare() { return estimatedFare; }
-    public Double getSurgeMultiplier() { return surgeMultiplier; }
+
 }
