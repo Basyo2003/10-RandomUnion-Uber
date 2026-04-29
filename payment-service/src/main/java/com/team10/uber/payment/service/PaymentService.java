@@ -434,6 +434,58 @@ public class PaymentService extends AbstractObservableService {
 
     // ── M2 Features ──────────────────────────────────────────────────────────
 
+    // §10.5.1
+    public List<VehicleTypeRevenueDTO> getFareRevenueByVehicleType(String startDateStr, String endDateStr) {
+        LocalDateTime startDate = parseDate(startDateStr, false);
+        LocalDateTime endDate = parseDate(endDateStr, true);
+
+        if (startDate.isAfter(endDate)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "startDate must be before endDate");
+        }
+
+        // §10.5.1(f)
+        try {
+            PaymentAuditEvent event = new PaymentAuditEvent(
+                    null, // Analytics are not tied to a specific payment ID
+                    "ANALYTICS_VIEWED",
+                    LocalDateTime.now(),
+                    null,
+                    null,
+                    Map.of("dashboard", "vehicle-type-revenue", "startDate", startDate.toString(), "endDate", endDate.toString())
+            );
+            auditEventRepository.save(event);
+        } catch (Exception e) {
+            log.warn("MongoDB audit event write failed: {}", e.getMessage());
+        }
+
+        // (10 min TTL)
+        String key = "S5-F10::" + startDate + "::" + endDate;
+        List<VehicleTypeRevenueDTO> cached = cache.get(key, new TypeReference<List<VehicleTypeRevenueDTO>>() {});
+        if (cached != null) return cached;
+
+        List<Object[]> rows = paymentRepository.findVehicleTypeRevenueStats(startDate, endDate);
+        List<VehicleTypeRevenueDTO> result = new ArrayList<>();
+
+        for (Object[] row : rows) {
+            String vehicleType = (String) row[0];
+            Double surgeFeeRevenue = row[1] != null ? ((Number) row[1]).doubleValue() : 0.0;
+            Double baseFareRevenue = row[2] != null ? ((Number) row[2]).doubleValue() : 0.0;
+            Double totalRevenue = row[3] != null ? ((Number) row[3]).doubleValue() : 0.0;
+            Long rideCount = row[4] != null ? ((Number) row[4]).longValue() : 0L;
+
+            result.add(VehicleTypeRevenueDTO.builder()
+                    .vehicleType(vehicleType)
+                    .surgeFeeRevenue(surgeFeeRevenue)
+                    .baseFareRevenue(baseFareRevenue)
+                    .totalRevenue(totalRevenue)
+                    .rideCount(rideCount)
+                    .build());
+        }
+
+        cache.put(key, result, TTL_ANALYTICS);
+        return result;
+    }
+
     // §10.5.3 — S5-F12: surge-adjusted refund with Strategy pattern
     @Transactional
     public Payment refundSurgeAdjusted(Long id, RefundRequest request) {
