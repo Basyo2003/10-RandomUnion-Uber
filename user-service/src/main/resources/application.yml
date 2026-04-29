@@ -15,8 +15,7 @@ spring:
       port: 6379
       password: redispass
     mongodb:
-      uri: mongodb://root:rootpass@localhost:27017/ubermongo?authSource=admin
-
+      uri: mongodb://root:rootpass@localhost:27017/ubermongo?authSource=admin&authMechanism=SCRAM-SHA-256
 
 server:
   port: 8080

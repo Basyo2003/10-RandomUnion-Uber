@@ -246,12 +246,16 @@ public class UserService {
         try {
             authEventRepository.save(new AuthEvent(userId, action, details));
         } catch (Exception e) {
-            // Don't fail the main operation if logging fails
+            System.err.println("MongoDB logging failed: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
     private User findUserByIdOrThrow(Long id) {
         return userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found with id: " + id));
+    }
+    public void logAuthEvent(Long userId, String action, Map<String, Object> details) {
+        logEvent(userId, action, details);
     }
 }
