@@ -43,6 +43,15 @@ public class DriverDocumentService extends AbstractObservableService {
         register(mongoEventLogger);
     }
 
+    // ── §4.4.4 — Cache invalidation helpers ─────────────────────────────────
+
+    private void evictDocumentCaches(Long documentId) {
+        cache.evict("driver-document::" + documentId);
+        cache.evictByPattern("S2-F9::*");
+    }
+
+    // ── CRUD ─────────────────────────────────────────────────────────────────
+
     public DriverDocument createDriverDocument(Long driverId, DriverDocument driverDocument) {
         Driver driver = driverRepository.findById(driverId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
@@ -50,6 +59,7 @@ public class DriverDocumentService extends AbstractObservableService {
         driverDocument.setDriver(driver);
         DriverDocument saved = driverDocumentRepository.save(driverDocument);
         notifyObservers("DRIVER_CREATED", driver);
+        cache.evictByPattern("S2-F9::*");
         return saved;
     }
 
@@ -94,6 +104,7 @@ public class DriverDocumentService extends AbstractObservableService {
 
         DriverDocument saved = driverDocumentRepository.save(existingDriverDocument);
         notifyObservers("UPDATED", saved.getDriver());
+        evictDocumentCaches(id);
         return saved;
     }
 
@@ -104,6 +115,7 @@ public class DriverDocumentService extends AbstractObservableService {
                 : null;
         driverDocumentRepository.delete(driverDocument);
         notifyObservers("DRIVER_DELETED", driverId);
+        evictDocumentCaches(driverDocument.getId());
     }
 
     @Transactional
@@ -148,6 +160,8 @@ public class DriverDocumentService extends AbstractObservableService {
 
         driverDocumentRepository.save(document);
         notifyObservers("DOCUMENT_VERIFIED", driver);
+        evictDocumentCaches(documentId);
+        cache.evict("driver::" + driverId);
 
         return new DriverWithDocumentsDTO(driver, driver.getDriverDocuments());
     }
