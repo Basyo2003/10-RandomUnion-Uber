@@ -85,4 +85,22 @@ public interface DriverRepository extends JpaRepository<Driver, Long> {
             AND status IN ('REQUESTED', 'ACCEPTED', 'IN_PROGRESS')
             """, nativeQuery = true)
     int countActiveRides(@Param("driverId") Long driverId);
+
+    interface DashboardAggregate {
+        Long getTotalRides();
+        Double getTotalEarnings();
+        Double getAverageRideFare();
+    }
+
+    @Query(value = """
+            SELECT
+                COUNT(r.id)                AS totalRides,
+                COALESCE(SUM(p.amount), 0) AS totalEarnings,
+                COALESCE(AVG(p.amount), 0) AS averageRideFare
+            FROM rides r
+            LEFT JOIN payments p ON p.ride_id = r.id
+            WHERE r.driver_id = :driverId
+              AND r.status = 'COMPLETED'
+            """, nativeQuery = true)
+    DashboardAggregate getDashboardAggregate(@Param("driverId") Long driverId);
 }
