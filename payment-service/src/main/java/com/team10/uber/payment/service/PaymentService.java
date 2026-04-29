@@ -26,6 +26,9 @@ import com.team10.uber.payment.repository.CouponRepository;
 import com.team10.uber.payment.repository.PaymentCouponRepository;
 import com.team10.uber.payment.enums.DiscountType;
 import java.time.LocalDateTime;
+import com.team10.uber.payment.strategy.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 import com.team10.uber.payment.dto.CouponUsageDTO;
@@ -39,6 +42,7 @@ import java.util.List;
 @Service
 public class PaymentService extends AbstractObservableService {
 
+    private static final Logger log = LoggerFactory.getLogger(PaymentService.class);
     private final PaymentRepository paymentRepository;
     private final CouponRepository couponRepository;
     private final PaymentCouponRepository paymentCouponRepository;
@@ -389,5 +393,81 @@ public class PaymentService extends AbstractObservableService {
 
             return new CouponUsageDTO(couponId, code, discountType, discountValue, timesUsed, totalDiscountGiven, active, expired);
         }).collect(java.util.stream.Collectors.toList());
+    }
+
+    @Transactional
+    public Payment refundSurgeAdjusted(Long id, RefundRequest request) {
+
+        // §10.5.3b — Find payment → 404
+        Payment payment = getPaymentById(id);
+
+        // §10.5.3c — Validate status == COMPLETED → 400
+        if (payment.getStatus() != PaymentStatus.COMPLETED) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Payment must be COMPLETED to be refunded");
+        }
+
+        // §3.2 — Select strategy via selector — NO if/else here
+        RefundStrategySelector selector = new RefundStrategySelector();
+        RefundStrategy strategy = selector.select(payment, request);
+        RefundResult result = strategy.calculateRefund(payment, request);
+
+        // §10.5.3e — If NoRefundStrategy selected
+        if (result.getAmount() == 0.0 && result.getReasonCode().equals("refund window expired")) {
+
+            // Log REFUND_DENIED to MongoDB
+            logPaymentEvent(payment, "REFUND_DENIED", Map.of(
+                    "strategyName", result.getStrategyName(),
+                    "reason", result.getReasonCode()
+            ));
+
+            // §10.5.3e — Invalidate caches
+            evictAnalyticsCaches();
+
+            // §10.5.3e — Throw 400 after logging
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "refund window expired");
+        }
+
+        // §10.5.3f — Update payment status
+        payment.setStatus(PaymentStatus.REFUNDED);
+
+        // §10.5.3g — Update transactionDetails JSONB
+        Map<String, Object> details = payment.getTransactionDetails();
+        if (details == null) details = new HashMap<>();
+        details.put("refundAmount", result.getAmount());
+        details.put("refundSurgeIncluded", request.isRefundSurge());
+        details.put("refundReason", request.getReason());
+        details.put("refundedAt", LocalDateTime.now().toString());
+        payment.setTransactionDetails(details);
+
+        Payment saved = paymentRepository.save(payment);
+
+        // §10.5.3h — Log REFUNDED event to MongoDB
+        logPaymentEvent(payment, "REFUNDED", Map.of(
+                "strategyName", result.getStrategyName(),
+                "reason", request.getReason(),
+                "originalAmount", payment.getAmount(),
+                "refundAmount", result.getAmount(),
+                "surgeIncluded", request.isRefundSurge()
+        ));
+
+        // §10.5.3i — Invalidate caches
+        evictAnalyticsCaches();
+
+        return saved;
+    }
+
+    private void logPaymentEvent(Payment payment, String action, Map<String, Object> details) {
+        try {
+            // Log to MongoDB payment_audit_trail via Observer
+            // (wire to your existing MongoEventLogger/Observer pattern)
+        } catch (Exception e) {
+            log.warn("MongoDB write failed: {}", e.getMessage());
+        }
+    }
+
+    private void evictAnalyticsCaches() {
+        // Invalidate S5-F10 and S5-F11 caches
+        // Use your Redis template or cache manager
     }
 }
