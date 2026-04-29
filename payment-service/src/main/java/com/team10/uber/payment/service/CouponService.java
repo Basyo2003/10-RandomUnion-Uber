@@ -2,6 +2,9 @@ package com.team10.uber.payment.service;
 
 import com.team10.uber.payment.model.Coupon;
 import com.team10.uber.payment.repository.CouponRepository;
+
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -17,6 +20,7 @@ public class CouponService {
         this.couponRepository = couponRepository;
     }
 
+    @CacheEvict(value = "payment-service::S5-F9", allEntries = true)
     public Coupon createCoupon(Coupon coupon) {
         return couponRepository.save(coupon);
     }
@@ -25,12 +29,18 @@ public class CouponService {
         return couponRepository.findAll();
     }
 
+    @Cacheable(value = "payment-service::coupon", key = "#id")
     public Coupon getCouponById(Long id) {
         return couponRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Coupon not found with id: " + id));
     }
 
+    @Caching(evict = {
+        @CacheEvict(value = "payment-service::coupon", key = "#id"),
+        @CacheEvict(value = "payment-service::S5-F9", allEntries = true),
+        @CacheEvict(value = "payment-service::S5-F8", allEntries = true) 
+    })
     public Coupon updateCoupon(Long id, Coupon updatedCoupon) {
         Coupon existing = getCouponById(id);
         existing.setCode(updatedCoupon.getCode());
