@@ -54,6 +54,16 @@ public class DriverController {
         return driverService.searchDrivers(status, minRating, maxRating);
     }
 
+    @GetMapping("/search/full-text")
+    public List<Driver> searchDriversFullText(
+            @RequestParam("query") String query,
+            @RequestParam(required = false) String vehicleType,
+            @RequestParam(required = false) DriverStatus status,
+            @RequestParam(required = false) Double minRating,
+            @RequestParam(required = false) Double maxRating) {
+        return driverService.fullTextSearchDrivers(query, vehicleType, status, minRating, maxRating);
+    }
+
     @GetMapping("/vehicle-type")
     public List<Driver> filterByVehicleType(
             @RequestParam String type,
