@@ -26,9 +26,6 @@ import java.util.List;
 public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final TokenExtractionHandler tokenExtractionHandler;
-    private final SignatureValidationHandler signatureValidationHandler;
-    private final UserLoaderHandler userLoaderHandler;
-    private final RoleAuthorizationHandler roleAuthorizationHandler;
 
     public JwtAuthFilter(
             TokenExtractionHandler tokenExtractionHandler,
@@ -37,9 +34,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             RoleAuthorizationHandler roleAuthorizationHandler
     ) {
         this.tokenExtractionHandler = tokenExtractionHandler;
-        this.signatureValidationHandler = signatureValidationHandler;
-        this.userLoaderHandler = userLoaderHandler;
-        this.roleAuthorizationHandler = roleAuthorizationHandler;
+        tokenExtractionHandler.setNext(signatureValidationHandler)
+                              .setNext(userLoaderHandler)
+                              .setNext(roleAuthorizationHandler);
     }
 
     // 3.4 Chain of Responsibility - Spring Security calls this filter, then this filter calls the custom AuthHandler chain
@@ -61,11 +58,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         // Location Service has no ADMIN-only endpoints, so requiredRole stays null.
         // If later you add an ADMIN-only endpoint, set ctx.setRequiredRole("ADMIN") based on path/method.
-
-        tokenExtractionHandler
-                .setNext(signatureValidationHandler)
-                .setNext(userLoaderHandler)
-                .setNext(roleAuthorizationHandler);
 
         AuthResult result = tokenExtractionHandler.handle(ctx);
 

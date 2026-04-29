@@ -13,6 +13,8 @@ public class DriverDocumentAlertDTO {
     private List<DriverDocument> expiredDocuments;
     private int expiredCount;
 
+    public DriverDocumentAlertDTO() {}
+
     public DriverDocumentAlertDTO(Driver driver,
             List<DriverDocument> expiredDocuments) {
         this.driverId = driver.getId();
@@ -42,4 +44,12 @@ public class DriverDocumentAlertDTO {
         return expiredCount;
     }
 
+    public void setDriverId(Long driverId) { this.driverId = driverId; }
+    public void setDriverName(String driverName) { this.driverName = driverName; }
+    public void setDriverStatus(DriverStatus driverStatus) { this.driverStatus = driverStatus; }
+    public void setExpiredDocuments(List<DriverDocument> expiredDocuments) {
+        this.expiredDocuments = expiredDocuments;
+        this.expiredCount = expiredDocuments != null ? expiredDocuments.size() : 0;
+    }
+    public void setExpiredCount(int expiredCount) { this.expiredCount = expiredCount; }
 }

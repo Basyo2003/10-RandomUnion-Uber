@@ -2,6 +2,7 @@ package com.team10.uber.driver.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.team10.uber.driver.enums.DriverStatus;
+import com.team10.uber.driver.listener.DriverEntityListener;
 import jakarta.persistence.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
@@ -12,6 +13,7 @@ import java.util.Map;
 
 @Entity
 @Table(name = "drivers")
+@EntityListeners(DriverEntityListener.class)
 public class Driver {
 
     @Id
