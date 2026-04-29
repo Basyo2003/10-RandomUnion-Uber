@@ -5,6 +5,9 @@ import com.team10.uber.payment.observer.AbstractObservableService;
 import com.team10.uber.payment.observer.MongoEventLogger;
 import com.team10.uber.payment.repository.PaymentRepository;
 import jakarta.annotation.PostConstruct;
+
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -63,6 +66,13 @@ public class PaymentService extends AbstractObservableService {
         register(mongoEventLogger);
     }
 
+    @Caching(evict = {
+        @CacheEvict(value = "payment-service::S5-F1", allEntries = true),
+        @CacheEvict(value = "payment-service::S5-F3", allEntries = true),
+        @CacheEvict(value = "payment-service::S5-F6", allEntries = true),
+        @CacheEvict(value = "payment-service::S5-F10", allEntries = true),
+        @CacheEvict(value = "payment-service::S5-F11", allEntries = true)
+    })
     public Payment createPayment(Payment payment) {
 
         // Check user exists
@@ -92,12 +102,23 @@ public class PaymentService extends AbstractObservableService {
         return paymentRepository.findAll();
     }
 
+    @Cacheable(value = "payment-service::payment", key = "#id")
     public Payment getPaymentById(Long id) {
         return paymentRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Payment not found with id: " + id));
     }
 
+
+    @Caching(evict = {
+        @CacheEvict(value = "payment-service::payment", key = "#id"),
+        @CacheEvict(value = "payment-service::S5-F8", key = "#id"),
+        @CacheEvict(value = "payment-service::S5-F1", allEntries = true),
+        @CacheEvict(value = "payment-service::S5-F3", allEntries = true),
+        @CacheEvict(value = "payment-service::S5-F6", allEntries = true),
+        @CacheEvict(value = "payment-service::S5-F10", allEntries = true),
+        @CacheEvict(value = "payment-service::S5-F11", allEntries = true)
+    })
     public Payment updatePayment(Long id, Payment updatedPayment) {
         Payment existing = getPaymentById(id);
         existing.setRideId(updatedPayment.getRideId());
@@ -111,12 +132,27 @@ public class PaymentService extends AbstractObservableService {
         return saved;
     }
 
+    @Caching(evict = {
+        @CacheEvict(value = "payment-service::payment", key = "#id"),
+        @CacheEvict(value = "payment-service::S5-F8", key = "#id"),
+        @CacheEvict(value = "payment-service::S5-F1", allEntries = true),
+        @CacheEvict(value = "payment-service::S5-F3", allEntries = true),
+        @CacheEvict(value = "payment-service::S5-F6", allEntries = true),
+        @CacheEvict(value = "payment-service::S5-F10", allEntries = true),
+        @CacheEvict(value = "payment-service::S5-F11", allEntries = true)
+    })
     public void deletePayment(Long id) {
         Payment payment = getPaymentById(id);
         paymentRepository.deleteById(id);
         notifyObservers("PAYMENT_DELETED", payment);
     }
 
+    @Caching(evict = {
+        @CacheEvict(value = "payment-service::payment", key = "#id"),
+        @CacheEvict(value = "payment-service::S5-F8", key = "#id"),
+        @CacheEvict(value = "payment-service::S5-F10", allEntries = true),
+        @CacheEvict(value = "payment-service::S5-F11", allEntries = true)
+    })
     @Transactional
     public Payment refundPayment(Long id, String reason) {
         Payment payment = getPaymentById(id);
@@ -151,6 +187,7 @@ public class PaymentService extends AbstractObservableService {
                 : LocalDateTime.parse(date + "T00:00:00");
     }
 
+    @Cacheable(value = "payment-service::S5-F3", key = "#userId")
     public UserPaymentSummaryDTO getUserPaymentSummary(Long userId) {
         // a) Verify user exists via native SQL
         int userCount = paymentRepository.countUserById(userId);
@@ -181,6 +218,13 @@ public class PaymentService extends AbstractObservableService {
         return new UserPaymentSummaryDTO(userId, totalPayments, totalAmount, methodBreakdown);
     }
 
+    @Caching(evict = {
+        @CacheEvict(value = "payment-service::S5-F1", allEntries = true),
+        @CacheEvict(value = "payment-service::S5-F3", allEntries = true),
+        @CacheEvict(value = "payment-service::S5-F6", allEntries = true),
+        @CacheEvict(value = "payment-service::S5-F10", allEntries = true),
+        @CacheEvict(value = "payment-service::S5-F11", allEntries = true)
+    })
     @Transactional
     public Payment processPaymentForRide(Long rideId, ProcessPaymentDTO dto) {
 
@@ -235,6 +279,13 @@ public class PaymentService extends AbstractObservableService {
         notifyObservers("COMPLETED", saved);
         return saved;
     }
+
+    @Caching(evict = {
+        @CacheEvict(value = "payment-service::payment", key = "#paymentId"),
+        @CacheEvict(value = "payment-service::S5-F8", key = "#paymentId"),
+        @CacheEvict(value = "payment-service::S5-F9", allEntries = true), // Flushes top coupons
+        @CacheEvict(value = "payment-service::coupon", key = "#couponId") // Coupon usage was incremented
+    })
     public PaymentDetailsDTO applyCoupon(Long paymentId, Long couponId) {
         Payment payment = getPaymentById(paymentId);
 
@@ -287,6 +338,7 @@ public class PaymentService extends AbstractObservableService {
         return getPaymentDetails(paymentId);
     }
 
+    @Cacheable(value = "payment-service::S5-F1", key = "(#status != null ? #status : 'ALL') + '_' + #startDate + '_' + #endDate")
     public List<Payment> searchPayments(String status, LocalDateTime startDate, LocalDateTime endDate) {
         List<Payment> result;
         if (status == null || status.isEmpty()) {
@@ -299,6 +351,7 @@ public class PaymentService extends AbstractObservableService {
         return result;
     }
 
+    @Cacheable(value = "payment-service::S5-F6", key = "#startDate.toString() + '_' + #endDate.toString()")
     public RevenueReportDTO getRevenueReport(LocalDateTime startDate, LocalDateTime endDate) {
         if (startDate.isAfter(endDate)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "startDate must be before endDate");
@@ -324,6 +377,11 @@ public class PaymentService extends AbstractObservableService {
         return new RevenueReportDTO(totalRevenue, totalTransactions, averagePayment, refundedAmount, refundCount);
     }
 
+    @Caching(evict = {
+        @CacheEvict(value = "payment-service::payment", key = "#id"),
+        @CacheEvict(value = "payment-service::S5-F8", key = "#id"),
+        @CacheEvict(value = "payment-service::S5-F11", allEntries = true) // Affects success/fail rate
+    })
     @Transactional
     public Payment retryPayment(Long id) {
         Payment payment = paymentRepository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Payment not found"));
@@ -350,6 +408,7 @@ public class PaymentService extends AbstractObservableService {
         return saved;
     }
 
+    @Cacheable(value = "payment-service::S5-F8", key = "#paymentId")
     public PaymentDetailsDTO getPaymentDetails(Long paymentId) {
         Payment payment = paymentRepository.findById(paymentId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Payment not found"));
 
@@ -369,6 +428,7 @@ public class PaymentService extends AbstractObservableService {
         return new PaymentDetailsDTO(payment.getId(), payment.getRideId(), payment.getUserId(), payment.getAmount(), payment.getMethod(), payment.getStatus(), transactionDetails, appliedCouponDTOs, totalDiscount, finalAmount); 
     }
 
+    @Cacheable(value = "payment-service::S5-F9", key = "#limit")
     public List<CouponUsageDTO> getTopUsedCoupons(int limit) {
         List<Object[]> rows = couponRepository.findTopUsedCoupons(limit);
 

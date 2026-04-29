@@ -17,6 +17,7 @@ public class CouponService {
         this.couponRepository = couponRepository;
     }
 
+    @CacheEvict(value = "payment-service::S5-F9", allEntries = true)
     public Coupon createCoupon(Coupon coupon) {
         return couponRepository.save(coupon);
     }
@@ -24,13 +25,18 @@ public class CouponService {
     public List<Coupon> getAllCoupons() {
         return couponRepository.findAll();
     }
-
+    @Cacheable(value = "payment-service::coupon", key = "#id")
     public Coupon getCouponById(Long id) {
         return couponRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Coupon not found with id: " + id));
     }
 
+    @Caching(evict = {
+        @CacheEvict(value = "payment-service::coupon", key = "#id"),
+        @CacheEvict(value = "payment-service::S5-F9", allEntries = true),
+        @CacheEvict(value = "payment-service::S5-F8", allEntries = true)
+    })
     public Coupon updateCoupon(Long id, Coupon updatedCoupon) {
         Coupon existing = getCouponById(id);
         existing.setCode(updatedCoupon.getCode());
@@ -44,6 +50,11 @@ public class CouponService {
         return couponRepository.save(existing);
     }
 
+    @Caching(evict = {
+        @CacheEvict(value = "payment-service::coupon", key = "#id"),
+        @CacheEvict(value = "payment-service::S5-F9", allEntries = true),
+        @CacheEvict(value = "payment-service::S5-F8", allEntries = true)
+    })
     public void deleteCoupon(Long id) {
         if (!couponRepository.existsById(id)) {
             throw new ResponseStatusException(
