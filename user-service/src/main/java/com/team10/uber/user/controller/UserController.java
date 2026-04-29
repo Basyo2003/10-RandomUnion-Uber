@@ -1,5 +1,6 @@
 package com.team10.uber.user.controller;
 
+import com.team10.uber.user.dto.RoleUpdateRequest;
 import com.team10.uber.user.dto.TopRiderDTO;
 import com.team10.uber.user.dto.UserProfileDTO;
 import com.team10.uber.user.dto.UserRideSummaryDTO;
@@ -95,5 +96,10 @@ public class UserController {
     @PutMapping("/{id}/deactivate")
     public User deactivateUser(@PathVariable Long id) {
         return userService.deactivateUser(id);
+    }
+
+    @PutMapping("/{id}/role")
+    public ResponseEntity<User> updateUserRole(@PathVariable Long id, @RequestBody RoleUpdateRequest request) {
+        return ResponseEntity.ok(userService.updateUserRole(id, request.getRole()));
     }
 }
