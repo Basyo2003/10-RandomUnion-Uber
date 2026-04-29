@@ -1,5 +1,6 @@
 package com.team10.uber.driver.service;
 
+import com.team10.uber.driver.adapter.ElasticsearchHitAdapter;
 import com.team10.uber.driver.model.Driver;
 import com.team10.uber.driver.model.elastic.DriverSearchDocument;
 import com.team10.uber.driver.observer.AbstractObservableService;
@@ -27,6 +28,8 @@ public class DriverIndexService extends AbstractObservableService {
     private final DriverRepository driverRepository;
     private final DriverSearchRepository searchRepository;
     private final MongoEventLogger mongoEventLogger;
+    @SuppressWarnings("unused")
+    private final ElasticsearchHitAdapter elasticsearchHitAdapter = new ElasticsearchHitAdapter();
 
     public DriverIndexService(DriverRepository driverRepository,
             DriverSearchRepository searchRepository,
