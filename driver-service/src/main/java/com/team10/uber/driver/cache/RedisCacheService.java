@@ -67,7 +67,6 @@ public class RedisCacheService {
         }
     }
 
-    /** Deletes all keys matching the given pattern (e.g. "S2-F1::*"). */
     public void evictByPattern(String pattern) {
         try {
             Set<String> keys = redisTemplate.keys(SERVICE_PREFIX + pattern);
