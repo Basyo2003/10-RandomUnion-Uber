@@ -1,36 +1,36 @@
 package com.team10.uber.ride.service;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.ArrayList;
+import java.util.List;
+
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
+import com.team10.uber.ride.dto.FareEstimateDTO;
+import com.team10.uber.ride.dto.FareEstimateRequestDTO;
+import com.team10.uber.ride.dto.RideAnalyticsDTO;
+import com.team10.uber.ride.dto.RideDetailsDTO;
+import com.team10.uber.ride.dto.RideStopRequestDTO;
+import com.team10.uber.ride.dto.RideWithStopsDTO;
 import com.team10.uber.ride.enums.RideStatus;
+import com.team10.uber.ride.enums.StopStatus;
 import com.team10.uber.ride.exception.DriverNotFoundException;
 import com.team10.uber.ride.exception.InvalidRideStatusException;
 import com.team10.uber.ride.exception.RideNotFoundException;
 import com.team10.uber.ride.model.Ride;
+import com.team10.uber.ride.model.RideStop;
 import com.team10.uber.ride.observer.AbstractObservableService;
 import com.team10.uber.ride.observer.MongoEventLogger;
 import com.team10.uber.ride.repository.RideRepository;
-import com.team10.uber.ride.dto.RideStopRequestDTO;
-import com.team10.uber.ride.dto.RideWithStopsDTO;
-import com.team10.uber.ride.enums.StopStatus;
-import com.team10.uber.ride.dto.FareEstimateDTO;
-import com.team10.uber.ride.dto.FareEstimateRequestDTO;
-import com.team10.uber.ride.dto.RideAnalyticsDTO;
-import com.team10.uber.ride.model.RideStop;
-import com.team10.uber.ride.repository.RideRepository;
-import com.team10.uber.ride.dto.RideDetailsDTO;
 import com.team10.uber.ride.repository.RideStopRepository;
-import jakarta.annotation.PostConstruct;
-import org.springframework.http.HttpStatus;
-import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
 
-import java.util.ArrayList;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
-import java.util.List;
+import jakarta.annotation.PostConstruct;
 
 @Service
 public class RideService extends AbstractObservableService {
@@ -39,7 +39,8 @@ public class RideService extends AbstractObservableService {
     private final RideStopRepository rideStopRepository;
     private final MongoEventLogger mongoEventLogger;
 
-    public RideService(RideRepository rideRepository, RideStopRepository rideStopRepository,
+    public RideService(RideRepository rideRepository,
+                       RideStopRepository rideStopRepository,
                        MongoEventLogger mongoEventLogger) {
         this.rideRepository = rideRepository;
         this.rideStopRepository = rideStopRepository;
@@ -51,6 +52,7 @@ public class RideService extends AbstractObservableService {
         register(mongoEventLogger);
     }
 
+    
     public Ride createRide(Ride ride) {
         if (ride.getStatus() == null) {
             ride.setStatus(RideStatus.REQUESTED);
@@ -68,7 +70,6 @@ public class RideService extends AbstractObservableService {
         return rideRepository.findById(id)
                 .orElseThrow(() -> new RideNotFoundException("Ride not found with id: " + id));
     }
-
     public Ride updateRide(Long id, Ride updatedRide) {
         Ride existing = getRideById(id);
         existing.setUserId(updatedRide.getUserId());
@@ -84,7 +85,6 @@ public class RideService extends AbstractObservableService {
         notifyObservers("RIDE_UPDATED", saved);
         return saved;
     }
-
     public void deleteRide(Long id) {
         Ride ride = getRideById(id);
         rideRepository.delete(ride);
@@ -106,7 +106,6 @@ public class RideService extends AbstractObservableService {
 
         ride.setStatus(RideStatus.CANCELLED);
 
-        // Only update driver if one is assigned
         if (ride.getDriverId() != null) {
             rideRepository.updateDriverStatusToAvailable(ride.getDriverId());
         }
@@ -118,17 +117,14 @@ public class RideService extends AbstractObservableService {
 
     @Transactional
     public Ride completeRide(Long rideId) {
-        // 1) Find ride
         Ride ride = getRideById(rideId);
 
-        // 2) Validate status
         if (ride.getStatus() != RideStatus.IN_PROGRESS) {
             throw new InvalidRideStatusException(
                     "Ride status must be IN_PROGRESS to complete. Current status: " + ride.getStatus()
             );
         }
 
-        // 3) Validate driver exists and is assigned to this ride
         int driverExists = rideRepository.countDriversById(ride.getDriverId());
         if (driverExists == 0) {
             throw new DriverNotFoundException("Driver not found with id: " + ride.getDriverId());
@@ -141,11 +137,9 @@ public class RideService extends AbstractObservableService {
             );
         }
 
-        // 4) Set ride as completed
         ride.setStatus(RideStatus.COMPLETED);
         ride.setCompletedAt(LocalDateTime.now());
 
-        // 5) Calculate fare if unset
         if (ride.getFare() == null) {
             double calculatedFare = calculateFare(
                     ride.getPickupLatitude(),
@@ -156,13 +150,9 @@ public class RideService extends AbstractObservableService {
             ride.setFare(calculatedFare);
         }
 
-        // 6) Update driver status to AVAILABLE
         rideRepository.updateDriverStatusToAvailable(ride.getDriverId());
-
-        // 7) Save ride first
         Ride saved = rideRepository.save(ride);
 
-        // 8) Create payment record in its own transaction (best-effort)
         try {
             rideRepository.createPayment(saved.getId(), saved.getUserId(), saved.getFare());
         } catch (Exception ignored) {
@@ -185,12 +175,14 @@ public class RideService extends AbstractObservableService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Ride not found"));
 
         if (ride.getStatus() != RideStatus.REQUESTED && ride.getStatus() != RideStatus.ACCEPTED) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot add stops to a ride that is not REQUESTED or ACCEPTED");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Cannot add stops to a ride that is not REQUESTED or ACCEPTED");
         }
 
         for (RideStopRequestDTO req : stopRequests) {
             if (req.getLatitude() == null || req.getLongitude() == null || req.getAddress() == null || req.getAddress().isBlank()) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Each stop must have latitude, longitude, and address");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Each stop must have latitude, longitude, and address");
             }
         }
 
@@ -216,6 +208,7 @@ public class RideService extends AbstractObservableService {
         return new RideWithStopsDTO(ride, allStops);
     }
 
+    @Cacheable(value = "ride-service::S3-F5", key = "#key + '_' + #value")
     public List<Ride> filterByMetadata(String key, String value) {
         if (key == null || key.isBlank() || value == null || value.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "key and value must not be blank");
@@ -223,6 +216,7 @@ public class RideService extends AbstractObservableService {
         return rideRepository.findByMetadataField(key, value);
     }
 
+    @Cacheable(value = "ride-service::S3-F3", key = "#request.pickupLatitude + '_' + #request.pickupLongitude + '_' + #request.dropoffLatitude + '_' + #request.dropoffLongitude")
     public FareEstimateDTO getFareEstimate(FareEstimateRequestDTO request) {
         double distance = Math.sqrt(
                 Math.pow(request.getDropoffLatitude() - request.getPickupLatitude(), 2) +
@@ -237,14 +231,19 @@ public class RideService extends AbstractObservableService {
         );
 
         double surgeMultiplier;
-        if (nearbyCount <= 10) surgeMultiplier = 1.0;
-        else if (nearbyCount <= 20) surgeMultiplier = 1.5;
-        else surgeMultiplier = 2.0;
+        if (nearbyCount <= 10) {
+            surgeMultiplier = 1.0;
+        } else if (nearbyCount <= 20) {
+            surgeMultiplier = 1.5;
+        } else {
+            surgeMultiplier = 2.0;
+        }
 
         double fare = 15.0 * distance * surgeMultiplier;
-
         return new FareEstimateDTO(distance, duration, fare, surgeMultiplier);
     }
+
+    @Cacheable(value = "ride-service::S3-F6", key = "#startDate + '_' + #endDate")
     public RideAnalyticsDTO getRideAnalytics(LocalDate startDate, LocalDate endDate) {
         if (startDate == null || endDate == null) {
             throw new IllegalArgumentException("startDate and endDate are required");
@@ -286,6 +285,7 @@ public class RideService extends AbstractObservableService {
         );
     }
 
+    @Cacheable(value = "ride-service::S3-F1", key = "(#status != null ? #status.name() : 'ALL') + '_' + #startDate + '_' + #endDate")
     public List<Ride> getRidesByStatusAndDateRange(RideStatus status, LocalDateTime startDate, LocalDateTime endDate) {
         String statusName = status != null ? status.name() : null;
         return rideRepository.getRidesByStatusAndDateRange(startDate, endDate, statusName);
@@ -293,34 +293,30 @@ public class RideService extends AbstractObservableService {
 
     @Transactional
     public Ride assignDriver(Long rideId, Long driverId) {
-
-
         Ride ride = rideRepository.findById(rideId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Ride not found with id: " + rideId));
 
-
         if (ride.getStatus() != RideStatus.REQUESTED) {
             throw new InvalidRideStatusException(
-                    "Ride " + rideId + " cannot be assigned. " +
-                            "Expected REQUESTED but was: " + ride.getStatus()
+                    "Ride " + rideId + " cannot be assigned. Expected REQUESTED but was: " + ride.getStatus()
             );
         }
 
-        String staus = rideRepository.findStatusByDriverId(driverId);
+        String status = rideRepository.findStatusByDriverId(driverId);
         boolean driverExists = rideRepository.driverexists(driverId);
         if (!driverExists) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,
                     "Driver not found with id: " + driverId);
         }
 
-        if (staus.equals("OFFLINE")) {
+        if (status.equals("OFFLINE")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Driver is not available");
         }
-        if (staus.equals("BUSY")) {
+        if (status.equals("BUSY")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Driver with id: " + driverId +" is OFFLINE");
+                    "Driver with id: " + driverId + " is OFFLINE");
         }
 
         ride.setDriverId(driverId);
@@ -330,14 +326,14 @@ public class RideService extends AbstractObservableService {
         notifyObservers("DRIVER_ASSIGNED", saved);
         return saved;
     }
+
+    @Cacheable(value = "ride-service::S3-F9", key = "#rideId")
     public RideDetailsDTO GetRideDetailsWithStops(Long rideId) {
         Ride ride = rideRepository.findById(rideId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Ride not found with id: " + rideId));
 
-
         List<RideStop> stops = rideStopRepository.findByRideIdOrderByStopOrderAsc(rideId);
-
-        return new RideDetailsDTO(ride,stops);}
-
+        return new RideDetailsDTO(ride, stops);
+    }
 }
