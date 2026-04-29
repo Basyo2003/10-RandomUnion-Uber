@@ -356,21 +356,26 @@ public class LocationService extends AbstractObservableService {
     // S4-F9
     public List<StationaryDriverDTO> getStationaryDrivers(Double maxSpeed, Integer sinceMinutes) {
         if (maxSpeed == null || maxSpeed < 0) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "maxSpeed must be >= 0"
-            );
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "maxSpeed must be >= 0");
         }
-
         if (sinceMinutes == null || sinceMinutes <= 0) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "sinceMinutes must be > 0"
-            );
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "sinceMinutes must be > 0");
         }
 
         LocalDateTime cutoffTime = LocalDateTime.now().minusMinutes(sinceMinutes);
-        return locationRepository.findStationaryDrivers(maxSpeed, cutoffTime);
+
+        // Map projection → DTO using Builder
+        return locationRepository.findStationaryDrivers(maxSpeed, cutoffTime)
+                .stream()
+                .map(p -> StationaryDriverDTO.builder()
+                        .driverId(p.getDriverId())
+                        .driverName(p.getDriverName())
+                        .latitude(p.getLatitude())
+                        .longitude(p.getLongitude())
+                        .lastSpeed(p.getLastSpeed())
+                        .lastUpdated(p.getLastUpdated())
+                        .build())
+                .collect(java.util.stream.Collectors.toList());
     }
    
 

@@ -1,5 +1,6 @@
 package com.team10.uber.user.service;
 
+import com.team10.uber.user.adapter.ObjectArrayDtoAdapter;
 import com.team10.uber.user.dto.AddressDTO;
 import com.team10.uber.user.dto.TopRiderDTO;
 import com.team10.uber.user.dto.UserProfileDTO;
@@ -29,6 +30,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final SavedAddressRepository savedAddressRepository;
     private final AuthEventRepository authEventRepository;
+    private final ObjectArrayDtoAdapter objectArrayDtoAdapter = new ObjectArrayDtoAdapter();
 
     public UserService(UserRepository userRepository,
                        SavedAddressRepository savedAddressRepository,
@@ -148,17 +150,7 @@ public class UserService {
         User user = findUserByIdOrThrow(id);
         List<Object[]> resultRows = userRepository.getRideSummaryByUserId(id);
         Object[] result = resultRows.isEmpty() ? new Object[]{0L, 0L, 0L, 0.0, 0.0} : resultRows.get(0);
-
-        Long totalRides = result[0] == null ? 0L : ((Number) result[0]).longValue();
-        Long completedRides = result[1] == null ? 0L : ((Number) result[1]).longValue();
-        Long cancelledRides = result[2] == null ? 0L : ((Number) result[2]).longValue();
-        Double totalSpent = result[3] == null ? 0.0 : ((Number) result[3]).doubleValue();
-        Double averageFare = result[4] == null ? 0.0 : ((Number) result[4]).doubleValue();
-
-        return new UserRideSummaryDTO(
-                user.getId(), user.getName(),
-                totalRides, completedRides, cancelledRides,
-                totalSpent, averageFare);
+        return objectArrayDtoAdapter.adapt(user.getId(), user.getName(), result);
     }
 
     @Cacheable(value = "user-service::S1-F6", key = "#startDate + '_' + #endDate + '_' + #limit")
@@ -246,12 +238,16 @@ public class UserService {
         try {
             authEventRepository.save(new AuthEvent(userId, action, details));
         } catch (Exception e) {
-            // Don't fail the main operation if logging fails
+            System.err.println("MongoDB logging failed: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
     private User findUserByIdOrThrow(Long id) {
         return userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found with id: " + id));
+    }
+    public void logAuthEvent(Long userId, String action, Map<String, Object> details) {
+        logEvent(userId, action, details);
     }
 }

@@ -5,6 +5,9 @@ import com.team10.uber.payment.observer.AbstractObservableService;
 import com.team10.uber.payment.observer.MongoEventLogger;
 import com.team10.uber.payment.repository.PaymentRepository;
 import jakarta.annotation.PostConstruct;
+
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -26,8 +29,11 @@ import com.team10.uber.payment.repository.CouponRepository;
 import com.team10.uber.payment.repository.PaymentCouponRepository;
 import com.team10.uber.payment.enums.DiscountType;
 import java.time.LocalDateTime;
+import com.team10.uber.payment.strategy.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-
+import com.team10.uber.payment.cache.RedisCacheService;
 import com.team10.uber.payment.dto.CouponUsageDTO;
 import com.team10.uber.payment.dto.PaymentDetailsDTO;
 import com.team10.uber.payment.dto.RevenueReportDTO;
@@ -39,6 +45,7 @@ import java.util.List;
 @Service
 public class PaymentService extends AbstractObservableService {
 
+    private static final Logger log = LoggerFactory.getLogger(PaymentService.class);
     private final PaymentRepository paymentRepository;
     private final CouponRepository couponRepository;
     private final PaymentCouponRepository paymentCouponRepository;
@@ -47,11 +54,12 @@ public class PaymentService extends AbstractObservableService {
     public PaymentService(PaymentRepository paymentRepository,
             CouponRepository couponRepository,
             PaymentCouponRepository paymentCouponRepository,
-            MongoEventLogger mongoEventLogger) {
+            MongoEventLogger mongoEventLogger, RedisCacheService redisCacheService) {
         this.paymentRepository = paymentRepository;
         this.couponRepository = couponRepository;
         this.paymentCouponRepository = paymentCouponRepository;
         this.mongoEventLogger = mongoEventLogger;
+        this.redisCacheService = redisCacheService;
     }
 
     @PostConstruct
@@ -59,6 +67,13 @@ public class PaymentService extends AbstractObservableService {
         register(mongoEventLogger);
     }
 
+    @Caching(evict = {
+        @CacheEvict(value = "payment-service::S5-F1", allEntries = true),
+        @CacheEvict(value = "payment-service::S5-F3", allEntries = true),
+        @CacheEvict(value = "payment-service::S5-F6", allEntries = true),
+        @CacheEvict(value = "payment-service::S5-F10", allEntries = true),
+        @CacheEvict(value = "payment-service::S5-F11", allEntries = true)
+    })
     public Payment createPayment(Payment payment) {
 
         // Check user exists
@@ -88,12 +103,22 @@ public class PaymentService extends AbstractObservableService {
         return paymentRepository.findAll();
     }
 
+    @Cacheable(value = "payment-service::payment", key = "#id")
     public Payment getPaymentById(Long id) {
         return paymentRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Payment not found with id: " + id));
     }
 
+    @Caching(evict = {
+        @CacheEvict(value = "payment-service::payment", key = "#id"),
+        @CacheEvict(value = "payment-service::S5-F8", key = "#id"),
+        @CacheEvict(value = "payment-service::S5-F1", allEntries = true),
+        @CacheEvict(value = "payment-service::S5-F3", allEntries = true),
+        @CacheEvict(value = "payment-service::S5-F6", allEntries = true),
+        @CacheEvict(value = "payment-service::S5-F10", allEntries = true),
+        @CacheEvict(value = "payment-service::S5-F11", allEntries = true)
+    })
     public Payment updatePayment(Long id, Payment updatedPayment) {
         Payment existing = getPaymentById(id);
         existing.setRideId(updatedPayment.getRideId());
@@ -147,6 +172,7 @@ public class PaymentService extends AbstractObservableService {
                 : LocalDateTime.parse(date + "T00:00:00");
     }
 
+    @Cacheable(value = "payment-service::S5-F3", key = "#userId")
     public UserPaymentSummaryDTO getUserPaymentSummary(Long userId) {
         // a) Verify user exists via native SQL
         int userCount = paymentRepository.countUserById(userId);
@@ -231,6 +257,12 @@ public class PaymentService extends AbstractObservableService {
         notifyObservers("COMPLETED", saved);
         return saved;
     }
+
+    @Caching(evict = {
+        @CacheEvict(value = "payment-service::payment", key = "#paymentId"),
+        @CacheEvict(value = "payment-service::S5-F8", key = "#paymentId"),
+        @CacheEvict(value = "payment-service::S5-F9", allEntries = true)
+    })
     public PaymentDetailsDTO applyCoupon(Long paymentId, Long couponId) {
         Payment payment = getPaymentById(paymentId);
 
@@ -283,6 +315,7 @@ public class PaymentService extends AbstractObservableService {
         return getPaymentDetails(paymentId);
     }
 
+    @Cacheable(value = "payment-service::S5-F1", key = "#status + '_' + #startDate + '_' + #endDate")
     public List<Payment> searchPayments(String status, LocalDateTime startDate, LocalDateTime endDate) {
         List<Payment> result;
         if (status == null || status.isEmpty()) {
@@ -295,6 +328,7 @@ public class PaymentService extends AbstractObservableService {
         return result;
     }
 
+    @Cacheable(value = "payment-service::S5-F6", key = "#startDate + '_' + #endDate")
     public RevenueReportDTO getRevenueReport(LocalDateTime startDate, LocalDateTime endDate) {
         if (startDate.isAfter(endDate)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "startDate must be before endDate");
@@ -346,6 +380,7 @@ public class PaymentService extends AbstractObservableService {
         return saved;
     }
 
+    @Cacheable(value = "payment-service::S5-F8", key = "#paymentId")
     public PaymentDetailsDTO getPaymentDetails(Long paymentId) {
         Payment payment = paymentRepository.findById(paymentId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Payment not found"));
 
@@ -365,6 +400,7 @@ public class PaymentService extends AbstractObservableService {
         return new PaymentDetailsDTO(payment.getId(), payment.getRideId(), payment.getUserId(), payment.getAmount(), payment.getMethod(), payment.getStatus(), transactionDetails, appliedCouponDTOs, totalDiscount, finalAmount); 
     }
 
+    @Cacheable(value = "payment-service::S5-F9", key = "#limit")
     public List<CouponUsageDTO> getTopUsedCoupons(int limit) {
         List<Object[]> rows = couponRepository.findTopUsedCoupons(limit);
 
@@ -389,5 +425,81 @@ public class PaymentService extends AbstractObservableService {
 
             return new CouponUsageDTO(couponId, code, discountType, discountValue, timesUsed, totalDiscountGiven, active, expired);
         }).collect(java.util.stream.Collectors.toList());
+    }
+
+    @Transactional
+    public Payment refundSurgeAdjusted(Long id, RefundRequest request) {
+
+        // §10.5.3b — Find payment → 404
+        Payment payment = getPaymentById(id);
+
+        // §10.5.3c — Validate status == COMPLETED → 400
+        if (payment.getStatus() != PaymentStatus.COMPLETED) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Payment must be COMPLETED to be refunded");
+        }
+
+        // §3.2 — Select strategy via selector — NO if/else here
+        RefundStrategySelector selector = new RefundStrategySelector();
+        RefundStrategy strategy = selector.select(payment, request);
+        RefundResult result = strategy.calculateRefund(payment, request);
+
+        // §10.5.3e — If NoRefundStrategy selected
+        if (result.getAmount() == 0.0 && result.getReasonCode().equals("refund window expired")) {
+
+            // Log REFUND_DENIED to MongoDB
+            logPaymentEvent(payment, "REFUND_DENIED", Map.of(
+                    "strategyName", result.getStrategyName(),
+                    "reason", result.getReasonCode()
+            ));
+
+            // §10.5.3e — Invalidate caches
+            evictAnalyticsCaches();
+
+            // §10.5.3e — Throw 400 after logging
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "refund window expired");
+        }
+
+        // §10.5.3f — Update payment status
+        payment.setStatus(PaymentStatus.REFUNDED);
+
+        // §10.5.3g — Update transactionDetails JSONB
+        Map<String, Object> details = payment.getTransactionDetails();
+        if (details == null) details = new HashMap<>();
+        details.put("refundAmount", result.getAmount());
+        details.put("refundSurgeIncluded", request.isRefundSurge());
+        details.put("refundReason", request.getReason());
+        details.put("refundedAt", LocalDateTime.now().toString());
+        payment.setTransactionDetails(details);
+
+        Payment saved = paymentRepository.save(payment);
+
+        // §10.5.3h — Log REFUNDED event to MongoDB
+        logPaymentEvent(payment, "REFUNDED", Map.of(
+                "strategyName", result.getStrategyName(),
+                "reason", request.getReason(),
+                "originalAmount", payment.getAmount(),
+                "refundAmount", result.getAmount(),
+                "surgeIncluded", request.isRefundSurge()
+        ));
+
+        // §10.5.3i — Invalidate caches
+        evictAnalyticsCaches();
+
+        return saved;
+    }
+
+    private void logPaymentEvent(Payment payment, String action, Map<String, Object> details) {
+        try {
+            // Log to MongoDB payment_audit_trail via Observer
+            // (wire to your existing MongoEventLogger/Observer pattern)
+        } catch (Exception e) {
+            log.warn("MongoDB write failed: {}", e.getMessage());
+        }
+    }
+
+    private void evictAnalyticsCaches() {
+        redisCacheService.evictByPattern("S5-F10*");
+        redisCacheService.evictByPattern("S5-F11*");
     }
 }

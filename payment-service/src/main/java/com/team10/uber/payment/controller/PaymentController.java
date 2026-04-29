@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.util.Map;
+import com.team10.uber.payment.strategy.RefundRequest;
 
 import com.team10.uber.payment.dto.UserPaymentSummaryDTO;
 import com.team10.uber.payment.dto.ProcessPaymentDTO;
@@ -127,5 +128,12 @@ public class PaymentController {
             @PathVariable Long couponId) {
         PaymentDetailsDTO result = paymentService.applyCoupon(paymentId, couponId);
         return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/{id}/refund-surge-adjusted")
+    public ResponseEntity<Payment> refundSurgeAdjusted(
+            @PathVariable Long id,
+            @RequestBody RefundRequest request) {
+        return ResponseEntity.ok(paymentService.refundSurgeAdjusted(id, request));
     }
 }
