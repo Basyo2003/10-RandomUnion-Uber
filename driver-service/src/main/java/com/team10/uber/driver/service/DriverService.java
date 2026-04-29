@@ -2,6 +2,7 @@ package com.team10.uber.driver.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.team10.uber.driver.cache.RedisCacheService;
+import com.team10.uber.driver.dto.DriverDashboardDTO;
 import com.team10.uber.driver.dto.DriverDocumentAlertDTO;
 import com.team10.uber.driver.dto.DriverEarningsDTO;
 import com.team10.uber.driver.dto.TopRatedDriverDTO;
@@ -311,6 +312,40 @@ public class DriverService extends AbstractObservableService {
             Driver driver = getDriverById(dId);
             result.add(new DriverDocumentAlertDTO(driver, groupedByDriver.get(dId)));
         }
+
+        cache.put(key, result, TTL_DTO);
+        return result;
+    }
+
+    /** S2-F12 — Driver Performance Dashboard, cached 10 min.
+     *  MongoDB DASHBOARD_VIEWED fires on every invocation (cache hit or miss). */
+    public DriverDashboardDTO getDriverDashboard(Long driverId) {
+        Driver driver = driverRepository.findById(driverId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Driver not found with id: " + driverId));
+
+        // Log every invocation — outside cache
+        notifyObservers("DASHBOARD_VIEWED", driver);
+
+        String key = "S2-F12::" + driverId;
+        DriverDashboardDTO cached = cache.get(key, DriverDashboardDTO.class);
+        if (cached != null) return cached;
+
+        DriverRepository.DashboardAggregate agg = driverRepository.getDashboardAggregate(driverId);
+
+        long totalRides      = (agg == null || agg.getTotalRides() == null)      ? 0L  : agg.getTotalRides();
+        double totalEarnings = (agg == null || agg.getTotalEarnings() == null)   ? 0.0 : agg.getTotalEarnings();
+        double avgRideFare   = (agg == null || agg.getAverageRideFare() == null) ? 0.0 : agg.getAverageRideFare();
+
+        DriverDashboardDTO result = DriverDashboardDTO.builder()
+                .driverId(driver.getId())
+                .name(driver.getName())
+                .totalRides(totalRides)
+                .totalEarnings(totalEarnings)
+                .averageRideFare(avgRideFare)
+                .averageRating(driver.getRating())
+                .totalRatings(driver.getTotalRatings())
+                .build();
 
         cache.put(key, result, TTL_DTO);
         return result;
