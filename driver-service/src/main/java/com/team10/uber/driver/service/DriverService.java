@@ -1,5 +1,6 @@
 package com.team10.uber.driver.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.team10.uber.driver.cache.RedisCacheService;
 import com.team10.uber.driver.dto.DriverDocumentAlertDTO;
 import com.team10.uber.driver.dto.DriverEarningsDTO;
@@ -84,19 +85,6 @@ public class DriverService extends AbstractObservableService {
         return driverRepository.findAll();
     }
 
-    public List<Driver> searchDrivers(DriverStatus status, Double minRating, Double maxRating) {
-        if (minRating != null && minRating < 0.0) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "minRating must be >= 0.0");
-        }
-        if (maxRating != null && maxRating > 5.0) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "maxRating must be <= 5.0");
-        }
-        if (minRating != null && maxRating != null && minRating > maxRating) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid rating range: minRating > maxRating");
-        }
-        return driverRepository.searchDrivers(status, minRating, maxRating);
-    }
-
     /** §4.4.2 — GET /api/drivers/{id}, cached 15 min. */
     public Driver getDriverById(Long id) {
         String key = "driver::" + id;
@@ -108,10 +96,6 @@ public class DriverService extends AbstractObservableService {
                         "Driver not found with id: " + id));
         cache.put(key, driver, TTL_DETAIL);
         return driver;
-    public Driver getDriverById(Long id) {
-        return driverRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "Driver not found with id: " + id));
     }
 
     public Driver updateDriver(Long id, Driver updatedDriver) {
