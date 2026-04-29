@@ -5,8 +5,17 @@ services:
       - "8081:8080"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/uberdb
+      SPRING_DATA_MONGODB_URI: mongodb://root:rootpass@mongo:27017/ubermongo?authSource=admin&authMechanism=SCRAM-SHA-256
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_DATA_REDIS_PASSWORD: redispass
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
   driver-service:
     build: ./driver-service
     ports:
@@ -30,6 +39,21 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/uberdb
     depends_on:
       - postgres
+  cassandra-init:
+    image: cassandra:latest
+    depends_on:
+      cassandra:
+        condition: service_healthy
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        until cqlsh cassandra 9042 -e 'DESCRIBE KEYSPACES'; do
+          echo 'Cassandra not ready yet, retrying in 5s...';
+          sleep 5;
+        done
+        cqlsh cassandra 9042 -e "CREATE KEYSPACE IF NOT EXISTS uberks WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};"
+
   location-service:
     build: ./location-service
     ports:
@@ -37,7 +61,10 @@ services:
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/uberdb
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+      cassandra-init:
+        condition: service_completed_successfully
   payment-service:
     build: ./payment-service
     ports:

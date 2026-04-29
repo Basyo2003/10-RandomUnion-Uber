@@ -1,5 +1,6 @@
 package com.team10.uber.driver.service;
 
+import com.team10.uber.driver.cache.RedisCacheService;
 import com.team10.uber.driver.model.Driver;
 import com.team10.uber.driver.model.DriverDocument;
 import com.team10.uber.driver.dto.DriverWithDocumentsDTO;
@@ -22,22 +23,34 @@ import java.util.Map;
 @Service
 public class DriverDocumentService extends AbstractObservableService {
 
+    private static final long TTL_DETAIL = 15 * 60; // §4.4.2 — 15 min
+
     private final DriverDocumentRepository driverDocumentRepository;
     private final DriverRepository driverRepository;
     private final MongoEventLogger mongoEventLogger;
+    private final RedisCacheService cache;
 
-    public DriverDocumentService(DriverDocumentRepository driverDocumentRepository,
-            DriverRepository driverRepository,
-            MongoEventLogger mongoEventLogger) {
+    public DriverDocumentService(DriverDocumentRepository driverDocumentRepository, DriverRepository driverRepository,
+                                 MongoEventLogger mongoEventLogger, RedisCacheService cache) {
         this.driverDocumentRepository = driverDocumentRepository;
         this.driverRepository = driverRepository;
         this.mongoEventLogger = mongoEventLogger;
+        this.cache = cache;
     }
 
     @PostConstruct
     public void initObservers() {
         register(mongoEventLogger);
     }
+
+    // ── §4.4.4 — Cache invalidation helpers ─────────────────────────────────
+
+    private void evictDocumentCaches(Long documentId) {
+        cache.evict("driver-document::" + documentId);
+        cache.evictByPattern("S2-F9::*");
+    }
+
+    // ── CRUD ─────────────────────────────────────────────────────────────────
 
     public DriverDocument createDriverDocument(Long driverId, DriverDocument driverDocument) {
         Driver driver = driverRepository.findById(driverId)
@@ -46,6 +59,7 @@ public class DriverDocumentService extends AbstractObservableService {
         driverDocument.setDriver(driver);
         DriverDocument saved = driverDocumentRepository.save(driverDocument);
         notifyObservers("DRIVER_CREATED", driver);
+        cache.evictByPattern("S2-F9::*");
         return saved;
     }
 
@@ -60,10 +74,17 @@ public class DriverDocumentService extends AbstractObservableService {
         return driverDocumentRepository.findByDriverId(driverId);
     }
 
+    /** §4.4.2 — GET /api/driver-documents/{id}, cached 15 min. */
     public DriverDocument getDriverDocumentById(Long id) {
-        return driverDocumentRepository.findById(id)
+        String key = "driver-document::" + id;
+        DriverDocument cached = cache.get(key, DriverDocument.class);
+        if (cached != null) return cached;
+
+        DriverDocument doc = driverDocumentRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Driver document not found with id: " + id));
+        cache.put(key, doc, TTL_DETAIL);
+        return doc;
     }
 
     public DriverDocument updateDriverDocument(Long id, DriverDocument updatedDriverDocument) {
@@ -83,6 +104,7 @@ public class DriverDocumentService extends AbstractObservableService {
 
         DriverDocument saved = driverDocumentRepository.save(existingDriverDocument);
         notifyObservers("UPDATED", saved.getDriver());
+        evictDocumentCaches(id);
         return saved;
     }
 
@@ -93,6 +115,7 @@ public class DriverDocumentService extends AbstractObservableService {
                 : null;
         driverDocumentRepository.delete(driverDocument);
         notifyObservers("DRIVER_DELETED", driverId);
+        evictDocumentCaches(driverDocument.getId());
     }
 
     @Transactional
@@ -137,6 +160,8 @@ public class DriverDocumentService extends AbstractObservableService {
 
         driverDocumentRepository.save(document);
         notifyObservers("DOCUMENT_VERIFIED", driver);
+        evictDocumentCaches(documentId);
+        cache.evict("driver::" + driverId);
 
         return new DriverWithDocumentsDTO(driver, driver.getDriverDocuments());
     }

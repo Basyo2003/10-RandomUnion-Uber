@@ -29,6 +29,11 @@ import com.team10.uber.ride.observer.AbstractObservableService;
 import com.team10.uber.ride.observer.MongoEventLogger;
 import com.team10.uber.ride.repository.RideRepository;
 import com.team10.uber.ride.repository.RideStopRepository;
+import jakarta.annotation.PostConstruct;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import jakarta.annotation.PostConstruct;
 
@@ -66,6 +71,7 @@ public class RideService extends AbstractObservableService {
         return rideRepository.findAll();
     }
 
+    @Cacheable(value = "ride-service::ride", key = "#id")
     public Ride getRideById(Long id) {
         return rideRepository.findById(id)
                 .orElseThrow(() -> new RideNotFoundException("Ride not found with id: " + id));

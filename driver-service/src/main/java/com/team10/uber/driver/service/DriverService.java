@@ -30,6 +30,7 @@ import java.util.Map;
 @Service
 public class DriverService extends AbstractObservableService {
 
+    private static final long TTL_DETAIL = 15 * 60; // §4.4.2 — 15 min
     // TTLs in seconds — §4.4.1 only
     private static final long TTL_SEARCH = 5  * 60; // F1, F5 — 5 min
     private static final long TTL_DTO    = 10 * 60; // F3, F6, F9 — 10 min
@@ -54,12 +55,32 @@ public class DriverService extends AbstractObservableService {
         register(mongoEventLogger);
     }
 
-    // ── CRUD (no caching — §4.4.2 and §4.4.4 are separate tasks) ────────────
+    // ── §4.4.4 — Cache invalidation helpers ─────────────────────────────────
+
+    /** Evicts all caches tied to a specific driver. */
+    private void evictDriverCaches(Long driverId) {
+        cache.evict("driver::" + driverId);
+        cache.evictByPattern("S2-F1::*");
+        cache.evictByPattern("S2-F3::" + driverId + "::*");
+        cache.evictByPattern("S2-F5::*");
+        cache.evictByPattern("S2-F6::*");
+        cache.evictByPattern("S2-F9::*");
+    }
+
+    /** Evicts list caches affected when a new driver is created. */
+    private void evictDriverListCaches() {
+        cache.evictByPattern("S2-F1::*");
+        cache.evictByPattern("S2-F5::*");
+        cache.evictByPattern("S2-F6::*");
+    }
+
+    // ── CRUD ─────────────────────────────────────────────────────────────────
 
     public Driver createDriver(Driver driver) {
         try {
             Driver saved = driverRepository.save(driver);
             notifyObservers("DRIVER_CREATED", saved);
+            evictDriverListCaches();
             return saved;
         } catch (DataIntegrityViolationException ex) {
             String message = ex.getMessage();
@@ -84,10 +105,17 @@ public class DriverService extends AbstractObservableService {
         return driverRepository.findAll();
     }
 
+    /** §4.4.2 — GET /api/drivers/{id}, cached 15 min. */
     public Driver getDriverById(Long id) {
-        return driverRepository.findById(id)
+        String key = "driver::" + id;
+        Driver cached = cache.get(key, Driver.class);
+        if (cached != null) return cached;
+
+        Driver driver = driverRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Driver not found with id: " + id));
+        cache.put(key, driver, TTL_DETAIL);
+        return driver;
     }
 
     public Driver updateDriver(Long id, Driver updatedDriver) {
@@ -103,6 +131,7 @@ public class DriverService extends AbstractObservableService {
         existingDriver.setDriverDocuments(updatedDriver.getDriverDocuments());
         Driver saved = driverRepository.save(existingDriver);
         notifyObservers("UPDATED", saved);
+        evictDriverCaches(id);
         return saved;
     }
 
@@ -110,6 +139,7 @@ public class DriverService extends AbstractObservableService {
         Driver driver = getDriverById(id);
         driverRepository.delete(driver);
         notifyObservers("DRIVER_DELETED", id);
+        evictDriverCaches(id);
     }
 
     // ── §4.4.1 — Feature GET endpoints with Redis caching ───────────────────
@@ -141,6 +171,7 @@ public class DriverService extends AbstractObservableService {
         existingDriver.setVehicleDetails(merged);
         Driver saved = driverRepository.save(existingDriver);
         notifyObservers("VEHICLE_DETAILS_UPDATED", saved);
+        evictDriverCaches(id);
         return saved;
     }
 
@@ -180,6 +211,7 @@ public class DriverService extends AbstractObservableService {
         driver.setStatus(newStatus);
         Driver saved = driverRepository.save(driver);
         notifyObservers("AVAILABILITY_UPDATED", saved);
+        evictDriverCaches(driverId);
     }
 
     /** S2-F5 — filter by vehicle type, cached 5 min. */
@@ -257,6 +289,7 @@ public class DriverService extends AbstractObservableService {
 
         Driver saved = driverRepository.save(driver);
         notifyObservers("RATING_RECORDED", saved);
+        evictDriverCaches(id);
         return saved;
     }
 

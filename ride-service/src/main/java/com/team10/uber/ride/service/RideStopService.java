@@ -3,6 +3,7 @@ package com.team10.uber.ride.service;
 import com.team10.uber.ride.model.RideStop;
 import com.team10.uber.ride.repository.RideRepository;
 import com.team10.uber.ride.repository.RideStopRepository;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -38,6 +39,7 @@ public class RideStopService {
         return rideStopRepository.findAll();
     }
 
+    @Cacheable(value = "ride-service::rideStop", key = "#id")
     public RideStop getRideStopById(Long id) {
         return rideStopRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("RideStop not found with id: " + id));
