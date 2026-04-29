@@ -55,12 +55,32 @@ public class DriverService extends AbstractObservableService {
         register(mongoEventLogger);
     }
 
-    // ── CRUD (no caching — §4.4.2 and §4.4.4 are separate tasks) ────────────
+    // ── §4.4.4 — Cache invalidation helpers ─────────────────────────────────
+
+    /** Evicts all caches tied to a specific driver. */
+    private void evictDriverCaches(Long driverId) {
+        cache.evict("driver::" + driverId);
+        cache.evictByPattern("S2-F1::*");
+        cache.evictByPattern("S2-F3::" + driverId + "::*");
+        cache.evictByPattern("S2-F5::*");
+        cache.evictByPattern("S2-F6::*");
+        cache.evictByPattern("S2-F9::*");
+    }
+
+    /** Evicts list caches affected when a new driver is created. */
+    private void evictDriverListCaches() {
+        cache.evictByPattern("S2-F1::*");
+        cache.evictByPattern("S2-F5::*");
+        cache.evictByPattern("S2-F6::*");
+    }
+
+    // ── CRUD ─────────────────────────────────────────────────────────────────
 
     public Driver createDriver(Driver driver) {
         try {
             Driver saved = driverRepository.save(driver);
             notifyObservers("DRIVER_CREATED", saved);
+            evictDriverListCaches();
             return saved;
         } catch (DataIntegrityViolationException ex) {
             String message = ex.getMessage();
@@ -111,6 +131,7 @@ public class DriverService extends AbstractObservableService {
         existingDriver.setDriverDocuments(updatedDriver.getDriverDocuments());
         Driver saved = driverRepository.save(existingDriver);
         notifyObservers("UPDATED", saved);
+        evictDriverCaches(id);
         return saved;
     }
 
@@ -118,6 +139,7 @@ public class DriverService extends AbstractObservableService {
         Driver driver = getDriverById(id);
         driverRepository.delete(driver);
         notifyObservers("DRIVER_DELETED", id);
+        evictDriverCaches(id);
     }
 
     // ── §4.4.1 — Feature GET endpoints with Redis caching ───────────────────
@@ -149,6 +171,7 @@ public class DriverService extends AbstractObservableService {
         existingDriver.setVehicleDetails(merged);
         Driver saved = driverRepository.save(existingDriver);
         notifyObservers("VEHICLE_DETAILS_UPDATED", saved);
+        evictDriverCaches(id);
         return saved;
     }
 
@@ -188,6 +211,7 @@ public class DriverService extends AbstractObservableService {
         driver.setStatus(newStatus);
         Driver saved = driverRepository.save(driver);
         notifyObservers("AVAILABILITY_UPDATED", saved);
+        evictDriverCaches(driverId);
     }
 
     /** S2-F5 — filter by vehicle type, cached 5 min. */
@@ -265,6 +289,7 @@ public class DriverService extends AbstractObservableService {
 
         Driver saved = driverRepository.save(driver);
         notifyObservers("RATING_RECORDED", saved);
+        evictDriverCaches(id);
         return saved;
     }
 
