@@ -1,55 +1,46 @@
 package com.team10.uber.payment.service;
 
-import com.team10.uber.payment.model.Payment;
-import com.team10.uber.payment.observer.AbstractObservableService;
-import com.team10.uber.payment.observer.MongoEventLogger;
-import com.team10.uber.payment.repository.PaymentRepository;
-import jakarta.annotation.PostConstruct;
-
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Caching;
-import org.springframework.http.HttpStatus;
-import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
-import com.team10.uber.payment.enums.PaymentStatus;
-import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.Map;
-import com.team10.uber.payment.dto.UserPaymentSummaryDTO;
-import com.team10.uber.payment.dto.ProcessPaymentDTO;
-import com.team10.uber.payment.enums.PaymentMethod;
-import java.util.Optional;
-import org.springframework.transaction.annotation.Transactional;
-import com.team10.uber.payment.enums.PaymentStatus;
-import java.util.Map;
-import java.util.HashMap;
-import com.team10.uber.payment.model.Coupon;
-import com.team10.uber.payment.model.PaymentCoupon;
-import com.team10.uber.payment.repository.CouponRepository;
-import com.team10.uber.payment.repository.PaymentCouponRepository;
-import com.team10.uber.payment.enums.DiscountType;
-import java.time.LocalDateTime;
-import com.team10.uber.payment.strategy.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import com.team10.uber.payment.cache.RedisCacheService;
 import com.team10.uber.payment.dto.CouponUsageDTO;
 import com.team10.uber.payment.dto.PaymentDetailsDTO;
+import com.team10.uber.payment.dto.ProcessPaymentDTO;
 import com.team10.uber.payment.dto.RevenueReportDTO;
+import com.team10.uber.payment.dto.UserPaymentSummaryDTO;
+import com.team10.uber.payment.enums.DiscountType;
+import com.team10.uber.payment.enums.PaymentMethod;
+import com.team10.uber.payment.enums.PaymentStatus;
+import com.team10.uber.payment.model.Coupon;
+import com.team10.uber.payment.model.Payment;
+import com.team10.uber.payment.model.PaymentCoupon;
+import com.team10.uber.payment.observer.AbstractObservableService;
+import com.team10.uber.payment.observer.MongoEventLogger;
+import com.team10.uber.payment.repository.CouponRepository;
+import com.team10.uber.payment.repository.PaymentCouponRepository;
+import com.team10.uber.payment.repository.PaymentRepository;
+import com.team10.uber.payment.strategy.*;
+import jakarta.annotation.PostConstruct;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
-
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 @Service
 public class PaymentService extends AbstractObservableService {
 
-    private static final Logger log = LoggerFactory.getLogger(PaymentService.class);
     private final PaymentRepository paymentRepository;
     private final CouponRepository couponRepository;
     private final PaymentCouponRepository paymentCouponRepository;
     private final MongoEventLogger mongoEventLogger;
+    private final RedisCacheService redisCacheService;
 
     public PaymentService(PaymentRepository paymentRepository,
             CouponRepository couponRepository,
@@ -204,7 +195,7 @@ public class PaymentService extends AbstractObservableService {
     }
 
     @Transactional
-    public Payment processPaymentForRide(Long rideId, ProcessPaymentDTO dto) {
+    public Payment processPaymentForRide(Long rideId, ProcessPaymentDTO dto, boolean simulateFailure) {
 
         // a) Verify ride exists
         String rideStatus = paymentRepository.findRideStatusById(rideId);
@@ -236,24 +227,53 @@ public class PaymentService extends AbstractObservableService {
         // e) Get ride details
         Double fare = paymentRepository.findRideFareById(rideId);
         Long userId = paymentRepository.findRideUserIdById(rideId);
+        double amount = fare != null ? fare : 0.0;
 
-        // f) Build JSONB transactionDetails
+        // f) Compute surgeFee from ride metadata.surgeMultiplier (15% fallback)
+        String surgeMultStr = paymentRepository.findSurgeMultiplierByRideId(rideId);
+        double surgeFee;
+        if (surgeMultStr != null) {
+            double multiplier = Double.parseDouble(surgeMultStr);
+            surgeFee = amount * (multiplier - 1.0);
+        } else {
+            surgeFee = amount * 0.15;
+        }
+
+        // g) Build JSONB transactionDetails
         Map<String, Object> transactionDetails = new HashMap<>();
         transactionDetails.put("gatewayResponse", "success");
         transactionDetails.put("cardLastFour", dto.getCardLastFour());
         transactionDetails.put("receiptUrl", "https://receipts.com/" + rideId);
         transactionDetails.put("failureReason", null);
+        transactionDetails.put("surgeFee", surgeFee);
 
-        // g) Create and save payment
+        // h) Save with PENDING, fire CREATED
         Payment payment = new Payment();
         payment.setRideId(rideId);
         payment.setUserId(userId);
-        payment.setAmount(fare != null ? fare : 0.0);
+        payment.setAmount(amount);
         payment.setMethod(PaymentMethod.valueOf(dto.getMethod()));
-        payment.setStatus(PaymentStatus.COMPLETED);
+        payment.setStatus(PaymentStatus.PENDING);
         payment.setTransactionDetails(transactionDetails);
 
         Payment saved = paymentRepository.save(payment);
+        notifyObservers("CREATED", saved);
+
+        // i) simulateFailure path
+        if (simulateFailure) {
+            saved.setStatus(PaymentStatus.FAILED);
+            Map<String, Object> failDetails = new HashMap<>(saved.getTransactionDetails());
+            failDetails.put("gatewayResponse", "declined");
+            failDetails.put("failureReason", "simulated failure");
+            saved.setTransactionDetails(failDetails);
+            paymentRepository.save(saved);
+            notifyObservers("FAILED", saved);
+            return saved;
+        }
+
+        // j) Normal path — transition to COMPLETED
+        saved.setStatus(PaymentStatus.COMPLETED);
+        paymentRepository.save(saved);
         notifyObservers("COMPLETED", saved);
         return saved;
     }
@@ -490,12 +510,9 @@ public class PaymentService extends AbstractObservableService {
     }
 
     private void logPaymentEvent(Payment payment, String action, Map<String, Object> details) {
-        try {
-            // Log to MongoDB payment_audit_trail via Observer
-            // (wire to your existing MongoEventLogger/Observer pattern)
-        } catch (Exception e) {
-            log.warn("MongoDB write failed: {}", e.getMessage());
-        }
+        Map<String, Object> merged = new HashMap<>(details);
+        merged.put("action", action);
+        notifyObservers(action, payment);
     }
 
     private void evictAnalyticsCaches() {

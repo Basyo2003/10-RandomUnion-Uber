@@ -8,10 +8,11 @@ import com.team10.uber.user.dto.UserRideSummaryDTO;
 import com.team10.uber.user.enums.Status;
 import com.team10.uber.user.model.SavedAddress;
 import com.team10.uber.user.model.User;
-import com.team10.uber.user.event.AuthEvent;
-import com.team10.uber.user.repository.mongo.AuthEventRepository;
+import com.team10.uber.user.observer.AbstractObservableService;
+import com.team10.uber.user.observer.MongoEventLogger;
 import com.team10.uber.user.repository.SavedAddressRepository;
 import com.team10.uber.user.repository.UserRepository;
+import jakarta.annotation.PostConstruct;
 import jakarta.transaction.Transactional;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
@@ -25,19 +26,24 @@ import java.time.format.DateTimeParseException;
 import java.util.*;
 
 @Service
-public class UserService {
+public class UserService extends AbstractObservableService {
 
     private final UserRepository userRepository;
     private final SavedAddressRepository savedAddressRepository;
-    private final AuthEventRepository authEventRepository;
+    private final MongoEventLogger mongoEventLogger;
     private final ObjectArrayDtoAdapter objectArrayDtoAdapter = new ObjectArrayDtoAdapter();
 
     public UserService(UserRepository userRepository,
                        SavedAddressRepository savedAddressRepository,
-                       AuthEventRepository authEventRepository) {
+                       MongoEventLogger mongoEventLogger) {
         this.userRepository = userRepository;
         this.savedAddressRepository = savedAddressRepository;
-        this.authEventRepository = authEventRepository;
+        this.mongoEventLogger = mongoEventLogger;
+    }
+
+    @PostConstruct
+    public void initObservers() {
+        register(mongoEventLogger);
     }
 
     public Optional<User> findByEmail(String email) {
@@ -50,8 +56,14 @@ public class UserService {
     })
     public User createUser(User user) {
         User saved = userRepository.save(user);
-        logEvent(saved.getId(), "USER_CREATED", Map.of("email", saved.getEmail()));
+        notifyObservers("USER_CREATED", saved);
         return saved;
+    }
+
+    public void logAuthEvent(Long userId, String action, Map<String, String> details) {
+        Map<String, Object> payload = new java.util.HashMap<>(details);
+        payload.put("userId", userId);
+        notifyObservers(action, payload);
     }
 
     public List<User> getAllUsers() {
@@ -78,7 +90,7 @@ public class UserService {
         existingUser.setStatus(updatedUser.getStatus());
         existingUser.setPreferences(updatedUser.getPreferences());
         User saved = userRepository.save(existingUser);
-        logEvent(id, "USER_UPDATED", Map.of("userId", id));
+        notifyObservers("USER_UPDATED", saved);
         return saved;
     }
 
@@ -91,7 +103,7 @@ public class UserService {
     public void deleteUser(Long id) {
         User user = findUserByIdOrThrow(id);
         userRepository.delete(user);
-        logEvent(id, "USER_DELETED", Map.of("userId", id));
+        notifyObservers("USER_DELETED", id);
     }
 
     @Cacheable(value = "user-service::S1-F1", key = "#name + '_' + #email + '_' + #role")
@@ -113,7 +125,7 @@ public class UserService {
         merged.putAll(newPreferences);
         user.setPreferences(merged);
         User saved = userRepository.save(user);
-        logEvent(id, "USER_UPDATED", Map.of("updatedFields", "preferences"));
+        notifyObservers("USER_UPDATED", Map.of("userId", id, "updatedFields", "preferences"));
         return saved;
     }
 
@@ -209,7 +221,7 @@ public class UserService {
         }
         user.setStatus(Status.DEACTIVATED);
         User saved = userRepository.save(user);
-        logEvent(id, "USER_DEACTIVATED", Map.of("userId", id));
+        notifyObservers("USER_DEACTIVATED", Map.of("userId", id, "status", "DEACTIVATED"));
         return saved;
     }
 
@@ -230,24 +242,12 @@ public class UserService {
         }
         targetAddress.setIsDefault(true);
         userRepository.save(user);
-        logEvent(userId, "DEFAULT_ADDRESS_SET", Map.of("addressId", addressId));
+        notifyObservers("DEFAULT_ADDRESS_SET", Map.of("userId", userId, "addressId", addressId));
         return getUserProfile(userId);
-    }
-
-    private void logEvent(Long userId, String action, Map<String, Object> details) {
-        try {
-            authEventRepository.save(new AuthEvent(userId, action, details));
-        } catch (Exception e) {
-            System.err.println("MongoDB logging failed: " + e.getMessage());
-            e.printStackTrace();
-        }
     }
 
     private User findUserByIdOrThrow(Long id) {
         return userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found with id: " + id));
-    }
-    public void logAuthEvent(Long userId, String action, Map<String, Object> details) {
-        logEvent(userId, action, details);
     }
 }
