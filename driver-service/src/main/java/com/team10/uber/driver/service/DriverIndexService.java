@@ -17,8 +17,9 @@ import java.util.Map;
 /**
  * Handles all Elasticsearch indexing for drivers.
  * Kept separate from DriverService to avoid a circular dependency:
- *   DriverEntityListener → DriverIndexService → DriverRepository (PG) + DriverSearchRepository (ES)
- *   DriverService        → DriverRepository (PG)  — no reference to DriverIndexService
+ * DriverEntityListener → DriverIndexService → DriverRepository (PG) +
+ * DriverSearchRepository (ES)
+ * DriverService → DriverRepository (PG) — no reference to DriverIndexService
  */
 @Service
 public class DriverIndexService extends AbstractObservableService {
@@ -28,8 +29,8 @@ public class DriverIndexService extends AbstractObservableService {
     private final MongoEventLogger mongoEventLogger;
 
     public DriverIndexService(DriverRepository driverRepository,
-                               DriverSearchRepository searchRepository,
-                               MongoEventLogger mongoEventLogger) {
+            DriverSearchRepository searchRepository,
+            MongoEventLogger mongoEventLogger) {
         this.driverRepository = driverRepository;
         this.searchRepository = searchRepository;
         this.mongoEventLogger = mongoEventLogger;
@@ -42,7 +43,8 @@ public class DriverIndexService extends AbstractObservableService {
 
     /**
      * Index a single driver into Elasticsearch and fire an INDEXED event.
-     * source values: "explicit" (POST /index endpoint), "auto_crud_create", "auto_crud_update"
+     * source values: "explicit" (POST /index endpoint), "auto_crud_create",
+     * "auto_crud_update"
      */
     public void indexDriver(Long driverId, String source) {
         Driver driver = driverRepository.findById(driverId)
@@ -54,7 +56,7 @@ public class DriverIndexService extends AbstractObservableService {
         if (driver.getVehicleDetails() != null) {
             Object desc = driver.getVehicleDetails().get("description");
             description = desc != null ? desc.toString() : "";
-            Object vt   = driver.getVehicleDetails().get("vehicleType");
+            Object vt = driver.getVehicleDetails().get("vehicleType");
             vehicleType = vt != null ? vt.toString() : "";
         }
 
@@ -64,20 +66,19 @@ public class DriverIndexService extends AbstractObservableService {
                 vehicleType,
                 description,
                 driver.getRating(),
-                driver.getStatus() != null ? driver.getStatus().name() : null
-        );
+                driver.getStatus() != null ? driver.getStatus().name() : null);
         searchRepository.save(doc);
 
         List<String> indexedFields = List.of("id", "name", "vehicleType", "description", "rating", "status");
         notifyObservers("INDEXED", Map.of(
-                "driverId",      driverId,
-                "source",        source,
-                "indexedFields", indexedFields
-        ));
+                "driverId", driverId,
+                "source", source,
+                "indexedFields", indexedFields));
     }
 
     /**
-     * Remove a driver from Elasticsearch. Called by DriverEntityListener @PostRemove.
+     * Remove a driver from Elasticsearch. Called by
+     * DriverEntityListener @PostRemove.
      * Soft dependency — ES failure must not crash the delete flow.
      */
     public void removeFromIndex(Long driverId) {
