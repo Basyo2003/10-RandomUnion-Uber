@@ -9,6 +9,7 @@ import com.team10.uber.payment.cache.RedisCacheService;
 import com.team10.uber.payment.repository.CouponRepository;
 import com.team10.uber.payment.repository.PaymentCouponRepository;
 import com.team10.uber.payment.repository.PaymentRepository;
+import com.team10.uber.payment.repository.mongo.PaymentAuditEventRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -32,9 +33,10 @@ class PaymentServiceS5F4Test {
         CouponRepository couponRepo = mock(CouponRepository.class);
         PaymentCouponRepository couponPaymentRepo = mock(PaymentCouponRepository.class);
         MongoEventLogger mongoLogger = mock(MongoEventLogger.class);
+        PaymentAuditEventRepository auditRepo = mock(PaymentAuditEventRepository.class);
         RedisCacheService cacheService = mock(RedisCacheService.class);
 
-        svc = new PaymentService(paymentRepo, couponRepo, couponPaymentRepo, mongoLogger, cacheService);
+        svc = new PaymentService(paymentRepo, couponRepo, couponPaymentRepo, mongoLogger, auditRepo, cacheService);
 
         mockObserver = mock(EntityObserver.class);
         svc.register(mockObserver);

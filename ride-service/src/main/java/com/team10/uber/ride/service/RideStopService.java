@@ -5,6 +5,7 @@ import com.team10.uber.ride.observer.AbstractObservableService;
 import com.team10.uber.ride.observer.MongoEventLogger;
 import com.team10.uber.ride.repository.RideRepository;
 import com.team10.uber.ride.repository.RideStopRepository;
+import org.springframework.cache.annotation.CacheEvict;
 import jakarta.annotation.PostConstruct;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
@@ -21,8 +22,8 @@ public class RideStopService extends AbstractObservableService {
     private final MongoEventLogger mongoEventLogger;
 
     public RideStopService(RideStopRepository rideStopRepository,
-                           RideRepository rideRepository,
-                           MongoEventLogger mongoEventLogger) {
+            RideRepository rideRepository,
+            MongoEventLogger mongoEventLogger) {
         this.rideStopRepository = rideStopRepository;
         this.rideRepository = rideRepository;
         this.mongoEventLogger = mongoEventLogger;
@@ -42,7 +43,8 @@ public class RideStopService extends AbstractObservableService {
                     "Missing required fields: stopOrder, latitude, longitude, address, status, ride.id");
         }
         if (!rideRepository.existsById(rideStop.getRide().getId())) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Ride not found with id: " + rideStop.getRide().getId());
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "Ride not found with id: " + rideStop.getRide().getId());
         }
         RideStop saved = rideStopRepository.save(rideStop);
         notifyObservers("STOPS_ADDED", saved.getRide());
@@ -59,8 +61,10 @@ public class RideStopService extends AbstractObservableService {
                 .orElseThrow(() -> new RuntimeException("RideStop not found with id: " + id));
     }
 
+    @CacheEvict(value = "ride-service::rideStop", key = "#id")
     public RideStop updateRideStop(Long id, RideStop updatedRideStop) {
-        if (updatedRideStop.getStopOrder() == null || updatedRideStop.getLatitude() == null || updatedRideStop.getLongitude() == null
+        if (updatedRideStop.getStopOrder() == null || updatedRideStop.getLatitude() == null
+                || updatedRideStop.getLongitude() == null
                 || updatedRideStop.getAddress() == null || updatedRideStop.getAddress().isBlank()
                 || updatedRideStop.getStatus() == null
                 || updatedRideStop.getRide() == null || updatedRideStop.getRide().getId() == null) {
@@ -68,7 +72,8 @@ public class RideStopService extends AbstractObservableService {
                     "Missing required fields: stopOrder, latitude, longitude, address, status, ride.id");
         }
         if (!rideRepository.existsById(updatedRideStop.getRide().getId())) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Ride not found with id: " + updatedRideStop.getRide().getId());
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "Ride not found with id: " + updatedRideStop.getRide().getId());
         }
         RideStop existing = getRideStopById(id);
         existing.setStopOrder(updatedRideStop.getStopOrder());
@@ -83,6 +88,7 @@ public class RideStopService extends AbstractObservableService {
         return saved;
     }
 
+    @CacheEvict(value = "ride-service::rideStop", key = "#id")
     public void deleteRideStop(Long id) {
         RideStop rideStop = getRideStopById(id);
         Long rideId = rideStop.getRide() != null ? rideStop.getRide().getId() : null;
