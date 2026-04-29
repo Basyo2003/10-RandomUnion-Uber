@@ -30,6 +30,7 @@ import java.util.Map;
 @Service
 public class DriverService extends AbstractObservableService {
 
+    private static final long TTL_DETAIL = 15 * 60; // §4.4.2 — 15 min
     // TTLs in seconds — §4.4.1 only
     private static final long TTL_SEARCH = 5  * 60; // F1, F5 — 5 min
     private static final long TTL_DTO    = 10 * 60; // F3, F6, F9 — 10 min
@@ -84,10 +85,17 @@ public class DriverService extends AbstractObservableService {
         return driverRepository.findAll();
     }
 
+    /** §4.4.2 — GET /api/drivers/{id}, cached 15 min. */
     public Driver getDriverById(Long id) {
-        return driverRepository.findById(id)
+        String key = "driver::" + id;
+        Driver cached = cache.get(key, Driver.class);
+        if (cached != null) return cached;
+
+        Driver driver = driverRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Driver not found with id: " + id));
+        cache.put(key, driver, TTL_DETAIL);
+        return driver;
     }
 
     public Driver updateDriver(Long id, Driver updatedDriver) {
