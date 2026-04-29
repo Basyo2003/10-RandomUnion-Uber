@@ -66,6 +66,24 @@ public interface RideRepository extends JpaRepository<Ride, Long> {
     @Query(value = "UPDATE drivers SET status = 'BUSY' WHERE id = :driverId AND status = 'AVAILABLE'", nativeQuery = true)
     int updateDriverStatusToBusy(@Param("driverId") Long driverId);
 
+    @Query(value = """
+        SELECT COALESCE(SUM(p.amount), 0)
+        FROM rides r
+        JOIN payments p ON p.ride_id = r.id
+        WHERE r.status = 'COMPLETED'
+          AND r.requested_at BETWEEN :startDateTime AND :endDateTime
+        """, nativeQuery = true)
+    Double sumCompletedRideRevenueBetween(@Param("startDateTime") LocalDateTime startDateTime,
+                                          @Param("endDateTime") LocalDateTime endDateTime);
+
+    @Query(value = """
+        SELECT r.status::text AS status, COUNT(*) AS cnt
+        FROM rides r
+        WHERE r.requested_at BETWEEN :startDateTime AND :endDateTime
+        GROUP BY r.status
+        """, nativeQuery = true)
+    List<Object[]> countRidesByStatusBetween(@Param("startDateTime") LocalDateTime startDateTime,
+                                             @Param("endDateTime") LocalDateTime endDateTime);
 
 
 }
