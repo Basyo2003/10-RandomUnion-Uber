@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.server.ResponseStatusException;
+import com.team10.uber.location.dto.StationaryDriverProjection;
 
 import org.springframework.data.repository.query.Param;
 
@@ -171,7 +172,7 @@ public interface LocationRepository extends JpaRepository<Location, Long> {
             WHERE CAST(l.metadata ->> 'speed' AS DOUBLE PRECISION) <= :maxSpeed
               AND l.timestamp >= :cutoffTime
             """, nativeQuery = true)
-    List<StationaryDriverDTO> findStationaryDrivers(
+    List<StationaryDriverProjection> findStationaryDrivers(
             @Param("maxSpeed") Double maxSpeed,
             @Param("cutoffTime") LocalDateTime cutoffTime
     );

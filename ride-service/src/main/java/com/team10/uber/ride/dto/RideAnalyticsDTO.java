@@ -9,8 +9,7 @@ public class RideAnalyticsDTO {
     private double averageFare;
     private double completionRate;
 
-    public RideAnalyticsDTO() {
-    }
+    public RideAnalyticsDTO() {}
 
     public RideAnalyticsDTO(long totalRides, long completedRides, long cancelledRides,
                             double totalRevenue, double averageFare, double completionRate) {
@@ -22,51 +21,39 @@ public class RideAnalyticsDTO {
         this.completionRate = completionRate;
     }
 
-    public long getTotalRides() {
-        return totalRides;
+    // §3.5 — Builder
+    public static Builder builder() { return new Builder(); }
+
+    public static class Builder {
+        private long totalRides;
+        private long completedRides;
+        private long cancelledRides;
+        private double totalRevenue;
+        private double averageFare;
+        private double completionRate;
+
+        public Builder totalRides(long totalRides) { this.totalRides = totalRides; return this; }
+        public Builder completedRides(long completedRides) { this.completedRides = completedRides; return this; }
+        public Builder cancelledRides(long cancelledRides) { this.cancelledRides = cancelledRides; return this; }
+        public Builder totalRevenue(double totalRevenue) { this.totalRevenue = totalRevenue; return this; }
+        public Builder averageFare(double averageFare) { this.averageFare = averageFare; return this; }
+        public Builder completionRate(double completionRate) { this.completionRate = completionRate; return this; }
+
+        public RideAnalyticsDTO build() {
+            return new RideAnalyticsDTO(totalRides, completedRides, cancelledRides, totalRevenue, averageFare, completionRate);
+        }
     }
 
-    public void setTotalRides(long totalRides) {
-        this.totalRides = totalRides;
-    }
-
-    public long getCompletedRides() {
-        return completedRides;
-    }
-
-    public void setCompletedRides(long completedRides) {
-        this.completedRides = completedRides;
-    }
-
-    public long getCancelledRides() {
-        return cancelledRides;
-    }
-
-    public void setCancelledRides(long cancelledRides) {
-        this.cancelledRides = cancelledRides;
-    }
-
-    public double getTotalRevenue() {
-        return totalRevenue;
-    }
-
-    public void setTotalRevenue(double totalRevenue) {
-        this.totalRevenue = totalRevenue;
-    }
-
-    public double getAverageFare() {
-        return averageFare;
-    }
-
-    public void setAverageFare(double averageFare) {
-        this.averageFare = averageFare;
-    }
-
-    public double getCompletionRate() {
-        return completionRate;
-    }
-
-    public void setCompletionRate(double completionRate) {
-        this.completionRate = completionRate;
-    }
+    public long getTotalRides() { return totalRides; }
+    public void setTotalRides(long totalRides) { this.totalRides = totalRides; }
+    public long getCompletedRides() { return completedRides; }
+    public void setCompletedRides(long completedRides) { this.completedRides = completedRides; }
+    public long getCancelledRides() { return cancelledRides; }
+    public void setCancelledRides(long cancelledRides) { this.cancelledRides = cancelledRides; }
+    public double getTotalRevenue() { return totalRevenue; }
+    public void setTotalRevenue(double totalRevenue) { this.totalRevenue = totalRevenue; }
+    public double getAverageFare() { return averageFare; }
+    public void setAverageFare(double averageFare) { this.averageFare = averageFare; }
+    public double getCompletionRate() { return completionRate; }
+    public void setCompletionRate(double completionRate) { this.completionRate = completionRate; }
 }
