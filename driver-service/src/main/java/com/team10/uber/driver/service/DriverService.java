@@ -1,5 +1,6 @@
 package com.team10.uber.driver.service;
 
+import com.team10.uber.driver.cache.RedisCacheService;
 import com.team10.uber.driver.dto.DriverDocumentAlertDTO;
 import com.team10.uber.driver.dto.DriverEarningsDTO;
 import com.team10.uber.driver.dto.TopRatedDriverDTO;
@@ -28,15 +29,19 @@ import java.util.Map;
 @Service
 public class DriverService extends AbstractObservableService {
 
+    private static final long TTL_DETAIL = 15 * 60; // §4.4.2 — 15 min
+
     private final DriverRepository driverRepository;
     private final DriverDocumentRepository driverDocumentRepository;
     private final MongoEventLogger mongoEventLogger;
+    private final RedisCacheService cache;
 
     public DriverService(DriverRepository driverRepository, DriverDocumentRepository driverDocumentRepository,
-                         MongoEventLogger mongoEventLogger) {
+                         MongoEventLogger mongoEventLogger, RedisCacheService cache) {
         this.driverRepository = driverRepository;
         this.driverDocumentRepository = driverDocumentRepository;
         this.mongoEventLogger = mongoEventLogger;
+        this.cache = cache;
     }
 
     @PostConstruct
@@ -88,10 +93,17 @@ public class DriverService extends AbstractObservableService {
         return driverRepository.searchDrivers(status, minRating, maxRating);
     }
 
+    /** §4.4.2 — GET /api/drivers/{id}, cached 15 min. */
     public Driver getDriverById(Long id) {
-        return driverRepository.findById(id)
-                .orElseThrow(
-                        () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Driver not found with id: " + id));
+        String key = "driver::" + id;
+        Driver cached = cache.get(key, Driver.class);
+        if (cached != null) return cached;
+
+        Driver driver = driverRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Driver not found with id: " + id));
+        cache.put(key, driver, TTL_DETAIL);
+        return driver;
     }
 
     public Driver updateDriver(Long id, Driver updatedDriver) {
