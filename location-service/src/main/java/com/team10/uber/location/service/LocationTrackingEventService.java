@@ -7,6 +7,7 @@ import com.team10.uber.location.cassandra.LocationTrackingEventRepository;
 import com.team10.uber.location.dto.LocationTrackingEventDTO;
 import com.team10.uber.location.model.Location;
 import org.springframework.stereotype.Service;
+import com.team10.uber.location.dto.TrackingEventRequest;
 
 import java.time.Instant;
 import java.time.ZoneId;
@@ -90,5 +91,26 @@ public class LocationTrackingEventService {
         } catch (NumberFormatException e) {
             return null;
         }
+    }
+
+    // S4-F11 - record GPS tracking payload directly into Cassandra
+    public LocationTrackingEvent recordTrackingEvent(Long driverId, TrackingEventRequest request) {
+        LocationTrackingEventKey key = new LocationTrackingEventKey(
+                driverId,
+                Instant.now()
+        );
+
+        LocationTrackingEvent event = new LocationTrackingEvent(
+                key,
+                request.getLatitude(),
+                request.getLongitude(),
+                request.getSpeed(),
+                request.getHeading(),
+                request.getAccuracy(),
+                request.getRideId(),
+                request.getNotes()
+        );
+
+        return locationTrackingEventRepository.save(event);
     }
 }
