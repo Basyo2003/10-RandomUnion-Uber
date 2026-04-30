@@ -2,7 +2,7 @@ spring:
   application:
     name: user-service
   datasource:
-    url: jdbc:postgresql://localhost:5432/uberdb
+    url: jdbc:postgresql://postgres:5432/uberdb
     username: postgres
     password: postgres
   jpa:
@@ -11,11 +11,11 @@ spring:
     show-sql: true
   data:
     redis:
-      host: localhost
+      host: redis
       port: 6379
       password: redispass
     mongodb:
-      uri: mongodb://root:rootpass@localhost:27017/ubermongo?authSource=admin&authMechanism=SCRAM-SHA-256
+      uri: mongodb://root:rootpass@mongo:27017/ubermongo?authSource=admin&authMechanism=SCRAM-SHA-256
 
 server:
   port: 8080

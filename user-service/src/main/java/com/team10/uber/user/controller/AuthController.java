@@ -27,11 +27,18 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<User> register(@RequestBody User user) {
-        user.setRole(Role.RIDER);
-        user.setPassword(passwordEncoder.encode(user.getPassword()));
-        User created = userService.createUser(user);
-        return ResponseEntity.status(HttpStatus.CREATED).body(created);
+    public ResponseEntity<Map<String, Object>> register(@RequestBody User user) {
+        User saved = userService.registerUser(user);
+
+        String token = jwtUtil.generateToken(
+                saved.getEmail(),
+                saved.getId(),
+                saved.getRole().name());
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
+                "token", token,
+                "expiresIn", 86400000
+        ));
     }
 
     @PostMapping("/login")

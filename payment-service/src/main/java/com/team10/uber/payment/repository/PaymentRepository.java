@@ -103,4 +103,6 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     List<Object[]> findVehicleTypeRevenueStats(
             @Param("startDate") LocalDateTime startDate,
             @Param("endDate") LocalDateTime endDate);
+    @Query(value = "SELECT metadata->>'surgeMultiplier' FROM rides WHERE id = :rideId", nativeQuery = true)
+    String findSurgeMultiplierByRideId(@Param("rideId") Long rideId);
 }
