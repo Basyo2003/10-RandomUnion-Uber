@@ -1,5 +1,10 @@
 package com.team10.uber.location.service;
 
+import com.team10.uber.location.dto.BatchLocationRequest;
+import com.team10.uber.location.dto.DriverMovementSummaryDTO;
+import com.team10.uber.location.dto.DriverMovementSummaryProjection;
+import com.team10.uber.location.dto.StationaryDriverDTO;
+import com.team10.uber.location.event.LocationEventActions;
 import com.team10.uber.location.dto.*;
 import com.team10.uber.location.model.Location;
 import com.team10.uber.location.repository.LocationRepository;
@@ -38,9 +43,9 @@ public class LocationService {
     // 4.4.4 Cache Invalidation - create location invalidates feature caches
     public Location createLocation(Location location) {
         locationRepository.driverExists(jdbcTemplate, location.getDriverId());
-
         Location saved = locationRepository.save(location);
         invalidateLocationCaches(saved.getId(), saved.getDriverId());
+        notifyObservers(LocationEventActions.LOCATION_UPDATED, saved);
 
         return saved;
     }
@@ -97,6 +102,7 @@ public class LocationService {
 
         Location saved = locationRepository.save(existing);
         invalidateLocationCaches(saved.getId(), saved.getDriverId());
+        notifyObservers(LocationEventActions.LOCATION_UPDATED, saved);
         return saved;
     }
 
@@ -105,6 +111,8 @@ public class LocationService {
         Location existing = getLocationById(id);
         locationRepository.delete(existing);
         invalidateLocationCaches(existing.getId(), existing.getDriverId());
+        notifyObservers(LocationEventActions.LOCATION_DELETED, existing);
+
     }
     
 
@@ -137,6 +145,7 @@ public class LocationService {
 
         Location saved = locationRepository.save(location);
         invalidateLocationCaches(saved.getId(), saved.getDriverId());
+        notifyObservers(LocationEventActions.LOCATION_UPDATED, saved);
 
         return saved;
     }
@@ -187,50 +196,61 @@ public class LocationService {
 
 
 
-  //S4-F4
-     @Transactional
-    public Map<String, Object> batchCreateLocations(BatchLocationRequest request) {
-        if (request.getDriverId() == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Driver ID is required");
-        }
-
-        if (request.getLocations() == null || request.getLocations().isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Locations list cannot be empty");
-        }
-
-        locationRepository.driverExists(jdbcTemplate,request.getDriverId());
-
-        List<Location> locationsToSave = new ArrayList<>();
-        LocalDateTime baseTime = LocalDateTime.now();
-
-        for (int i = 0; i < request.getLocations().size(); i++) {
-            BatchLocationRequest.LocationInput input = request.getLocations().get(i);
-
-            validateCoordinates(input.getLatitude(), input.getLongitude());
-
-            Location location = new Location();
-            location.setDriverId(request.getDriverId());
-            location.setLatitude(input.getLatitude());
-            location.setLongitude(input.getLongitude());
-            location.setMetadata(input.getMetadata());
-            location.setTimestamp(baseTime.plusSeconds(i));
-
-            locationsToSave.add(location);
-        }
-
-         List<Location> savedLocations = locationRepository.saveAll(locationsToSave);
-
-        // 4.4.4 Cache Invalidation - S4-F4 batch create invalidates affected location feature caches
-         for (Location saved : savedLocations) {
-             invalidateLocationCaches(saved.getId(), saved.getDriverId());
-         }
-
-         Map<String, Object> response = new HashMap<>();
-         response.put("count", savedLocations.size());
-         response.put("message", "Batch locations created successfully");
-
-         return response;
+//S4-F4
+@Transactional
+public Map<String, Object> batchCreateLocations(BatchLocationRequest request) {
+    if (request.getDriverId() == null) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Driver ID is required");
     }
+
+    if (request.getLocations() == null || request.getLocations().isEmpty()) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Locations list cannot be empty");
+    }
+
+    locationRepository.driverExists(jdbcTemplate, request.getDriverId());
+
+    List<Location> locationsToSave = new ArrayList<>();
+    LocalDateTime baseTime = LocalDateTime.now();
+
+    for (int i = 0; i < request.getLocations().size(); i++) {
+        BatchLocationRequest.LocationInput input = request.getLocations().get(i);
+
+        validateCoordinates(input.getLatitude(), input.getLongitude());
+
+        Location location = new Location();
+        location.setDriverId(request.getDriverId());
+        location.setLatitude(input.getLatitude());
+        location.setLongitude(input.getLongitude());
+        location.setMetadata(input.getMetadata());
+        location.setTimestamp(baseTime.plusSeconds(i));
+
+        locationsToSave.add(location);
+    }
+
+    List<Location> savedLocations = locationRepository.saveAll(locationsToSave);
+
+    // 4.4.4 Cache Invalidation - S4-F4 batch create invalidates affected location feature caches
+    for (Location saved : savedLocations) {
+        invalidateLocationCaches(saved.getId(), saved.getDriverId());
+    }
+
+    Map<String, Object> response = new HashMap<>();
+    response.put("count", savedLocations.size());
+    response.put("message", "Batch locations created successfully");
+    response.put("driverId", request.getDriverId());
+
+    notifyObservers(
+            LocationEventActions.BATCH_LOCATIONS_UPDATED,
+            Map.of(
+                    "driverId", request.getDriverId(),
+                    "count", savedLocations.size(),
+                    "firstTimestamp", savedLocations.get(0).getTimestamp(),
+                    "lastTimestamp", savedLocations.get(savedLocations.size() - 1).getTimestamp()
+            )
+    );
+
+    return response;
+}
 
     private void validateCoordinates(Double latitude, Double longitude) {
         if (latitude == null || longitude == null) {
@@ -357,8 +377,8 @@ public class LocationService {
 
         int count = locationRepository.countLocationsOlderThan(cutoff);
         locationRepository.deleteLocationsOlderThan(cutoff);
-
-        // Purge can affect many drivers/locations, so clear all Location Service feature caches
+      
+      // Purge can affect many drivers/locations, so clear all Location Service feature caches
         redisCacheService.deleteByPattern(CACHE_PREFIX + "::location::*");
         redisCacheService.deleteByPattern(CACHE_PREFIX + "::S4-F1::*");
         redisCacheService.deleteByPattern(CACHE_PREFIX + "::S4-F3::*");
@@ -367,107 +387,142 @@ public class LocationService {
         redisCacheService.deleteByPattern(CACHE_PREFIX + "::S4-F8::*");
         redisCacheService.deleteByPattern(CACHE_PREFIX + "::S4-F9::*");
 
+
+        notifyObservers(
+                LocationEventActions.OLD_LOCATIONS_PURGED,
+                Map.of(
+                        "count", count,
+                        "olderThanDays", olderThanDays,
+                        "cutoff", cutoff
+                )
+        );
+        
         return count;
     }
 
     // S4-F8 - 4.4.1 Redis cache, TTL 15 min
-    public DriverMovementSummaryDTO getDriverMovementSummary(
-            Long driverId,
-            LocalDate startDate,
-            LocalDate endDate
-    ) {
-        if (endDate.isBefore(startDate)) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "endDate must be on or after startDate"
-            );
-        }
-
-        locationRepository.driverExists(jdbcTemplate, driverId);
-
-        String cacheKey = featureKey("S4-F8", driverId, startDate, endDate);
-
-        Object cached = redisCacheService.get(cacheKey);
-        if (cached instanceof DriverMovementSummaryDTO summaryDTO) {
-            return summaryDTO;
-        }
-
-        LocalDateTime startDateTime = startDate.atStartOfDay();
-        LocalDateTime endDateTime = endDate.plusDays(1).atStartOfDay();
-
-        Optional<DriverMovementSummaryProjection> optionalSummary =
-                locationRepository.getDriverMovementSummary(driverId, startDateTime, endDateTime);
-
-        DriverMovementSummaryDTO result;
-
-        if (optionalSummary.isEmpty()) {
-            result = new DriverMovementSummaryDTO(
-                    driverId,
-                    0L,
-                    0.0,
-                    0.0,
-                    null,
-                    null
-            );
-        } else {
-            DriverMovementSummaryProjection summary = optionalSummary.get();
-
-            result = new DriverMovementSummaryDTO(
-                    summary.getDriverId(),
-                    summary.getTotalLocationPoints(),
-                    summary.getAverageSpeed(),
-                    summary.getMaxSpeed(),
-                    summary.getFirstTimestamp(),
-                    summary.getLastTimestamp()
-            );
-        }
-
-        redisCacheService.set(cacheKey, result, Duration.ofMinutes(15));
-        return result;
+public DriverMovementSummaryDTO getDriverMovementSummary(
+        Long driverId,
+        LocalDate startDate,
+        LocalDate endDate
+) {
+    if (endDate.isBefore(startDate)) {
+        throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "endDate must be on or after startDate"
+        );
     }
+
+    locationRepository.driverExists(jdbcTemplate, driverId);
+
+    String cacheKey = featureKey("S4-F8", driverId, startDate, endDate);
+
+    Object cached = redisCacheService.get(cacheKey);
+    if (cached instanceof DriverMovementSummaryDTO summaryDTO) {
+        return summaryDTO;
+    }
+
+    LocalDateTime startDateTime = startDate.atStartOfDay();
+    LocalDateTime endDateTime = endDate.plusDays(1).atStartOfDay();
+
+    Optional<DriverMovementSummaryProjection> optionalSummary =
+            locationRepository.getDriverMovementSummary(driverId, startDateTime, endDateTime);
+
+    DriverMovementSummaryDTO result;
+
+    if (optionalSummary.isEmpty()) {
+        result = new DriverMovementSummaryDTO(
+                driverId,
+                0L,
+                0.0,
+                0.0,
+                null,
+                null
+        );
+    } else {
+        DriverMovementSummaryProjection summary = optionalSummary.get();
+
+        result = new DriverMovementSummaryDTO(
+                summary.getDriverId(),
+                summary.getTotalLocationPoints(),
+                summary.getAverageSpeed(),
+                summary.getMaxSpeed(),
+                summary.getFirstTimestamp(),
+                summary.getLastTimestamp()
+        );
+    }
+
+    redisCacheService.set(cacheKey, result, Duration.ofMinutes(15));
+
+    Map<String, Object> eventData = new HashMap<>();
+    eventData.put("driverId", driverId);
+    eventData.put("startDate", startDate);
+    eventData.put("endDate", endDate);
+    eventData.put("totalLocationPoints", result.getTotalLocationPoints());
+    eventData.put("averageSpeed", result.getAverageSpeed());
+    eventData.put("maxSpeed", result.getMaxSpeed());
+    eventData.put("firstTimestamp", result.getFirstTimestamp());
+    eventData.put("lastTimestamp", result.getLastTimestamp());
+
+    notifyObservers(
+            LocationEventActions.ANALYTICS_VIEWED,
+            eventData
+    );
+
+    return result;
+}
 
     // S4-F9 - 4.4.1 Redis cache, TTL 10 min
-    public List<StationaryDriverDTO> getStationaryDrivers(Double maxSpeed, Integer sinceMinutes) {
-        if (maxSpeed == null || maxSpeed < 0) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "maxSpeed must be >= 0"
-            );
-        }
-
-        if (sinceMinutes == null || sinceMinutes <= 0) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "sinceMinutes must be > 0"
-            );
-        }
-
-        String cacheKey = featureKey("S4-F9", maxSpeed, sinceMinutes);
-
-        Object cached = redisCacheService.get(cacheKey);
-        if (cached instanceof List<?> cachedList) {
-            return (List<StationaryDriverDTO>) cachedList;
-        }
-
-        LocalDateTime cutoffTime = LocalDateTime.now().minusMinutes(sinceMinutes);
-
-        List<StationaryDriverProjection> projections =
-                locationRepository.findStationaryDrivers(maxSpeed, cutoffTime);
-
-        List<StationaryDriverDTO> result = projections.stream()
-                .map(p -> new StationaryDriverDTO(
-                        p.getDriverId(),
-                        p.getDriverName(),
-                        p.getLatitude(),
-                        p.getLongitude(),
-                        p.getLastSpeed(),
-                        p.getLastUpdated()
-                ))
-                .toList();
-
-        redisCacheService.set(cacheKey, result, Duration.ofMinutes(10));
-        return result;
+public List<StationaryDriverDTO> getStationaryDrivers(Double maxSpeed, Integer sinceMinutes) {
+    if (maxSpeed == null || maxSpeed < 0) {
+        throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "maxSpeed must be >= 0"
+        );
     }
+
+    if (sinceMinutes == null || sinceMinutes <= 0) {
+        throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "sinceMinutes must be > 0"
+        );
+    }
+
+    String cacheKey = featureKey("S4-F9", maxSpeed, sinceMinutes);
+
+    Object cached = redisCacheService.get(cacheKey);
+    if (cached instanceof List<?> cachedList) {
+        return (List<StationaryDriverDTO>) cachedList;
+    }
+
+    LocalDateTime cutoffTime = LocalDateTime.now().minusMinutes(sinceMinutes);
+
+    List<StationaryDriverDTO> result = locationRepository.findStationaryDrivers(maxSpeed, cutoffTime)
+            .stream()
+            .map(p -> StationaryDriverDTO.builder()
+                    .driverId(p.getDriverId())
+                    .driverName(p.getDriverName())
+                    .latitude(p.getLatitude())
+                    .longitude(p.getLongitude())
+                    .lastSpeed(p.getLastSpeed())
+                    .lastUpdated(p.getLastUpdated())
+                    .build())
+            .toList();
+
+    redisCacheService.set(cacheKey, result, Duration.ofMinutes(10));
+
+    notifyObservers(
+            LocationEventActions.ANALYTICS_VIEWED,
+            Map.of(
+                    "analyticsType", "STATIONARY_DRIVERS",
+                    "maxSpeed", maxSpeed,
+                    "sinceMinutes", sinceMinutes,
+                    "resultCount", result.size()
+            )
+    );
+
+    return result;
+}
 
 
     // 4.4 Redis Caching - cache key helpers
