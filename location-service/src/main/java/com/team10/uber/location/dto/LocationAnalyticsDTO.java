@@ -24,6 +24,47 @@ public class LocationAnalyticsDTO {
         this.eventsByHour = eventsByHour;
     }
 
+    // §3.5 — Builder
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public static class Builder {
+        private Long totalLocationEvents;
+        private Long activeDrivers;
+        private Double averageSpeed;
+        private Map<Integer, Long> eventsByHour;
+
+        public Builder totalLocationEvents(Long totalLocationEvents) {
+            this.totalLocationEvents = totalLocationEvents;
+            return this;
+        }
+
+        public Builder activeDrivers(Long activeDrivers) {
+            this.activeDrivers = activeDrivers;
+            return this;
+        }
+
+        public Builder averageSpeed(Double averageSpeed) {
+            this.averageSpeed = averageSpeed;
+            return this;
+        }
+
+        public Builder eventsByHour(Map<Integer, Long> eventsByHour) {
+            this.eventsByHour = eventsByHour;
+            return this;
+        }
+
+        public LocationAnalyticsDTO build() {
+            return new LocationAnalyticsDTO(
+                    totalLocationEvents,
+                    activeDrivers,
+                    averageSpeed,
+                    eventsByHour
+            );
+        }
+    }
+
     public Long getTotalLocationEvents() {
         return totalLocationEvents;
     }
