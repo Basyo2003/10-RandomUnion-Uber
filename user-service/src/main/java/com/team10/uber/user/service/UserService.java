@@ -2,21 +2,33 @@ package com.team10.uber.user.service;
 
 import com.team10.uber.user.adapter.ObjectArrayDtoAdapter;
 import com.team10.uber.user.dto.AddressDTO;
+import com.team10.uber.user.dto.AuthEventDTO;
 import com.team10.uber.user.dto.TopRiderDTO;
+import com.team10.uber.user.dto.UserActivityFeedResponseDTO;
 import com.team10.uber.user.dto.UserProfileDTO;
 import com.team10.uber.user.dto.UserRideSummaryDTO;
+import com.team10.uber.user.enums.Role;
 import com.team10.uber.user.enums.Status;
+import com.team10.uber.user.event.AuthEvent;
 import com.team10.uber.user.model.SavedAddress;
 import com.team10.uber.user.model.User;
 import com.team10.uber.user.event.AuthEvent;
+import com.team10.uber.user.observer.EntityObserver;
 import com.team10.uber.user.repository.mongo.AuthEventRepository;
+import com.team10.uber.user.observer.AbstractObservableService;
+import com.team10.uber.user.observer.MongoEventLogger;
 import com.team10.uber.user.repository.SavedAddressRepository;
 import com.team10.uber.user.repository.UserRepository;
+import com.team10.uber.user.repository.mongo.AuthEventRepository;
+import jakarta.annotation.PostConstruct;
 import jakarta.transaction.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -25,19 +37,31 @@ import java.time.format.DateTimeParseException;
 import java.util.*;
 
 @Service
-public class UserService {
+public class UserService extends AbstractObservableService {
 
     private final UserRepository userRepository;
     private final SavedAddressRepository savedAddressRepository;
     private final AuthEventRepository authEventRepository;
+    private final EntityObserver observer;
+    private final PasswordEncoder passwordEncoder;
+    private final MongoEventLogger mongoEventLogger;
     private final ObjectArrayDtoAdapter objectArrayDtoAdapter = new ObjectArrayDtoAdapter();
 
     public UserService(UserRepository userRepository,
                        SavedAddressRepository savedAddressRepository,
-                       AuthEventRepository authEventRepository) {
+                       AuthEventRepository authEventRepository, EntityObserver observer,
+                       PasswordEncoder passwordEncoder, MongoEventLogger mongoEventLogger) {
         this.userRepository = userRepository;
         this.savedAddressRepository = savedAddressRepository;
         this.authEventRepository = authEventRepository;
+        this.observer = observer;
+        this.passwordEncoder = passwordEncoder;
+        this.mongoEventLogger = mongoEventLogger;
+    }
+
+    @PostConstruct
+    public void initObservers() {
+        register(mongoEventLogger);
     }
 
     public Optional<User> findByEmail(String email) {
@@ -50,19 +74,46 @@ public class UserService {
     })
     public User createUser(User user) {
         User saved = userRepository.save(user);
-        logEvent(saved.getId(), "USER_CREATED", Map.of("email", saved.getEmail()));
+        notifyObservers("USER_CREATED", saved);
         return saved;
+    }
+
+    public void logAuthEvent(Long userId, String action, Map<String, String> details) {
+        Map<String, Object> payload = new java.util.HashMap<>(details);
+        payload.put("userId", userId);
+        notifyObservers(action, payload);
     }
 
     public List<User> getAllUsers() {
         return userRepository.findAll();
     }
 
+    @Cacheable(value = "user-service::user", key = "#id")
     public User getUserById(Long id) {
         return findUserByIdOrThrow(id);
     }
 
+    @Cacheable(value = "user-service::S1-F12", key = "#id + ':' + #page + ':' + #size")
+    public UserActivityFeedResponseDTO getUserActivityFeed(Long id, int page, int size) {
+        findUserByIdOrThrow(id);
+
+        Page<AuthEvent> eventPage = authEventRepository.findByUserIdOrderByTimestampDesc(
+                id, PageRequest.of(page, size));
+
+        List<AuthEventDTO> content = eventPage.getContent().stream()
+                .map(this::toAuthEventDto)
+                .toList();
+
+        UserActivityFeedResponseDTO response = new UserActivityFeedResponseDTO();
+        response.setContent(content);
+        response.setPage(page);
+        response.setSize(size);
+        response.setTotalElements(eventPage.getTotalElements());
+        return response;
+    }
+
     @Caching(evict = {
+            @CacheEvict(value = "user-service::user", key = "#id"),
             @CacheEvict(value = "user-service::S1-F8", key = "#id"),
             @CacheEvict(value = "user-service::S1-F3", key = "#id"),
             @CacheEvict(value = "user-service::S1-F1", allEntries = true),
@@ -78,11 +129,12 @@ public class UserService {
         existingUser.setStatus(updatedUser.getStatus());
         existingUser.setPreferences(updatedUser.getPreferences());
         User saved = userRepository.save(existingUser);
-        logEvent(id, "USER_UPDATED", Map.of("userId", id));
+        notifyObservers("USER_UPDATED", saved);
         return saved;
     }
 
     @Caching(evict = {
+            @CacheEvict(value = "user-service::user", key = "#id"),
             @CacheEvict(value = "user-service::S1-F8", key = "#id"),
             @CacheEvict(value = "user-service::S1-F3", key = "#id"),
             @CacheEvict(value = "user-service::S1-F1", allEntries = true),
@@ -91,7 +143,7 @@ public class UserService {
     public void deleteUser(Long id) {
         User user = findUserByIdOrThrow(id);
         userRepository.delete(user);
-        logEvent(id, "USER_DELETED", Map.of("userId", id));
+        notifyObservers("USER_DELETED", id);
     }
 
     @Cacheable(value = "user-service::S1-F1", key = "#name + '_' + #email + '_' + #role")
@@ -103,6 +155,7 @@ public class UserService {
     }
 
     @Caching(evict = {
+            @CacheEvict(value = "user-service::user", key = "#id"),
             @CacheEvict(value = "user-service::S1-F8", key = "#id"),
             @CacheEvict(value = "user-service::S1-F3", key = "#id"),
             @CacheEvict(value = "user-service::S1-F1", allEntries = true)
@@ -113,7 +166,7 @@ public class UserService {
         merged.putAll(newPreferences);
         user.setPreferences(merged);
         User saved = userRepository.save(user);
-        logEvent(id, "USER_UPDATED", Map.of("updatedFields", "preferences"));
+        notifyObservers("USER_UPDATED", Map.of("userId", id, "updatedFields", "preferences"));
         return saved;
     }
 
@@ -199,6 +252,7 @@ public class UserService {
 
     @Transactional
     @Caching(evict = {
+            @CacheEvict(value = "user-service::user", key = "#id"),
             @CacheEvict(value = "user-service::S1-F8", key = "#id"),
             @CacheEvict(value = "user-service::S1-F1", allEntries = true)
     })
@@ -209,7 +263,7 @@ public class UserService {
         }
         user.setStatus(Status.DEACTIVATED);
         User saved = userRepository.save(user);
-        logEvent(id, "USER_DEACTIVATED", Map.of("userId", id));
+        notifyObservers("USER_DEACTIVATED", Map.of("userId", id, "status", "DEACTIVATED"));
         return saved;
     }
 
@@ -230,8 +284,36 @@ public class UserService {
         }
         targetAddress.setIsDefault(true);
         userRepository.save(user);
-        logEvent(userId, "DEFAULT_ADDRESS_SET", Map.of("addressId", addressId));
+        notifyObservers("DEFAULT_ADDRESS_SET", Map.of("userId", userId, "addressId", addressId));
         return getUserProfile(userId);
+    }
+
+    @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "user-service::user", key = "#id"),
+            @CacheEvict(value = "user-service::S1-F12", allEntries = true)
+    })
+    public User updateUserRole(Long id, String requestedRole) {
+        User user = findUserByIdOrThrow(id);
+
+        if (requestedRole == null || requestedRole.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Role is required");
+        }
+
+        Role newRole;
+        try {
+            newRole = Role.valueOf(requestedRole.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid role value");
+        }
+
+        Role oldRole = user.getRole();
+        user.setRole(newRole);
+        User saved = userRepository.save(user);
+        logEvent(id, "ROLE_CHANGED", Map.of(
+                "oldRole", oldRole.name(),
+                "newRole", newRole.name()));
+        return saved;
     }
 
     private void logEvent(Long userId, String action, Map<String, Object> details) {
@@ -247,7 +329,54 @@ public class UserService {
         return userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found with id: " + id));
     }
-    public void logAuthEvent(Long userId, String action, Map<String, Object> details) {
-        logEvent(userId, action, details);
+
+    @Transactional
+    public User registerUser(User user) {
+// a) Validation: Check for null OR empty/blank strings
+        if (user.getName() == null || user.getName().isBlank() ||
+                user.getEmail() == null || user.getEmail().isBlank() ||
+                user.getPassword() == null || user.getPassword().isBlank() ||
+                user.getPhone() == null || user.getPhone().isBlank()) {
+
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Field cannot be blank");
+        }
+        // b) Uniqueness Check
+        if (userRepository.existsByEmail(user.getEmail()) ||
+                userRepository.existsByPhone(user.getPhone())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Email or Phone already exists");
+        }
+        // d) Default Role & Status
+        user.setPassword(passwordEncoder.encode(user.getPassword()));
+        user.setRole(Role.RIDER);
+        user.setStatus(Status.ACTIVE);
+
+        // Save to PostgreSQL
+        User savedUser = userRepository.save(user);
+
+        // e) Log to MongoDB via Observer Pattern
+        // This uses your MongoEventLogger and EventFactory internally
+        observer.onEvent("REGISTERED", savedUser);
+
+        return savedUser;
     }
+
+    private AuthEventDTO toAuthEventDto(AuthEvent event) {
+        AuthEventDTO dto = new AuthEventDTO();
+        dto.setId(event.getId());
+        dto.setUserId(event.getUserId());
+        dto.setAction(event.getAction());
+        dto.setTimestamp(event.getTimestamp());
+        dto.setDetails(event.getDetails());
+        return dto;
+    }
+//     public void logAuthEvent(Long userId, String action, Map<String, Object> details) {
+//         try {
+//             authEventRepository.save(new AuthEvent(userId, action, details));
+//         } catch (Exception e) {
+
+//         }
+//     }
+// public void logAuthEvent(Long userId, String action, Map<String, Object> details) {
+// logEvent(userId, action, details);
+// }
 }

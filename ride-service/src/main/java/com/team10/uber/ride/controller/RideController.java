@@ -7,6 +7,8 @@ import java.util.List;
 import com.team10.uber.ride.dto.*;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -17,8 +19,16 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.team10.uber.ride.dto.DriverRecommendationDTO;
+import com.team10.uber.ride.dto.FareEstimateDTO;
+import com.team10.uber.ride.dto.FareEstimateRequestDTO;
+import com.team10.uber.ride.dto.RideAnalyticsDTO;
+import com.team10.uber.ride.dto.RideDetailsDTO;
+import com.team10.uber.ride.dto.RideStopRequestDTO;
+import com.team10.uber.ride.dto.RideWithStopsDTO;
 import com.team10.uber.ride.enums.RideStatus;
 import com.team10.uber.ride.model.Ride;
+import com.team10.uber.ride.service.RecommendationService;
 import com.team10.uber.ride.service.RideService;
 
 @RestController
@@ -26,9 +36,11 @@ import com.team10.uber.ride.service.RideService;
 public class RideController {
 
     private final RideService rideService;
+    private final RecommendationService recommendationService;
 
-    public RideController(RideService rideService) {
+    public RideController(RideService rideService, RecommendationService recommendationService) {
         this.rideService = rideService;
+        this.recommendationService = recommendationService;
     }
 
     @PostMapping
@@ -126,5 +138,27 @@ public class RideController {
         rideService.logAnalyticsViewed(startDate, endDate, userId);
 
         return dto;
+    }
+
+    @GetMapping("/recommendations")
+    public ResponseEntity<List<DriverRecommendationDTO>> getDriverRecommendations(
+            @RequestParam Long userId,
+            @RequestParam(defaultValue = "5") int limit,
+            HttpServletRequest request) {
+
+        Long requesterId = (Long) request.getAttribute("userId");
+        String requesterRole = (String) request.getAttribute("userRole");
+
+        if (!userId.equals(requesterId) && !"ADMIN".equals(requesterRole)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
+        return ResponseEntity.ok(recommendationService.getDriverRecommendations(userId, limit));
+    }
+
+    @PostMapping("/{rideId}/record-interaction")
+    public String recordInteraction(@PathVariable Long rideId) {
+        return rideService.recordInteraction(rideId);
+
     }
 }

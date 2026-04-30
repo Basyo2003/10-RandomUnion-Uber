@@ -1,65 +1,88 @@
 package com.team10.uber.payment.service;
 
+import com.team10.uber.payment.cache.RedisCacheService;
+import com.team10.uber.payment.enums.DiscountType;
+import com.team10.uber.payment.enums.PaymentMethod;
+import com.team10.uber.payment.enums.PaymentStatus;
+import com.team10.uber.payment.model.Coupon;
 import com.team10.uber.payment.model.Payment;
+import com.team10.uber.payment.model.PaymentCoupon;
 import com.team10.uber.payment.observer.AbstractObservableService;
 import com.team10.uber.payment.observer.MongoEventLogger;
+import com.team10.uber.payment.repository.CouponRepository;
+import com.team10.uber.payment.repository.PaymentCouponRepository;
 import com.team10.uber.payment.repository.PaymentRepository;
+import com.team10.uber.payment.strategy.*;
 import jakarta.annotation.PostConstruct;
-
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
-import com.team10.uber.payment.enums.PaymentStatus;
-import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.Map;
-import com.team10.uber.payment.dto.UserPaymentSummaryDTO;
-import com.team10.uber.payment.dto.ProcessPaymentDTO;
-import com.team10.uber.payment.enums.PaymentMethod;
-import java.util.Optional;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.time.LocalDateTime;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.team10.uber.payment.cache.RedisCacheService;
+import com.team10.uber.payment.dto.*;
+import com.team10.uber.payment.enums.DiscountType;
+import com.team10.uber.payment.enums.PaymentMethod;
 import com.team10.uber.payment.enums.PaymentStatus;
-import java.util.Map;
-import java.util.HashMap;
+import com.team10.uber.payment.event.PaymentAuditEvent;
 import com.team10.uber.payment.model.Coupon;
+import com.team10.uber.payment.model.Payment;
 import com.team10.uber.payment.model.PaymentCoupon;
+import com.team10.uber.payment.observer.AbstractObservableService;
+import com.team10.uber.payment.observer.MongoEventLogger;
 import com.team10.uber.payment.repository.CouponRepository;
 import com.team10.uber.payment.repository.PaymentCouponRepository;
-import com.team10.uber.payment.enums.DiscountType;
-import java.time.LocalDateTime;
+import com.team10.uber.payment.repository.PaymentRepository;
+import com.team10.uber.payment.repository.mongo.PaymentAuditEventRepository;
 import com.team10.uber.payment.strategy.*;
+import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import com.team10.uber.payment.cache.RedisCacheService;
-import com.team10.uber.payment.dto.CouponUsageDTO;
-import com.team10.uber.payment.dto.PaymentDetailsDTO;
-import com.team10.uber.payment.dto.RevenueReportDTO;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
-
-import java.util.List;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class PaymentService extends AbstractObservableService {
 
     private static final Logger log = LoggerFactory.getLogger(PaymentService.class);
+
+    // §8.1 TTL constants
+    private static final long TTL_ANALYTICS = 10 * 60L; // 10 min — dashboards/analytics
+    private static final long TTL_SEARCH = 5 * 60L; // 5 min — search results
+    private static final long TTL_DETAIL = 15 * 60L; // 15 min — entity detail views
+
     private final PaymentRepository paymentRepository;
     private final CouponRepository couponRepository;
     private final PaymentCouponRepository paymentCouponRepository;
     private final MongoEventLogger mongoEventLogger;
+    private final PaymentAuditEventRepository auditEventRepository;
+    private final RedisCacheService cache;
 
     public PaymentService(PaymentRepository paymentRepository,
             CouponRepository couponRepository,
             PaymentCouponRepository paymentCouponRepository,
-            MongoEventLogger mongoEventLogger, RedisCacheService redisCacheService) {
+            MongoEventLogger mongoEventLogger,
+            PaymentAuditEventRepository auditEventRepository,
+            RedisCacheService cache) {
         this.paymentRepository = paymentRepository;
         this.couponRepository = couponRepository;
         this.paymentCouponRepository = paymentCouponRepository;
         this.mongoEventLogger = mongoEventLogger;
-        this.redisCacheService = redisCacheService;
+        this.auditEventRepository = auditEventRepository;
+        this.cache = cache;
+
     }
 
     @PostConstruct
@@ -67,35 +90,49 @@ public class PaymentService extends AbstractObservableService {
         register(mongoEventLogger);
     }
 
-    @Caching(evict = {
-        @CacheEvict(value = "payment-service::S5-F1", allEntries = true),
-        @CacheEvict(value = "payment-service::S5-F3", allEntries = true),
-        @CacheEvict(value = "payment-service::S5-F6", allEntries = true),
-        @CacheEvict(value = "payment-service::S5-F10", allEntries = true),
-        @CacheEvict(value = "payment-service::S5-F11", allEntries = true)
-    })
-    public Payment createPayment(Payment payment) {
+    // ── §4.4.6 — Cache invalidation helpers ──────────────────────────────────
 
-        // Check user exists
-        if (paymentRepository.countUserById(payment.getUserId()) == 0) {
+    private void evictPaymentCaches(Long paymentId) {
+        // entity detail
+        cache.evict("payment::" + paymentId);
+        // feature caches that reference this payment
+        cache.evictByPattern("S5-F1::*");
+        cache.evictByPattern("S5-F3::*");
+        cache.evictByPattern("S5-F8::" + paymentId);
+        cache.evictByPattern("S5-F9::*");
+    }
+
+    private void evictAnalyticsCaches() {
+        // §10.5.3e / §10.5.3i — invalidate analytics dashboards
+        cache.evictByPattern("S5-F6::*");
+        cache.evictByPattern("S5-F10::*");
+        cache.evictByPattern("S5-F11::*");
+    }
+
+    // ── CRUD ─────────────────────────────────────────────────────────────────
+
+    public Payment createPayment(Payment payment) {
+        if (paymentRepository.countUserById(payment.getUserId()) == 0)
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,
                     "User not found with id: " + payment.getUserId());
-        }
-
-        // Check ride exists
-        if (paymentRepository.countRideById(payment.getRideId()) == 0) {
+        if (paymentRepository.countRideById(payment.getRideId()) == 0)
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,
                     "Ride not found with id: " + payment.getRideId());
-        }
-
-        // Check ride does not already have a payment
-        if (paymentRepository.countPaymentsByRideId(payment.getRideId()) > 0) {
+        if (paymentRepository.countPaymentsByRideId(payment.getRideId()) > 0)
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "A payment already exists for ride id: " + payment.getRideId());
-        }
 
         Payment saved = paymentRepository.save(payment);
         notifyObservers("CREATED", saved);
+
+        saveAuditEvent(saved, "CREATED", Map.of(
+                "rideId", saved.getRideId(),
+                "userId", saved.getUserId()));
+
+        // §4.4.4 — invalidate search/list caches on new payment
+        cache.evictByPattern("S5-F1::*");
+        cache.evictByPattern("S5-F3::" + saved.getUserId() + "::*");
+        evictAnalyticsCaches();
         return saved;
     }
 
@@ -103,22 +140,20 @@ public class PaymentService extends AbstractObservableService {
         return paymentRepository.findAll();
     }
 
-    @Cacheable(value = "payment-service::payment", key = "#id")
+    // §4.4.2 — GET /api/payments/{id}, cached 15 min
     public Payment getPaymentById(Long id) {
-        return paymentRepository.findById(id)
+        String key = "payment::" + id;
+        Payment cached = cache.get(key, Payment.class);
+        if (cached != null)
+            return cached;
+
+        Payment payment = paymentRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Payment not found with id: " + id));
+        cache.put(key, payment, TTL_DETAIL);
+        return payment;
     }
 
-    @Caching(evict = {
-        @CacheEvict(value = "payment-service::payment", key = "#id"),
-        @CacheEvict(value = "payment-service::S5-F8", key = "#id"),
-        @CacheEvict(value = "payment-service::S5-F1", allEntries = true),
-        @CacheEvict(value = "payment-service::S5-F3", allEntries = true),
-        @CacheEvict(value = "payment-service::S5-F6", allEntries = true),
-        @CacheEvict(value = "payment-service::S5-F10", allEntries = true),
-        @CacheEvict(value = "payment-service::S5-F11", allEntries = true)
-    })
     public Payment updatePayment(Long id, Payment updatedPayment) {
         Payment existing = getPaymentById(id);
         existing.setRideId(updatedPayment.getRideId());
@@ -129,6 +164,8 @@ public class PaymentService extends AbstractObservableService {
         existing.setTransactionDetails(updatedPayment.getTransactionDetails());
         Payment saved = paymentRepository.save(existing);
         notifyObservers("UPDATED", saved);
+        evictPaymentCaches(id);
+        evictAnalyticsCaches();
         return saved;
     }
 
@@ -136,275 +173,355 @@ public class PaymentService extends AbstractObservableService {
         Payment payment = getPaymentById(id);
         paymentRepository.deleteById(id);
         notifyObservers("PAYMENT_DELETED", payment);
+
+        saveAuditEvent(payment, "PAYMENT_DELETED", Map.of(
+                "paymentId", id));
+
+        evictPaymentCaches(id);
+        evictAnalyticsCaches();
     }
 
-    @Transactional
-    public Payment refundPayment(Long id, String reason) {
-        Payment payment = getPaymentById(id);
+    // ── M1 Features ──────────────────────────────────────────────────────────
 
-        if (payment.getStatus() != PaymentStatus.COMPLETED) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST, "Payment cannot be refunded. Current status: " + payment.getStatus());
-        }
-
-        payment.setStatus(PaymentStatus.REFUNDED);
-
-        Map<String, Object> details = payment.getTransactionDetails();
-        if (details == null) {
-            details = new HashMap<>();
-        }
-        details.put("refundReason", reason);
-        details.put("refundedAt", LocalDateTime.now().toString());
-        payment.setTransactionDetails(details);
-
-        Payment saved = paymentRepository.save(payment);
-        notifyObservers("REFUNDED", saved);
-        return saved;
-    }
-
-    public LocalDateTime parseDate(String date, boolean endOfDay) {
-        if (date == null) return null;
-        if (date.contains("T")) {
-            return LocalDateTime.parse(date);
-        }
-        return endOfDay
-                ? LocalDateTime.parse(date + "T23:59:59.999999999")
-                : LocalDateTime.parse(date + "T00:00:00");
-    }
-
-    @Cacheable(value = "payment-service::S5-F3", key = "#userId")
-    public UserPaymentSummaryDTO getUserPaymentSummary(Long userId) {
-        // a) Verify user exists via native SQL
-        int userCount = paymentRepository.countUserById(userId);
-        if (userCount == 0) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found with id: " + userId);
-        }
-
-        // b) Query payment data grouped by method
-        List<Object[]> results = paymentRepository.findPaymentSummaryByUserId(userId);
-
-        // c) Build method breakdown map
-        Map<String, Double> methodBreakdown = new HashMap<>();
-        for (Object[] row : results) {
-            String method = (String) row[0];
-            Double totalForMethod = ((Number) row[2]).doubleValue();
-            methodBreakdown.put(method, totalForMethod);
-        }
-
-        // d) Calculate totals
-        long totalPayments = 0;
-        double totalAmount = 0.0;
-        for (Object[] row : results) {
-            totalPayments += ((Number) row[1]).longValue();
-            totalAmount += ((Number) row[2]).doubleValue();
-        }
-
-        // e) Build and return DTO
-        return new UserPaymentSummaryDTO(userId, totalPayments, totalAmount, methodBreakdown);
-    }
-
-    @Transactional
-    public Payment processPaymentForRide(Long rideId, ProcessPaymentDTO dto) {
-
-        // a) Verify ride exists
-        String rideStatus = paymentRepository.findRideStatusById(rideId);
-        if (rideStatus == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Ride not found with id: " + rideId);
-        }
-
-        // b) Verify ride is COMPLETED
-        if (!rideStatus.equals("COMPLETED")) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Ride is not completed. Current status: " + rideStatus);
-        }
-
-        // c) Check no COMPLETED payment exists for this ride
-        Optional<Payment> existingPayment = paymentRepository.findByRideIdAndStatus(rideId, PaymentStatus.COMPLETED);
-        if (existingPayment.isPresent()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "already paid");
-        }
-
-        // d) Validate cardLastFour
-        if (dto.getMethod().equals("CREDIT_CARD") && dto.getCardLastFour() != null) {
-            String cardLastFour = dto.getCardLastFour();
-            if (cardLastFour.length() != 4 || !cardLastFour.matches("\\d{4}")) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "cardLastFour must be exactly 4 digits");
-            }
-        }
-
-        // e) Get ride details
-        Double fare = paymentRepository.findRideFareById(rideId);
-        Long userId = paymentRepository.findRideUserIdById(rideId);
-
-        // f) Build JSONB transactionDetails
-        Map<String, Object> transactionDetails = new HashMap<>();
-        transactionDetails.put("gatewayResponse", "success");
-        transactionDetails.put("cardLastFour", dto.getCardLastFour());
-        transactionDetails.put("receiptUrl", "https://receipts.com/" + rideId);
-        transactionDetails.put("failureReason", null);
-
-        // g) Create and save payment
-        Payment payment = new Payment();
-        payment.setRideId(rideId);
-        payment.setUserId(userId);
-        payment.setAmount(fare != null ? fare : 0.0);
-        payment.setMethod(PaymentMethod.valueOf(dto.getMethod()));
-        payment.setStatus(PaymentStatus.COMPLETED);
-        payment.setTransactionDetails(transactionDetails);
-
-        Payment saved = paymentRepository.save(payment);
-        notifyObservers("COMPLETED", saved);
-        return saved;
-    }
-
-    @Caching(evict = {
-        @CacheEvict(value = "payment-service::payment", key = "#paymentId"),
-        @CacheEvict(value = "payment-service::S5-F8", key = "#paymentId"),
-        @CacheEvict(value = "payment-service::S5-F9", allEntries = true)
-    })
-    public PaymentDetailsDTO applyCoupon(Long paymentId, Long couponId) {
-        Payment payment = getPaymentById(paymentId);
-
-        if (payment.getStatus() != PaymentStatus.PENDING) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "cannot apply coupon to a completed/cancelled payment");
-        }
-
-        Coupon coupon = couponRepository.findById(couponId)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "Coupon not found with id: " + couponId));
-
-        if (!coupon.getActive()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Coupon is not active");
-        }
-        if (coupon.getExpiryDate().isBefore(LocalDateTime.now())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Coupon has expired");
-        }
-        if (coupon.getCurrentUses() >= coupon.getMaxUses()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Coupon usage limit reached");
-        }
-
-        Optional<PaymentCoupon> existing = paymentCouponRepository
-                .findByPaymentIdAndCouponId(paymentId, couponId);
-        if (existing.isPresent()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "coupon already applied");
-        }
-
-        double discount;
-        if (coupon.getDiscountType() == DiscountType.PERCENTAGE) {
-            discount = payment.getAmount() * coupon.getDiscountValue() / 100;
-        } else {
-            discount = coupon.getDiscountValue();
-        }
-        if (discount > payment.getAmount()) {
-            discount = payment.getAmount();
-        }
-
-        PaymentCoupon paymentCoupon = new PaymentCoupon();
-        paymentCoupon.setPayment(payment);
-        paymentCoupon.setCoupon(coupon);
-        paymentCoupon.setDiscountApplied(discount);
-
-        coupon.setCurrentUses(coupon.getCurrentUses() + 1);
-
-        paymentCouponRepository.save(paymentCoupon);
-        couponRepository.save(coupon);
-
-        notifyObservers("COUPON_APPLIED", payment);
-        return getPaymentDetails(paymentId);
-    }
-
-    @Cacheable(value = "payment-service::S5-F1", key = "#status + '_' + #startDate + '_' + #endDate")
+    // §4.4.1 — S5-F1: search payments, cached 5 min
     public List<Payment> searchPayments(String status, LocalDateTime startDate, LocalDateTime endDate) {
+        String key = "S5-F1::" + status + "::" + startDate + "::" + endDate;
+        List<Payment> cached = cache.get(key, new TypeReference<List<Payment>>() {
+        });
+        if (cached != null)
+            return cached;
+
         List<Payment> result;
         if (status == null || status.isEmpty()) {
             result = paymentRepository.findByDateRange(startDate, endDate);
         } else {
             result = paymentRepository.findByStatusAndDateRange(status, startDate, endDate);
         }
-
-        System.out.println("Result size: " + result.size());
+        cache.put(key, result, TTL_SEARCH);
         return result;
     }
 
-    @Cacheable(value = "payment-service::S5-F6", key = "#startDate + '_' + #endDate")
-    public RevenueReportDTO getRevenueReport(LocalDateTime startDate, LocalDateTime endDate) {
-        if (startDate.isAfter(endDate)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "startDate must be before endDate");
-        }
+    // §4.4.1 — S5-F2: refund payment — write, invalidates caches
+    @Transactional
+    public Payment refundPayment(Long id, String reason) {
+        Payment payment = getPaymentById(id);
+        if (payment.getStatus() != PaymentStatus.COMPLETED)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Payment cannot be refunded. Current status: " + payment.getStatus());
 
-        Object[] revenueRow = paymentRepository.findRevenueStats(startDate, endDate);
-        Object[] refundRow  = paymentRepository.findRefundStats(startDate, endDate);
+        payment.setStatus(PaymentStatus.REFUNDED);
+        Map<String, Object> details = payment.getTransactionDetails();
+        if (details == null)
+            details = new HashMap<>();
+        details.put("refundReason", reason);
+        details.put("refundedAt", LocalDateTime.now().toString());
+        payment.setTransactionDetails(details);
 
-        if (revenueRow != null && revenueRow.length > 0 && revenueRow[0] instanceof Object[]) {
-            revenueRow = (Object[]) revenueRow[0];
-        }
-        if (refundRow != null && refundRow.length > 0 && refundRow[0] instanceof Object[]) {
-            refundRow = (Object[]) refundRow[0];
-        }
+        Payment saved = paymentRepository.save(payment);
+        notifyObservers("REFUNDED", saved);
 
-        Double totalRevenue = (revenueRow != null && revenueRow.length > 0 && revenueRow[0] != null) ? ((Number) revenueRow[0]).doubleValue() : 0.0;
-        Long   totalTransactions = (revenueRow != null && revenueRow.length > 1 && revenueRow[1] != null) ? ((Number) revenueRow[1]).longValue() : 0L;
-        Double averagePayment= (totalTransactions > 0) ? totalRevenue / totalTransactions : 0.0;
+        saveAuditEvent(saved, "REFUNDED", Map.of(
+                "refundReason", reason,
+                "refundedAt", LocalDateTime.now().toString()));
 
-        Double refundedAmount = (refundRow != null && refundRow.length > 0 && refundRow[0] != null) ? ((Number) refundRow[0]).doubleValue() : 0.0;
-        Long   refundCount = (refundRow != null && refundRow.length > 1 && refundRow[1] != null) ? ((Number) refundRow[1]).longValue() : 0L;
-
-        return new RevenueReportDTO(totalRevenue, totalTransactions, averagePayment, refundedAmount, refundCount);
+        evictPaymentCaches(id);
+        evictAnalyticsCaches();
+        return saved;
     }
 
+    // §4.4.1 — S5-F3: user payment summary, cached 5 min
+    public UserPaymentSummaryDTO getUserPaymentSummary(Long userId) {
+        String key = "S5-F3::" + userId;
+        UserPaymentSummaryDTO cached = cache.get(key, UserPaymentSummaryDTO.class);
+        if (cached != null)
+            return cached;
+
+        int userCount = paymentRepository.countUserById(userId);
+        if (userCount == 0)
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "User not found with id: " + userId);
+
+        List<Object[]> results = paymentRepository.findPaymentSummaryByUserId(userId);
+        Map<String, Double> methodBreakdown = new HashMap<>();
+        long totalPayments = 0;
+        double totalAmount = 0.0;
+
+        for (Object[] row : results) {
+            methodBreakdown.put((String) row[0], ((Number) row[2]).doubleValue());
+            totalPayments += ((Number) row[1]).longValue();
+            totalAmount += ((Number) row[2]).doubleValue();
+        }
+
+        UserPaymentSummaryDTO result = new UserPaymentSummaryDTO(
+                userId, totalPayments, totalAmount, methodBreakdown);
+        cache.put(key, result, TTL_SEARCH);
+        return result;
+    }
+
+    // §4.4.1 — S5-F4: process payment — write, invalidates caches
+    @Transactional
+    public Payment processPaymentForRide(Long rideId, ProcessPaymentDTO dto, boolean simulateFailure) {
+
+        // a) Verify ride exists
+        String rideStatus = paymentRepository.findRideStatusById(rideId);
+        if (rideStatus == null)
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "Ride not found with id: " + rideId);
+        if (!rideStatus.equals("COMPLETED"))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Ride is not completed. Current status: " + rideStatus);
+
+        Optional<Payment> existingPayment = paymentRepository
+                .findByRideIdAndStatus(rideId, PaymentStatus.COMPLETED);
+        if (existingPayment.isPresent())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "already paid");
+
+        if (dto.getMethod().equals("CREDIT_CARD") && dto.getCardLastFour() != null) {
+            String card = dto.getCardLastFour();
+            if (card.length() != 4 || !card.matches("\\d{4}"))
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "cardLastFour must be exactly 4 digits");
+        }
+
+        Double fare = paymentRepository.findRideFareById(rideId);
+        Long userId = paymentRepository.findRideUserIdById(rideId);
+        double amount = fare != null ? fare : 0.0;
+
+        // f) Compute surgeFee from ride metadata.surgeMultiplier (15% fallback)
+        String surgeMultStr = paymentRepository.findSurgeMultiplierByRideId(rideId);
+        double surgeFee;
+        if (surgeMultStr != null) {
+            double multiplier = Double.parseDouble(surgeMultStr);
+            surgeFee = amount * (multiplier - 1.0);
+        } else {
+            surgeFee = amount * 0.15;
+        }
+
+        // g) Build JSONB transactionDetails
+        Map<String, Object> transactionDetails = new HashMap<>();
+        transactionDetails.put("gatewayResponse", "success");
+        transactionDetails.put("cardLastFour", dto.getCardLastFour());
+        transactionDetails.put("receiptUrl", "https://receipts.com/" + rideId);
+        transactionDetails.put("failureReason", null);
+        transactionDetails.put("surgeFee", surgeFee);
+
+        // h) Save with PENDING, fire CREATED
+        Payment payment = new Payment();
+        payment.setRideId(rideId);
+        payment.setUserId(userId);
+        payment.setAmount(amount);
+        payment.setMethod(PaymentMethod.valueOf(dto.getMethod()));
+        payment.setStatus(PaymentStatus.PENDING);
+        payment.setTransactionDetails(transactionDetails);
+
+        Payment saved = paymentRepository.save(payment);
+        notifyObservers("CREATED", saved);
+
+        saveAuditEvent(saved, "CREATED", Map.of(
+                "rideId", rideId,
+                "userId", userId,
+                "surgeFee", surgeFee));
+
+        // i) simulateFailure path
+        if (simulateFailure) {
+            saved.setStatus(PaymentStatus.FAILED);
+            Map<String, Object> failDetails = new HashMap<>(saved.getTransactionDetails());
+            failDetails.put("gatewayResponse", "declined");
+            failDetails.put("failureReason", "simulated failure");
+            saved.setTransactionDetails(failDetails);
+            paymentRepository.save(saved);
+            notifyObservers("FAILED", saved);
+
+            saveAuditEvent(saved, "FAILED", Map.of(
+                    "failureReason", "simulated failure",
+                    "gatewayResponse", "declined"));
+
+            return saved;
+        }
+
+        // j) Normal path — transition to COMPLETED
+        saved.setStatus(PaymentStatus.COMPLETED);
+        paymentRepository.save(saved);
+        notifyObservers("COMPLETED", saved);
+
+        saveAuditEvent(saved, "COMPLETED", Map.of(
+                "rideId", rideId,
+                "surgeFee", surgeFee,
+                "gatewayResponse", "success"));
+
+        // §4.4.4 — invalidate affected caches
+        cache.evictByPattern("S5-F1::*");
+        cache.evictByPattern("S5-F3::" + userId);
+        evictAnalyticsCaches();
+        return saved;
+    }
+
+    // §4.4.1 — S5-F5: apply coupon — write, invalidates caches
+    public PaymentDetailsDTO applyCoupon(Long paymentId, Long couponId) {
+        Payment payment = getPaymentById(paymentId);
+        if (payment.getStatus() != PaymentStatus.PENDING)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "cannot apply coupon to a completed/cancelled payment");
+
+        Coupon coupon = couponRepository.findById(couponId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Coupon not found with id: " + couponId));
+
+        if (!coupon.getActive())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Coupon is not active");
+        if (coupon.getExpiryDate().isBefore(LocalDateTime.now()))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Coupon has expired");
+        if (coupon.getCurrentUses() >= coupon.getMaxUses())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Coupon usage limit reached");
+
+        Optional<PaymentCoupon> existing = paymentCouponRepository
+                .findByPaymentIdAndCouponId(paymentId, couponId);
+        if (existing.isPresent())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "coupon already applied");
+
+        double discount = coupon.getDiscountType() == DiscountType.PERCENTAGE
+                ? payment.getAmount() * coupon.getDiscountValue() / 100
+                : coupon.getDiscountValue();
+        if (discount > payment.getAmount())
+            discount = payment.getAmount();
+
+        PaymentCoupon paymentCoupon = new PaymentCoupon();
+        paymentCoupon.setPayment(payment);
+        paymentCoupon.setCoupon(coupon);
+        paymentCoupon.setDiscountApplied(discount);
+        coupon.setCurrentUses(coupon.getCurrentUses() + 1);
+
+        paymentCouponRepository.save(paymentCoupon);
+        couponRepository.save(coupon);
+        notifyObservers("COUPON_APPLIED", payment);
+
+        saveAuditEvent(payment, "COUPON_APPLIED", Map.of(
+                "couponId", couponId,
+                "discountApplied", discount));
+
+        // §4.4.4 — invalidate detail and coupon caches
+        evictPaymentCaches(paymentId);
+        cache.evictByPattern("S5-F9::*");
+        return getPaymentDetails(paymentId);
+    }
+
+    // §4.4.1 — S5-F6: revenue report, cached 10 min
+    public RevenueReportDTO getRevenueReport(LocalDateTime startDate, LocalDateTime endDate) {
+        if (startDate.isAfter(endDate))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "startDate must be before endDate");
+
+        String key = "S5-F6::" + startDate + "::" + endDate;
+        RevenueReportDTO cached = cache.get(key, RevenueReportDTO.class);
+        if (cached != null)
+            return cached;
+
+        Object[] revenueRow = paymentRepository.findRevenueStats(startDate, endDate);
+        Object[] refundRow = paymentRepository.findRefundStats(startDate, endDate);
+
+        if (revenueRow != null && revenueRow.length > 0 && revenueRow[0] instanceof Object[])
+            revenueRow = (Object[]) revenueRow[0];
+        if (refundRow != null && refundRow.length > 0 && refundRow[0] instanceof Object[])
+            refundRow = (Object[]) refundRow[0];
+
+        Double totalRevenue = (revenueRow != null && revenueRow.length > 0 && revenueRow[0] != null)
+                ? ((Number) revenueRow[0]).doubleValue()
+                : 0.0;
+        Long totalTransactions = (revenueRow != null && revenueRow.length > 1 && revenueRow[1] != null)
+                ? ((Number) revenueRow[1]).longValue()
+                : 0L;
+        Double averagePayment = totalTransactions > 0 ? totalRevenue / totalTransactions : 0.0;
+        Double refundedAmount = (refundRow != null && refundRow.length > 0 && refundRow[0] != null)
+                ? ((Number) refundRow[0]).doubleValue()
+                : 0.0;
+        Long refundCount = (refundRow != null && refundRow.length > 1 && refundRow[1] != null)
+                ? ((Number) refundRow[1]).longValue()
+                : 0L;
+
+        RevenueReportDTO result = new RevenueReportDTO(
+                totalRevenue, totalTransactions, averagePayment, refundedAmount, refundCount);
+        cache.put(key, result, TTL_ANALYTICS);
+        return result;
+    }
+
+    // §4.4.1 — S5-F7: retry payment — write, invalidates caches
     @Transactional
     public Payment retryPayment(Long id) {
-        Payment payment = paymentRepository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Payment not found"));
-    
-        if (payment.getStatus() != PaymentStatus.FAILED) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only FAILED payments can be retried");
-        }
-    
+        Payment payment = paymentRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Payment not found"));
+        if (payment.getStatus() != PaymentStatus.FAILED)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Only FAILED payments can be retried");
+
         payment.setStatus(PaymentStatus.COMPLETED);
-    
         Map<String, Object> details = payment.getTransactionDetails();
-        if (details == null) {
-            details = new java.util.HashMap<>();
-        }
-    
-        int retryAttempt = details.containsKey("retryAttempt") ? ((Number) details.get("retryAttempt")).intValue() + 1 : 1;
-    
+        if (details == null)
+            details = new HashMap<>();
+        int retryAttempt = details.containsKey("retryAttempt")
+                ? ((Number) details.get("retryAttempt")).intValue() + 1
+                : 1;
         details.put("retryAttempt", retryAttempt);
         details.put("gatewayResponse", "approved");
         payment.setTransactionDetails(details);
 
         Payment saved = paymentRepository.save(payment);
         notifyObservers("RETRY_ATTEMPTED", saved);
+
+        saveAuditEvent(saved, "RETRY_ATTEMPTED", Map.of(
+                "retryAttempt", retryAttempt,
+                "gatewayResponse", "approved"));
+
+        evictPaymentCaches(id);
+        evictAnalyticsCaches();
         return saved;
     }
 
-    @Cacheable(value = "payment-service::S5-F8", key = "#paymentId")
+    // §4.4.1 — S5-F8: payment details, cached 15 min
     public PaymentDetailsDTO getPaymentDetails(Long paymentId) {
-        Payment payment = paymentRepository.findById(paymentId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Payment not found"));
+        String key = "S5-F8::" + paymentId;
+        PaymentDetailsDTO cached = cache.get(key, PaymentDetailsDTO.class);
+        if (cached != null)
+            return cached;
+
+        Payment payment = paymentRepository.findById(paymentId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Payment not found"));
 
         List<PaymentCoupon> paymentCoupons = paymentCouponRepository.findByPaymentId(paymentId);
+        List<PaymentDetailsDTO.AppliedCouponDTO> appliedCouponDTOs = paymentCoupons.stream()
+                .map(pc -> new PaymentDetailsDTO.AppliedCouponDTO(
+                        pc.getCoupon().getCode(),
+                        pc.getCoupon().getDiscountType().name(),
+                        pc.getDiscountApplied(),
+                        pc.getAppliedAt()))
+                .collect(Collectors.toList());
 
-        List<PaymentDetailsDTO.AppliedCouponDTO> appliedCouponDTOs = paymentCoupons.stream().map(pc -> new PaymentDetailsDTO.AppliedCouponDTO(pc.getCoupon().getCode(), pc.getCoupon().getDiscountType().name(), pc.getDiscountApplied(), pc.getAppliedAt())).collect(java.util.stream.Collectors.toList());
-
-        Double totalDiscount = appliedCouponDTOs.stream().mapToDouble(PaymentDetailsDTO.AppliedCouponDTO::getDiscountApplied).sum();
-
+        Double totalDiscount = appliedCouponDTOs.stream()
+                .mapToDouble(PaymentDetailsDTO.AppliedCouponDTO::getDiscountApplied).sum();
         Double finalAmount = payment.getAmount() - totalDiscount;
+        Map<String, Object> transactionDetails = payment.getTransactionDetails() != null
+                ? payment.getTransactionDetails()
+                : new HashMap<>();
 
-        Map<String, Object> transactionDetails = payment.getTransactionDetails();
-        if (transactionDetails == null) {
-            transactionDetails = new java.util.HashMap<>();
-        }
-
-        return new PaymentDetailsDTO(payment.getId(), payment.getRideId(), payment.getUserId(), payment.getAmount(), payment.getMethod(), payment.getStatus(), transactionDetails, appliedCouponDTOs, totalDiscount, finalAmount); 
+        PaymentDetailsDTO result = new PaymentDetailsDTO(
+                payment.getId(), payment.getRideId(), payment.getUserId(),
+                payment.getAmount(), payment.getMethod(), payment.getStatus(),
+                transactionDetails, appliedCouponDTOs, totalDiscount, finalAmount);
+        cache.put(key, result, TTL_DETAIL);
+        return result;
     }
 
-    @Cacheable(value = "payment-service::S5-F9", key = "#limit")
+    // §4.4.1 — S5-F9: top used coupons, cached 10 min
     public List<CouponUsageDTO> getTopUsedCoupons(int limit) {
-        List<Object[]> rows = couponRepository.findTopUsedCoupons(limit);
+        String key = "S5-F9::" + limit;
+        List<CouponUsageDTO> cached = cache.get(key, new TypeReference<List<CouponUsageDTO>>() {
+        });
+        if (cached != null)
+            return cached;
 
-        return rows.stream().map(row -> {
+        List<Object[]> rows = couponRepository.findTopUsedCoupons(limit);
+        List<CouponUsageDTO> result = rows.stream().map(row -> {
             Long couponId = ((Number) row[0]).longValue();
             String code = (String) row[1];
             String discountType = (String) row[2];
@@ -412,94 +529,253 @@ public class PaymentService extends AbstractObservableService {
             Integer timesUsed = ((Number) row[4]).intValue();
             Double totalDiscountGiven = ((Number) row[5]).doubleValue();
             Boolean active = (Boolean) row[6];
-
-            java.time.LocalDateTime expiryDate;
-            if (row[7] instanceof java.sql.Timestamp) {
+            LocalDateTime expiryDate;
+            if (row[7] instanceof java.sql.Timestamp)
                 expiryDate = ((java.sql.Timestamp) row[7]).toLocalDateTime();
-            } else if (row[7] instanceof java.time.LocalDateTime) {
-                expiryDate = (java.time.LocalDateTime) row[7];
-            } else {
-                expiryDate = java.time.LocalDateTime.parse(row[7].toString());
-            }
-            Boolean expired = expiryDate.isBefore(java.time.LocalDateTime.now());
+            else if (row[7] instanceof LocalDateTime)
+                expiryDate = (LocalDateTime) row[7];
+            else
+                expiryDate = LocalDateTime.parse(row[7].toString());
+            Boolean expired = expiryDate.isBefore(LocalDateTime.now());
+            return new CouponUsageDTO(couponId, code, discountType, discountValue,
+                    timesUsed, totalDiscountGiven, active, expired);
+        }).collect(Collectors.toList());
 
-            return new CouponUsageDTO(couponId, code, discountType, discountValue, timesUsed, totalDiscountGiven, active, expired);
-        }).collect(java.util.stream.Collectors.toList());
+        cache.put(key, result, TTL_ANALYTICS);
+        return result;
     }
 
-    @Transactional
-    public Payment refundSurgeAdjusted(Long id, RefundRequest request) {
+    // ── M2 Features ──────────────────────────────────────────────────────────
 
-        // §10.5.3b — Find payment → 404
-        Payment payment = getPaymentById(id);
+    // §10.5.1
+    public List<VehicleTypeRevenueDTO> getFareRevenueByVehicleType(String startDateStr, String endDateStr) {
+        LocalDateTime startDate = parseDate(startDateStr, false);
+        LocalDateTime endDate = parseDate(endDateStr, true);
 
-        // §10.5.3c — Validate status == COMPLETED → 400
-        if (payment.getStatus() != PaymentStatus.COMPLETED) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Payment must be COMPLETED to be refunded");
+        if (startDate.isAfter(endDate)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "startDate must be before endDate");
         }
 
-        // §3.2 — Select strategy via selector — NO if/else here
+        // §10.5.1(f)
+        try {
+            PaymentAuditEvent event = new PaymentAuditEvent(
+                    null, // Analytics are not tied to a specific payment ID
+                    "ANALYTICS_VIEWED",
+                    LocalDateTime.now(),
+                    null,
+                    null,
+                    Map.of("dashboard", "vehicle-type-revenue", "startDate", startDate.toString(), "endDate", endDate.toString())
+            );
+            auditEventRepository.save(event);
+        } catch (Exception e) {
+            log.warn("MongoDB audit event write failed: {}", e.getMessage());
+        }
+
+        // (10 min TTL)
+        String key = "S5-F10::" + startDate + "::" + endDate;
+        List<VehicleTypeRevenueDTO> cached = cache.get(key, new TypeReference<List<VehicleTypeRevenueDTO>>() {});
+        if (cached != null) return cached;
+
+        List<Object[]> rows = paymentRepository.findVehicleTypeRevenueStats(startDate, endDate);
+        List<VehicleTypeRevenueDTO> result = new ArrayList<>();
+
+        for (Object[] row : rows) {
+            String vehicleType = (String) row[0];
+            Double surgeFeeRevenue = row[1] != null ? ((Number) row[1]).doubleValue() : 0.0;
+            Double baseFareRevenue = row[2] != null ? ((Number) row[2]).doubleValue() : 0.0;
+            Double totalRevenue = row[3] != null ? ((Number) row[3]).doubleValue() : 0.0;
+            Long rideCount = row[4] != null ? ((Number) row[4]).longValue() : 0L;
+
+            result.add(VehicleTypeRevenueDTO.builder()
+                    .vehicleType(vehicleType)
+                    .surgeFeeRevenue(surgeFeeRevenue)
+                    .baseFareRevenue(baseFareRevenue)
+                    .totalRevenue(totalRevenue)
+                    .rideCount(rideCount)
+                    .build());
+        }
+
+        cache.put(key, result, TTL_ANALYTICS);
+        return result;
+    }
+
+    // §10.5.2 — S5-F11: Get Payment Method Breakdown
+    public List<PaymentMethodDTO> getPaymentMethodBreakdown(String startDateStr, String endDateStr) {
+        LocalDateTime startDate = parseDate(startDateStr, false);  // 00:00:00
+        LocalDateTime endDate = parseDate(endDateStr, true);      // 23:59:59.999
+
+        if (startDate.isAfter(endDate)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "startDate must be before endDate");
+        }
+
+        // Log ANALYTICS_VIEWED (pure observability - same pattern as S5-F10)
+        try {
+            PaymentAuditEvent event = new PaymentAuditEvent(
+                    null,
+                    "ANALYTICS_VIEWED",
+                    LocalDateTime.now(),
+                    null,
+                    null,
+                    Map.of("dashboard", "payment-method-breakdown",
+                           "startDate", startDate.toString(),
+                           "endDate", endDate.toString())
+            );
+            auditEventRepository.save(event);
+        } catch (Exception e) {
+            log.warn("MongoDB audit event write failed: {}", e.getMessage());
+        }
+
+        // Redis caching (10 min TTL - matches TTL_ANALYTICS)
+        String key = "S5-F11::" + startDate + "::" + endDate;
+        List<PaymentMethodDTO> cached = cache.get(key, new TypeReference<List<PaymentMethodDTO>>() {});
+        if (cached != null) {
+            return cached;
+        }
+
+        // Query MongoDB (only COMPLETED + FAILED)
+        List<PaymentAuditEvent> events = auditEventRepository
+                .findByTimestampBetweenAndActionIn(startDate, endDate);
+
+        // Group by method
+        Map<String, PaymentMethodStats> statsMap = new HashMap<>();
+        for (PaymentAuditEvent event : events) {
+            String method = event.getMethod();
+            if (method == null) continue;
+
+            PaymentMethodStats stats = statsMap.computeIfAbsent(method, k -> new PaymentMethodStats());
+
+            if ("COMPLETED".equals(event.getAction())) {
+                stats.successCount++;
+                stats.totalAmount += (event.getAmount() != null ? event.getAmount() : 0.0);
+            } else if ("FAILED".equals(event.getAction())) {
+                stats.failureCount++;
+            }
+        }
+
+        // Build DTO list
+        List<PaymentMethodDTO> result = statsMap.entrySet().stream()
+                .map(entry -> {
+                    String method = entry.getKey();
+                    PaymentMethodStats s = entry.getValue();
+                    long total = s.successCount + s.failureCount;
+                    double rate = total == 0 ? 0.0 : (double) s.successCount / total;
+
+                    return PaymentMethodDTO.builder()
+                            .method(method)
+                            .successCount(s.successCount)
+                            .failureCount(s.failureCount)
+                            .successRate(rate)
+                            .totalAmount(s.totalAmount)
+                            .build();
+                })
+                .toList();
+
+        cache.put(key, result, TTL_ANALYTICS);
+        return result;
+    }
+
+    // Tiny helper class for grouping (private inside service)
+    private static class PaymentMethodStats {
+        long successCount = 0;
+        long failureCount = 0;
+        double totalAmount = 0.0;
+    }
+
+    // §10.5.3 — S5-F12: surge-adjusted refund with Strategy pattern
+    @Transactional
+    public Payment refundSurgeAdjusted(Long id, RefundRequest request) {
+        Payment payment = getPaymentById(id);
+
+        if (payment.getStatus() != PaymentStatus.COMPLETED)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Payment must be COMPLETED to be refunded");
+
+        // §3.2 — No if/else — selector chooses strategy
         RefundStrategySelector selector = new RefundStrategySelector();
         RefundStrategy strategy = selector.select(payment, request);
         RefundResult result = strategy.calculateRefund(payment, request);
 
-        // §10.5.3e — If NoRefundStrategy selected
+        // §10.5.3e — NoRefundStrategy path
         if (result.getAmount() == 0.0 && result.getReasonCode().equals("refund window expired")) {
-
-            // Log REFUND_DENIED to MongoDB
-            logPaymentEvent(payment, "REFUND_DENIED", Map.of(
+            saveAuditEvent(payment, "REFUND_DENIED", Map.of(
                     "strategyName", result.getStrategyName(),
-                    "reason", result.getReasonCode()
-            ));
-
-            // §10.5.3e — Invalidate caches
+                    "reason", result.getReasonCode()));
+            evictPaymentCaches(id);
             evictAnalyticsCaches();
-
-            // §10.5.3e — Throw 400 after logging
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "refund window expired");
         }
 
-        // §10.5.3f — Update payment status
+        // §10.5.3f,g — Update payment
         payment.setStatus(PaymentStatus.REFUNDED);
-
-        // §10.5.3g — Update transactionDetails JSONB
         Map<String, Object> details = payment.getTransactionDetails();
-        if (details == null) details = new HashMap<>();
+        if (details == null)
+            details = new HashMap<>();
         details.put("refundAmount", result.getAmount());
         details.put("refundSurgeIncluded", request.isRefundSurge());
         details.put("refundReason", request.getReason());
         details.put("refundedAt", LocalDateTime.now().toString());
         payment.setTransactionDetails(details);
-
         Payment saved = paymentRepository.save(payment);
 
-        // §10.5.3h — Log REFUNDED event to MongoDB
-        logPaymentEvent(payment, "REFUNDED", Map.of(
+        // §10.5.3h — Log REFUNDED to MongoDB
+        saveAuditEvent(saved, "REFUNDED", Map.of(
                 "strategyName", result.getStrategyName(),
                 "reason", request.getReason(),
                 "originalAmount", payment.getAmount(),
                 "refundAmount", result.getAmount(),
-                "surgeIncluded", request.isRefundSurge()
-        ));
+                "surgeIncluded", request.isRefundSurge()));
 
         // §10.5.3i — Invalidate caches
+        evictPaymentCaches(id);
         evictAnalyticsCaches();
-
         return saved;
     }
 
-    private void logPaymentEvent(Payment payment, String action, Map<String, Object> details) {
+    // ── Helpers ──────────────────────────────────────────────────────────────
+
+    public LocalDateTime parseDate(String date, boolean endOfDay) {
+        if (date == null)
+            return null;
+        if (date.contains("T"))
+            return LocalDateTime.parse(date);
+        return endOfDay
+                ? LocalDateTime.parse(date + "T23:59:59.999999999")
+                : LocalDateTime.parse(date + "T00:00:00");
+    }
+
+    // §7.1.6 — Save PaymentAuditEvent to MongoDB (soft dependency)
+    private void saveAuditEvent(Payment payment, String action, Map<String, Object> details) {
         try {
-            // Log to MongoDB payment_audit_trail via Observer
-            // (wire to your existing MongoEventLogger/Observer pattern)
+            // §7.1.6 — method+amount required on payment-shaped actions only
+            boolean requiresMethodAndAmount = List.of(
+                    "CREATED", "COMPLETED", "FAILED",
+                    "REFUNDED", "REFUND_DENIED",
+                    "COUPON_APPLIED", "RETRY_ATTEMPTED"
+            ).contains(action);
+
+            String method = requiresMethodAndAmount && payment.getMethod() != null
+                    ? payment.getMethod().name() : null;
+            Double amount = requiresMethodAndAmount
+                    ? payment.getAmount() : null;
+
+            PaymentAuditEvent event = new PaymentAuditEvent(
+                    payment.getId(),
+                    action,
+                    LocalDateTime.now(),
+                    method,    // null for ANALYTICS_VIEWED, PAYMENT_DELETED
+                    amount,    // null for ANALYTICS_VIEWED, PAYMENT_DELETED
+                    details);
+            auditEventRepository.save(event);
         } catch (Exception e) {
-            log.warn("MongoDB write failed: {}", e.getMessage());
+            log.warn("MongoDB audit event write failed: {}", e.getMessage());
         }
     }
 
-    private void evictAnalyticsCaches() {
-        redisCacheService.evictByPattern("S5-F10*");
-        redisCacheService.evictByPattern("S5-F11*");
+    private void logPaymentEvent(Payment payment, String action, Map<String, Object> details) {
+        Map<String, Object> merged = new HashMap<>(details);
+        merged.put("action", action);
+        notifyObservers(action, payment);
     }
+
 }

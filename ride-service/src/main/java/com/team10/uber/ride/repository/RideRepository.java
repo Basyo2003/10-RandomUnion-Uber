@@ -56,6 +56,9 @@ public interface RideRepository extends JpaRepository<Ride, Long> {
     @Query(value = "SELECT COUNT(*) > 0 FROM drivers WHERE id = :driverId", nativeQuery = true)
     boolean driverexists(@Param("driverId") Long driverId);
 
+    @Query(value = "SELECT COUNT(*) > 0 FROM users WHERE id = :userId", nativeQuery = true)
+    boolean userExistsById(@Param("userId") Long userId);
+
     @Query(value = "SELECT status FROM drivers WHERE id = :driverId",
             nativeQuery = true)
     String findStatusByDriverId(@Param("driverId") Long driverId);
@@ -65,6 +68,9 @@ public interface RideRepository extends JpaRepository<Ride, Long> {
     @Modifying
     @Query(value = "UPDATE drivers SET status = 'BUSY' WHERE id = :driverId AND status = 'AVAILABLE'", nativeQuery = true)
     int updateDriverStatusToBusy(@Param("driverId") Long driverId);
+
+    @Query(value = "SELECT COUNT(*) > 0 FROM users WHERE id = :userId", nativeQuery = true)
+    boolean userExists(@Param("userId") Long userId);
 
     @Query(value = """
         SELECT COALESCE(SUM(p.amount), 0)
@@ -85,5 +91,7 @@ public interface RideRepository extends JpaRepository<Ride, Long> {
     List<Object[]> countRidesByStatusBetween(@Param("startDateTime") LocalDateTime startDateTime,
                                              @Param("endDateTime") LocalDateTime endDateTime);
 
+    @Query(value = "SELECT name, vehicle_details->>'vehicleType' AS vehicleType FROM drivers WHERE id = :driverId", nativeQuery = true)
+    Object[] findDriverDetailsById(@Param("driverId") Long driverId);
 
 }

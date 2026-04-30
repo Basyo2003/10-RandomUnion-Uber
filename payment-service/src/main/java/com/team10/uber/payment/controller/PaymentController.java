@@ -11,8 +11,10 @@ import com.team10.uber.payment.strategy.RefundRequest;
 import com.team10.uber.payment.dto.UserPaymentSummaryDTO;
 import com.team10.uber.payment.dto.ProcessPaymentDTO;
 import com.team10.uber.payment.dto.CouponUsageDTO;
+import com.team10.uber.payment.dto.PaymentMethodDTO;
 import com.team10.uber.payment.dto.PaymentDetailsDTO;
 import com.team10.uber.payment.dto.RevenueReportDTO;
+import com.team10.uber.payment.dto.VehicleTypeRevenueDTO;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -71,8 +73,9 @@ public class PaymentController {
     @PostMapping("/ride/{rideId}")
     public ResponseEntity<Payment> processPaymentForRide(
             @PathVariable Long rideId,
-            @RequestBody ProcessPaymentDTO dto) {
-        Payment payment = paymentService.processPaymentForRide(rideId, dto);
+            @RequestBody ProcessPaymentDTO dto,
+            @RequestParam(defaultValue = "false") boolean simulateFailure) {
+        Payment payment = paymentService.processPaymentForRide(rideId, dto, simulateFailure);
         return ResponseEntity.status(HttpStatus.CREATED).body(payment);
     }
 
@@ -135,5 +138,19 @@ public class PaymentController {
             @PathVariable Long id,
             @RequestBody RefundRequest request) {
         return ResponseEntity.ok(paymentService.refundSurgeAdjusted(id, request));
+    }
+
+    @GetMapping("/analytics/vehicle-type")
+    public ResponseEntity<List<VehicleTypeRevenueDTO>> getFareRevenueByVehicleType(
+            @RequestParam String startDate,
+            @RequestParam String endDate) {
+        return ResponseEntity.ok(paymentService.getFareRevenueByVehicleType(startDate, endDate));
+    }
+
+    @GetMapping("/analytics/methods")
+    public ResponseEntity<List<PaymentMethodDTO>> getPaymentMethodBreakdown(
+            @RequestParam String startDate,
+            @RequestParam String endDate) {
+        return ResponseEntity.ok(paymentService.getPaymentMethodBreakdown(startDate, endDate));
     }
 }

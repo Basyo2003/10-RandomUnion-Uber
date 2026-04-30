@@ -10,6 +10,8 @@ import java.util.List;
 public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByEmail(String email);
+    boolean existsByEmail(String email);
+    boolean existsByPhone(String phone);
 
     @Query(value = "SELECT * FROM users u WHERE " +
             "(:name IS NULL OR LOWER(u.name) LIKE LOWER(CONCAT('%', :name, '%'))) AND " +
