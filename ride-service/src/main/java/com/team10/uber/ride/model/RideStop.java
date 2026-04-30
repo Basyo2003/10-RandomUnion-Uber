@@ -6,11 +6,12 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.Type;
 import org.hibernate.type.SqlTypes;
 
+import java.io.Serializable;
 import java.util.Map;
 
 @Entity
 @Table(name = "ride_stops")
-public class RideStop {
+public class RideStop implements Serializable {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

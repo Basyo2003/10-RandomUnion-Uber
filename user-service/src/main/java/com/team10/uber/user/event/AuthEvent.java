@@ -3,6 +3,7 @@ package com.team10.uber.user.event;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
+
 import java.time.LocalDateTime;
 import java.util.Map;
 
@@ -22,6 +23,13 @@ public class AuthEvent implements MongoEvent {
         this.userId = userId;
         this.action = action;
         this.timestamp = timestamp;
+        this.details = details;
+    }
+
+    public AuthEvent(Long userId, String action, Map<String, Object> details) {
+        this.userId = userId;
+        this.action = action;
+        this.timestamp = LocalDateTime.now();
         this.details = details;
     }
 

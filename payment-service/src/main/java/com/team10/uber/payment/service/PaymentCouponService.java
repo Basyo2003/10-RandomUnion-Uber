@@ -6,6 +6,10 @@ import com.team10.uber.payment.model.PaymentCoupon;
 import com.team10.uber.payment.repository.CouponRepository;
 import com.team10.uber.payment.repository.PaymentCouponRepository;
 import com.team10.uber.payment.repository.PaymentRepository;
+
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -20,8 +24,8 @@ public class PaymentCouponService {
     private final PaymentCouponRepository paymentCouponRepository;
 
     public PaymentCouponService(PaymentRepository paymentRepository,
-                                CouponRepository couponRepository,
-                                PaymentCouponRepository paymentCouponRepository) {
+            CouponRepository couponRepository,
+            PaymentCouponRepository paymentCouponRepository) {
         this.paymentRepository = paymentRepository;
         this.couponRepository = couponRepository;
         this.paymentCouponRepository = paymentCouponRepository;

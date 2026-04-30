@@ -1,5 +1,6 @@
 package com.team10.uber.user.service;
 
+import com.team10.uber.user.adapter.ObjectArrayDtoAdapter;
 import com.team10.uber.user.dto.AddressDTO;
 import com.team10.uber.user.dto.TopRiderDTO;
 import com.team10.uber.user.dto.UserProfileDTO;
@@ -7,33 +8,62 @@ import com.team10.uber.user.dto.UserRideSummaryDTO;
 import com.team10.uber.user.enums.Status;
 import com.team10.uber.user.model.SavedAddress;
 import com.team10.uber.user.model.User;
+import com.team10.uber.user.observer.AbstractObservableService;
+import com.team10.uber.user.observer.MongoEventLogger;
 import com.team10.uber.user.repository.SavedAddressRepository;
 import com.team10.uber.user.repository.UserRepository;
+import jakarta.annotation.PostConstruct;
 import jakarta.transaction.Transactional;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Service
-public class UserService {
+public class UserService extends AbstractObservableService {
 
     private final UserRepository userRepository;
     private final SavedAddressRepository savedAddressRepository;
+    private final MongoEventLogger mongoEventLogger;
+    private final ObjectArrayDtoAdapter objectArrayDtoAdapter = new ObjectArrayDtoAdapter();
 
-    public UserService(UserRepository userRepository, SavedAddressRepository savedAddressRepository) {
+    public UserService(UserRepository userRepository,
+                       SavedAddressRepository savedAddressRepository,
+                       MongoEventLogger mongoEventLogger) {
         this.userRepository = userRepository;
         this.savedAddressRepository = savedAddressRepository;
+        this.mongoEventLogger = mongoEventLogger;
     }
 
+    @PostConstruct
+    public void initObservers() {
+        register(mongoEventLogger);
+    }
+
+    public Optional<User> findByEmail(String email) {
+        return userRepository.findByEmail(email);
+    }
+
+    @Caching(evict = {
+            @CacheEvict(value = "user-service::S1-F1", allEntries = true),
+            @CacheEvict(value = "user-service::S1-F6", allEntries = true)
+    })
     public User createUser(User user) {
-        return userRepository.save(user);
+        User saved = userRepository.save(user);
+        notifyObservers("USER_CREATED", saved);
+        return saved;
+    }
+
+    public void logAuthEvent(Long userId, String action, Map<String, String> details) {
+        Map<String, Object> payload = new java.util.HashMap<>(details);
+        payload.put("userId", userId);
+        notifyObservers(action, payload);
     }
 
     public List<User> getAllUsers() {
@@ -44,9 +74,14 @@ public class UserService {
         return findUserByIdOrThrow(id);
     }
 
+    @Caching(evict = {
+            @CacheEvict(value = "user-service::S1-F8", key = "#id"),
+            @CacheEvict(value = "user-service::S1-F3", key = "#id"),
+            @CacheEvict(value = "user-service::S1-F1", allEntries = true),
+            @CacheEvict(value = "user-service::S1-F6", allEntries = true)
+    })
     public User updateUser(Long id, User updatedUser) {
         User existingUser = findUserByIdOrThrow(id);
-
         existingUser.setName(updatedUser.getName());
         existingUser.setEmail(updatedUser.getEmail());
         existingUser.setPassword(updatedUser.getPassword());
@@ -54,36 +89,49 @@ public class UserService {
         existingUser.setRole(updatedUser.getRole());
         existingUser.setStatus(updatedUser.getStatus());
         existingUser.setPreferences(updatedUser.getPreferences());
-
-        return userRepository.save(existingUser);
+        User saved = userRepository.save(existingUser);
+        notifyObservers("USER_UPDATED", saved);
+        return saved;
     }
 
+    @Caching(evict = {
+            @CacheEvict(value = "user-service::S1-F8", key = "#id"),
+            @CacheEvict(value = "user-service::S1-F3", key = "#id"),
+            @CacheEvict(value = "user-service::S1-F1", allEntries = true),
+            @CacheEvict(value = "user-service::S1-F6", allEntries = true)
+    })
     public void deleteUser(Long id) {
         User user = findUserByIdOrThrow(id);
         userRepository.delete(user);
+        notifyObservers("USER_DELETED", id);
     }
 
+    @Cacheable(value = "user-service::S1-F1", key = "#name + '_' + #email + '_' + #role")
     public List<User> searchUsers(String name, String email, String role) {
         String searchName = (name != null && !name.trim().isEmpty()) ? name.trim() : null;
         String searchEmail = (email != null && !email.trim().isEmpty()) ? email.trim() : null;
         String searchRole = (role != null && !role.trim().isEmpty()) ? role.trim() : null;
-
         return userRepository.searchUsers(searchName, searchEmail, searchRole);
     }
 
+    @Caching(evict = {
+            @CacheEvict(value = "user-service::S1-F8", key = "#id"),
+            @CacheEvict(value = "user-service::S1-F3", key = "#id"),
+            @CacheEvict(value = "user-service::S1-F1", allEntries = true)
+    })
     public User updatePreferences(Long id, Map<String, Object> newPreferences) {
         User user = findUserByIdOrThrow(id);
-
         Map<String, Object> merged = new HashMap<>(user.getPreferences());
         merged.putAll(newPreferences);
         user.setPreferences(merged);
-
-        return userRepository.save(user);
+        User saved = userRepository.save(user);
+        notifyObservers("USER_UPDATED", Map.of("userId", id, "updatedFields", "preferences"));
+        return saved;
     }
 
+    @Cacheable(value = "user-service::S1-F8", key = "#id")
     public UserProfileDTO getUserProfile(Long id) {
         User user = findUserByIdOrThrow(id);
-
         UserProfileDTO userProfileDTO = new UserProfileDTO();
         userProfileDTO.setUserId(user.getId());
         userProfileDTO.setName(user.getName());
@@ -92,7 +140,6 @@ public class UserService {
         userProfileDTO.setPreferences(user.getPreferences());
 
         List<AddressDTO> addressDTOList = new ArrayList<>();
-
         for (SavedAddress savedAddress : user.getSavedAddresses()) {
             AddressDTO addressDTO = new AddressDTO();
             addressDTO.setId(savedAddress.getId());
@@ -105,35 +152,20 @@ public class UserService {
             addressDTO.setCreatedAt(savedAddress.getCreatedAt());
             addressDTOList.add(addressDTO);
         }
-
         userProfileDTO.setSavedAddresses(addressDTOList);
         userProfileDTO.setTotalAddresses(addressDTOList.size());
-
         return userProfileDTO;
     }
 
+    @Cacheable(value = "user-service::S1-F3", key = "#id")
     public UserRideSummaryDTO getUserRideSummary(Long id) {
         User user = findUserByIdOrThrow(id);
         List<Object[]> resultRows = userRepository.getRideSummaryByUserId(id);
         Object[] result = resultRows.isEmpty() ? new Object[]{0L, 0L, 0L, 0.0, 0.0} : resultRows.get(0);
-
-        Long totalRides = result[0] == null ? 0L : ((Number) result[0]).longValue();
-        Long completedRides = result[1] == null ? 0L : ((Number) result[1]).longValue();
-        Long cancelledRides = result[2] == null ? 0L : ((Number) result[2]).longValue();
-        Double totalSpent = result[3] == null ? 0.0 : ((Number) result[3]).doubleValue();
-        Double averageFare = result[4] == null ? 0.0 : ((Number) result[4]).doubleValue();
-
-        return new UserRideSummaryDTO(
-                user.getId(),
-                user.getName(),
-                totalRides,
-                completedRides,
-                cancelledRides,
-                totalSpent,
-                averageFare
-        );
+        return objectArrayDtoAdapter.adapt(user.getId(), user.getName(), result);
     }
 
+    @Cacheable(value = "user-service::S1-F6", key = "#startDate + '_' + #endDate + '_' + #limit")
     public List<TopRiderDTO> getTopRiders(String startDate, String endDate, int limit) {
         try {
             LocalDate start = LocalDate.parse(startDate);
@@ -149,7 +181,6 @@ public class UserService {
         String endDateTime = endDate + " 23:59:59";
 
         List<Object[]> results = userRepository.getTopRidersBySpending(startDateTime, endDateTime, limit);
-
         List<TopRiderDTO> topRiders = new ArrayList<>();
         for (Object[] row : results) {
             Long userId = ((Number) row[0]).longValue();
@@ -161,53 +192,57 @@ public class UserService {
         return topRiders;
     }
 
+    @Cacheable(value = "user-service::S1-F5", key = "#key + '_' + #value")
     public List<User> searchByPreference(String key, String value) {
         if (key == null || key.trim().isEmpty() || value == null || value.trim().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Key and value must not be blank");
         }
-
         return userRepository.searchByPreference(key, value);
     }
 
+    @Cacheable(value = "user-service::S1-F9", key = "#lang + '_' + #minRides")
     public List<User> searchByLanguageAndRides(String lang, Integer minRides) {
         if (lang == null || lang.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Language is required");
         }
         int rides = (minRides != null) ? minRides : 0;
-
         return userRepository.findUsersByLanguageAndCompletedRides(lang, rides);
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "user-service::S1-F8", key = "#id"),
+            @CacheEvict(value = "user-service::S1-F1", allEntries = true)
+    })
     public User deactivateUser(Long id) {
         User user = findUserByIdOrThrow(id);
-
         if (userRepository.hasActiveRides(id)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User has active rides");
         }
-
         user.setStatus(Status.DEACTIVATED);
-        return userRepository.save(user);
+        User saved = userRepository.save(user);
+        notifyObservers("USER_DEACTIVATED", Map.of("userId", id, "status", "DEACTIVATED"));
+        return saved;
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "user-service::S1-F8", key = "#userId"),
+            @CacheEvict(value = "user-service::S1-F1", allEntries = true)
+    })
     public UserProfileDTO setDefaultSavedAddress(Long userId, Long addressId) {
         User user = findUserByIdOrThrow(userId);
-
         SavedAddress targetAddress = savedAddressRepository.findById(addressId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Saved address not found"));
-
         if (!targetAddress.getUser().getId().equals(userId)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Saved address does not belong to this user");
         }
-
         for (SavedAddress address : user.getSavedAddresses()) {
             address.setIsDefault(false);
         }
-
         targetAddress.setIsDefault(true);
         userRepository.save(user);
-
+        notifyObservers("DEFAULT_ADDRESS_SET", Map.of("userId", userId, "addressId", addressId));
         return getUserProfile(userId);
     }
 

@@ -1,5 +1,6 @@
 package com.team10.uber.driver.controller;
 
+import com.team10.uber.driver.dto.DriverDashboardDTO;
 import com.team10.uber.driver.dto.TopRatedDriverDTO;
 import com.team10.uber.driver.dto.DriverDocumentAlertDTO;
 import com.team10.uber.driver.dto.DriverEarningsDTO;
@@ -10,6 +11,7 @@ import com.team10.uber.driver.enums.DriverStatus;
 import com.team10.uber.driver.model.Driver;
 import com.team10.uber.driver.model.DriverDocument;
 import com.team10.uber.driver.service.DriverDocumentService;
+import com.team10.uber.driver.service.DriverIndexService;
 import com.team10.uber.driver.service.DriverService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -24,10 +26,14 @@ public class DriverController {
 
     private final DriverService driverService;
     private final DriverDocumentService driverDocumentService;
+    private final DriverIndexService driverIndexService;
 
-    public DriverController(DriverService driverService, DriverDocumentService driverDocumentService) {
+    public DriverController(DriverService driverService,
+                            DriverDocumentService driverDocumentService,
+                            DriverIndexService driverIndexService) {
         this.driverService = driverService;
         this.driverDocumentService = driverDocumentService;
+        this.driverIndexService = driverIndexService;
     }
 
     @PostMapping
@@ -48,6 +54,16 @@ public class DriverController {
         return driverService.searchDrivers(status, minRating, maxRating);
     }
 
+    @GetMapping("/search/full-text")
+    public List<Driver> searchDriversFullText(
+            @RequestParam("query") String query,
+            @RequestParam(required = false) String vehicleType,
+            @RequestParam(required = false) DriverStatus status,
+            @RequestParam(required = false) Double minRating,
+            @RequestParam(required = false) Double maxRating) {
+        return driverService.fullTextSearchDrivers(query, vehicleType, status, minRating, maxRating);
+    }
+
     @GetMapping("/vehicle-type")
     public List<Driver> filterByVehicleType(
             @RequestParam String type,
@@ -61,6 +77,11 @@ public class DriverController {
             @RequestParam(defaultValue = "5") int limit) {
 
         return driverService.getTopRatedDrivers(limit);
+    }
+
+    @GetMapping("/{id}/dashboard")
+    public DriverDashboardDTO getDriverDashboard(@PathVariable Long id) {
+        return driverService.getDriverDashboard(id);
     }
 
     @GetMapping("/{id}")
@@ -96,6 +117,12 @@ public class DriverController {
     @PutMapping("/{id}")
     public Driver updateDriver(@PathVariable Long id, @RequestBody Driver updatedDriver) {
         return driverService.updateDriver(id, updatedDriver);
+    }
+
+    @PostMapping("/{id}/index")
+    public ResponseEntity<Void> indexDriver(@PathVariable Long id) {
+        driverIndexService.indexDriver(id, "explicit");
+        return ResponseEntity.ok().build();
     }
 
     @DeleteMapping("/{id}")
