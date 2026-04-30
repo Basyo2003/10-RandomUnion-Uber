@@ -1,44 +1,11 @@
 package com.team10.uber.payment.service;
 
-import com.team10.uber.payment.cache.RedisCacheService;
-import com.team10.uber.payment.dto.CouponUsageDTO;
-import com.team10.uber.payment.dto.PaymentDetailsDTO;
-import com.team10.uber.payment.dto.ProcessPaymentDTO;
-import com.team10.uber.payment.dto.RevenueReportDTO;
-import com.team10.uber.payment.dto.UserPaymentSummaryDTO;
-import com.team10.uber.payment.enums.DiscountType;
-import com.team10.uber.payment.enums.PaymentMethod;
-import com.team10.uber.payment.enums.PaymentStatus;
-import com.team10.uber.payment.model.Coupon;
-import com.team10.uber.payment.model.Payment;
-import com.team10.uber.payment.model.PaymentCoupon;
-import com.team10.uber.payment.observer.AbstractObservableService;
-import com.team10.uber.payment.observer.MongoEventLogger;
-import com.team10.uber.payment.repository.CouponRepository;
-import com.team10.uber.payment.repository.PaymentCouponRepository;
-import com.team10.uber.payment.repository.PaymentRepository;
-import com.team10.uber.payment.strategy.*;
-import jakarta.annotation.PostConstruct;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
-import org.springframework.cache.annotation.Caching;
-import org.springframework.http.HttpStatus;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
-
-import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.team10.uber.payment.cache.RedisCacheService;
 import com.team10.uber.payment.dto.*;
 import com.team10.uber.payment.enums.DiscountType;
 import com.team10.uber.payment.enums.PaymentMethod;
 import com.team10.uber.payment.enums.PaymentStatus;
-import com.team10.uber.payment.event.PaymentAuditEvent;
 import com.team10.uber.payment.model.Coupon;
 import com.team10.uber.payment.model.Payment;
 import com.team10.uber.payment.model.PaymentCoupon;
@@ -47,11 +14,8 @@ import com.team10.uber.payment.observer.MongoEventLogger;
 import com.team10.uber.payment.repository.CouponRepository;
 import com.team10.uber.payment.repository.PaymentCouponRepository;
 import com.team10.uber.payment.repository.PaymentRepository;
-import com.team10.uber.payment.repository.mongo.PaymentAuditEventRepository;
 import com.team10.uber.payment.strategy.*;
 import jakarta.annotation.PostConstruct;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -64,8 +28,6 @@ import java.util.stream.Collectors;
 @Service
 public class PaymentService extends AbstractObservableService {
 
-    private static final Logger log = LoggerFactory.getLogger(PaymentService.class);
-
     // §8.1 TTL constants
     private static final long TTL_ANALYTICS = 10 * 60L; // 10 min — dashboards/analytics
     private static final long TTL_SEARCH = 5 * 60L; // 5 min — search results
@@ -75,22 +37,18 @@ public class PaymentService extends AbstractObservableService {
     private final CouponRepository couponRepository;
     private final PaymentCouponRepository paymentCouponRepository;
     private final MongoEventLogger mongoEventLogger;
-    private final PaymentAuditEventRepository auditEventRepository;
     private final RedisCacheService cache;
 
     public PaymentService(PaymentRepository paymentRepository,
             CouponRepository couponRepository,
             PaymentCouponRepository paymentCouponRepository,
             MongoEventLogger mongoEventLogger,
-            PaymentAuditEventRepository auditEventRepository,
             RedisCacheService cache) {
         this.paymentRepository = paymentRepository;
         this.couponRepository = couponRepository;
         this.paymentCouponRepository = paymentCouponRepository;
         this.mongoEventLogger = mongoEventLogger;
-        this.auditEventRepository = auditEventRepository;
         this.cache = cache;
-
     }
 
     @PostConstruct
@@ -132,10 +90,6 @@ public class PaymentService extends AbstractObservableService {
 
         Payment saved = paymentRepository.save(payment);
         notifyObservers("CREATED", saved);
-
-        saveAuditEvent(saved, "CREATED", Map.of(
-                "rideId", saved.getRideId(),
-                "userId", saved.getUserId()));
 
         // §4.4.4 — invalidate search/list caches on new payment
         cache.evictByPattern("S5-F1::*");
@@ -182,9 +136,6 @@ public class PaymentService extends AbstractObservableService {
         paymentRepository.deleteById(id);
         notifyObservers("PAYMENT_DELETED", payment);
 
-        saveAuditEvent(payment, "PAYMENT_DELETED", Map.of(
-                "paymentId", id));
-
         evictPaymentCaches(id);
         evictAnalyticsCaches();
     }
@@ -227,10 +178,6 @@ public class PaymentService extends AbstractObservableService {
 
         Payment saved = paymentRepository.save(payment);
         notifyObservers("REFUNDED", saved);
-
-        saveAuditEvent(saved, "REFUNDED", Map.of(
-                "refundReason", reason,
-                "refundedAt", LocalDateTime.now().toString()));
 
         evictPaymentCaches(id);
         evictAnalyticsCaches();
@@ -325,11 +272,6 @@ public class PaymentService extends AbstractObservableService {
         Payment saved = paymentRepository.save(payment);
         notifyObservers("CREATED", saved);
 
-        saveAuditEvent(saved, "CREATED", Map.of(
-                "rideId", rideId,
-                "userId", userId,
-                "surgeFee", surgeFee));
-
         // i) simulateFailure path
         if (simulateFailure) {
             saved.setStatus(PaymentStatus.FAILED);
@@ -340,10 +282,6 @@ public class PaymentService extends AbstractObservableService {
             paymentRepository.save(saved);
             notifyObservers("FAILED", saved);
 
-            saveAuditEvent(saved, "FAILED", Map.of(
-                    "failureReason", "simulated failure",
-                    "gatewayResponse", "declined"));
-
             return saved;
         }
 
@@ -351,11 +289,6 @@ public class PaymentService extends AbstractObservableService {
         saved.setStatus(PaymentStatus.COMPLETED);
         paymentRepository.save(saved);
         notifyObservers("COMPLETED", saved);
-
-        saveAuditEvent(saved, "COMPLETED", Map.of(
-                "rideId", rideId,
-                "surgeFee", surgeFee,
-                "gatewayResponse", "success"));
 
         // §4.4.4 — invalidate affected caches
         cache.evictByPattern("S5-F1::*");
@@ -402,10 +335,6 @@ public class PaymentService extends AbstractObservableService {
         paymentCouponRepository.save(paymentCoupon);
         couponRepository.save(coupon);
         notifyObservers("COUPON_APPLIED", payment);
-
-        saveAuditEvent(payment, "COUPON_APPLIED", Map.of(
-                "couponId", couponId,
-                "discountApplied", discount));
 
         // §4.4.4 — invalidate detail and coupon caches
         evictPaymentCaches(paymentId);
@@ -475,10 +404,6 @@ public class PaymentService extends AbstractObservableService {
 
         Payment saved = paymentRepository.save(payment);
         notifyObservers("RETRY_ATTEMPTED", saved);
-
-        saveAuditEvent(saved, "RETRY_ATTEMPTED", Map.of(
-                "retryAttempt", retryAttempt,
-                "gatewayResponse", "approved"));
 
         evictPaymentCaches(id);
         evictAnalyticsCaches();
@@ -565,19 +490,10 @@ public class PaymentService extends AbstractObservableService {
         }
 
         // §10.5.1(f)
-        try {
-            PaymentAuditEvent event = new PaymentAuditEvent(
-                    null, // Analytics are not tied to a specific payment ID
-                    "ANALYTICS_VIEWED",
-                    LocalDateTime.now(),
-                    null,
-                    null,
-                    Map.of("dashboard", "vehicle-type-revenue", "startDate", startDate.toString(), "endDate", endDate.toString())
-            );
-            auditEventRepository.save(event);
-        } catch (Exception e) {
-            log.warn("MongoDB audit event write failed: {}", e.getMessage());
-        }
+        notifyObservers("ANALYTICS_VIEWED", Map.of(
+                "dashboard", "vehicle-type-revenue",
+                "startDate", startDate.toString(),
+                "endDate", endDate.toString()));
 
         // (10 min TTL)
         String key = "S5-F10::" + startDate + "::" + endDate;
@@ -623,9 +539,7 @@ public class PaymentService extends AbstractObservableService {
 
         // §10.5.3e — NoRefundStrategy path
         if (result.getAmount() == 0.0 && result.getReasonCode().equals("refund window expired")) {
-            saveAuditEvent(payment, "REFUND_DENIED", Map.of(
-                    "strategyName", result.getStrategyName(),
-                    "reason", result.getReasonCode()));
+            notifyObservers("REFUND_DENIED", payment);
             evictPaymentCaches(id);
             evictAnalyticsCaches();
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "refund window expired");
@@ -644,12 +558,7 @@ public class PaymentService extends AbstractObservableService {
         Payment saved = paymentRepository.save(payment);
 
         // §10.5.3h — Log REFUNDED to MongoDB
-        saveAuditEvent(saved, "REFUNDED", Map.of(
-                "strategyName", result.getStrategyName(),
-                "reason", request.getReason(),
-                "originalAmount", payment.getAmount(),
-                "refundAmount", result.getAmount(),
-                "surgeIncluded", request.isRefundSurge()));
+        notifyObservers("REFUNDED", saved);
 
         // §10.5.3i — Invalidate caches
         evictPaymentCaches(id);
@@ -667,40 +576,6 @@ public class PaymentService extends AbstractObservableService {
         return endOfDay
                 ? LocalDateTime.parse(date + "T23:59:59.999999999")
                 : LocalDateTime.parse(date + "T00:00:00");
-    }
-
-    // §7.1.6 — Save PaymentAuditEvent to MongoDB (soft dependency)
-    private void saveAuditEvent(Payment payment, String action, Map<String, Object> details) {
-        try {
-            // §7.1.6 — method+amount required on payment-shaped actions only
-            boolean requiresMethodAndAmount = List.of(
-                    "CREATED", "COMPLETED", "FAILED",
-                    "REFUNDED", "REFUND_DENIED",
-                    "COUPON_APPLIED", "RETRY_ATTEMPTED"
-            ).contains(action);
-
-            String method = requiresMethodAndAmount && payment.getMethod() != null
-                    ? payment.getMethod().name() : null;
-            Double amount = requiresMethodAndAmount
-                    ? payment.getAmount() : null;
-
-            PaymentAuditEvent event = new PaymentAuditEvent(
-                    payment.getId(),
-                    action,
-                    LocalDateTime.now(),
-                    method,    // null for ANALYTICS_VIEWED, PAYMENT_DELETED
-                    amount,    // null for ANALYTICS_VIEWED, PAYMENT_DELETED
-                    details);
-            auditEventRepository.save(event);
-        } catch (Exception e) {
-            log.warn("MongoDB audit event write failed: {}", e.getMessage());
-        }
-    }
-
-    private void logPaymentEvent(Payment payment, String action, Map<String, Object> details) {
-        Map<String, Object> merged = new HashMap<>(details);
-        merged.put("action", action);
-        notifyObservers(action, payment);
     }
 
 }
