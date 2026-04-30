@@ -6,12 +6,6 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.springframework.cache.annotation.Cacheable;
-import org.springframework.http.HttpStatus;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
-
 import com.team10.uber.ride.dto.FareEstimateDTO;
 import com.team10.uber.ride.dto.FareEstimateRequestDTO;
 import com.team10.uber.ride.dto.RideAnalyticsDTO;
@@ -30,12 +24,12 @@ import com.team10.uber.ride.observer.MongoEventLogger;
 import com.team10.uber.ride.repository.RideRepository;
 import com.team10.uber.ride.repository.RideStopRepository;
 import jakarta.annotation.PostConstruct;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
-
-import jakarta.annotation.PostConstruct;
 
 @Service
 public class RideService extends AbstractObservableService {
@@ -43,13 +37,24 @@ public class RideService extends AbstractObservableService {
     private final RideRepository rideRepository;
     private final RideStopRepository rideStopRepository;
     private final MongoEventLogger mongoEventLogger;
+    private final CacheInvalidationService cacheInvalidation;
 
     public RideService(RideRepository rideRepository,
                        RideStopRepository rideStopRepository,
-                       MongoEventLogger mongoEventLogger) {
+                       MongoEventLogger mongoEventLogger,
+                       CacheInvalidationService cacheInvalidation) {
         this.rideRepository = rideRepository;
         this.rideStopRepository = rideStopRepository;
         this.mongoEventLogger = mongoEventLogger;
+        this.cacheInvalidation = cacheInvalidation;
+    }
+
+    private void evictRideFeatureCaches() {
+        cacheInvalidation.evictByPattern("ride-service::S3-F1::*");
+        cacheInvalidation.evictByPattern("ride-service::S3-F3::*");
+        cacheInvalidation.evictByPattern("ride-service::S3-F5::*");
+        cacheInvalidation.evictByPattern("ride-service::S3-F6::*");
+        cacheInvalidation.evictByPattern("ride-service::S3-F10::*");
     }
 
     @PostConstruct
@@ -64,6 +69,7 @@ public class RideService extends AbstractObservableService {
         }
         Ride saved = rideRepository.save(ride);
         notifyObservers("RIDE_CREATED", saved);
+        evictRideFeatureCaches();
         return saved;
     }
 
@@ -76,6 +82,7 @@ public class RideService extends AbstractObservableService {
         return rideRepository.findById(id)
                 .orElseThrow(() -> new RideNotFoundException("Ride not found with id: " + id));
     }
+    @CacheEvict(value = "ride-service::ride", key = "#id")
     public Ride updateRide(Long id, Ride updatedRide) {
         Ride existing = getRideById(id);
         existing.setUserId(updatedRide.getUserId());
@@ -89,12 +96,17 @@ public class RideService extends AbstractObservableService {
         existing.setMetadata(updatedRide.getMetadata());
         Ride saved = rideRepository.save(existing);
         notifyObservers("RIDE_UPDATED", saved);
+        cacheInvalidation.evictByPattern("ride-service::S3-F9::" + id);
+        evictRideFeatureCaches();
         return saved;
     }
+    @CacheEvict(value = "ride-service::ride", key = "#id")
     public void deleteRide(Long id) {
         Ride ride = getRideById(id);
         rideRepository.delete(ride);
         notifyObservers("RIDE_DELETED", id);
+        cacheInvalidation.evictByPattern("ride-service::S3-F9::" + id);
+        evictRideFeatureCaches();
     }
 
     @Transactional
@@ -118,6 +130,9 @@ public class RideService extends AbstractObservableService {
 
         Ride saved = rideRepository.save(ride);
         notifyObservers("RIDE_CANCELLED", saved);
+        cacheInvalidation.evictByPattern("ride-service::ride::" + rideId);
+        cacheInvalidation.evictByPattern("ride-service::S3-F9::" + rideId);
+        evictRideFeatureCaches();
         return saved;
     }
 
@@ -165,6 +180,9 @@ public class RideService extends AbstractObservableService {
         }
 
         notifyObservers("RIDE_COMPLETED", saved);
+        cacheInvalidation.evictByPattern("ride-service::ride::" + rideId);
+        cacheInvalidation.evictByPattern("ride-service::S3-F9::" + rideId);
+        evictRideFeatureCaches();
         return saved;
     }
 
@@ -211,6 +229,9 @@ public class RideService extends AbstractObservableService {
 
         List<RideStop> allStops = rideStopRepository.findByRideIdOrderByStopOrderAsc(rideId);
         notifyObservers("STOPS_ADDED", ride);
+        cacheInvalidation.evictByPattern("ride-service::ride::" + rideId);
+        cacheInvalidation.evictByPattern("ride-service::S3-F9::" + rideId);
+        evictRideFeatureCaches();
         return new RideWithStopsDTO(ride, allStops);
     }
 
@@ -330,6 +351,10 @@ public class RideService extends AbstractObservableService {
         rideRepository.updateDriverStatusToBusy(driverId);
         Ride saved = rideRepository.save(ride);
         notifyObservers("DRIVER_ASSIGNED", saved);
+        cacheInvalidation.evictByPattern("ride-service::ride::" + rideId);
+        cacheInvalidation.evictByPattern("ride-service::S3-F9::" + rideId);
+        cacheInvalidation.evictByPattern("driver-service::S2-F12::" + driverId);
+        evictRideFeatureCaches();
         return saved;
     }
 

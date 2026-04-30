@@ -8,6 +8,7 @@ import com.team10.uber.payment.repository.PaymentCouponRepository;
 import com.team10.uber.payment.repository.PaymentRepository;
 
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -23,17 +24,13 @@ public class PaymentCouponService {
     private final PaymentCouponRepository paymentCouponRepository;
 
     public PaymentCouponService(PaymentRepository paymentRepository,
-                                CouponRepository couponRepository,
-                                PaymentCouponRepository paymentCouponRepository) {
+            CouponRepository couponRepository,
+            PaymentCouponRepository paymentCouponRepository) {
         this.paymentRepository = paymentRepository;
         this.couponRepository = couponRepository;
         this.paymentCouponRepository = paymentCouponRepository;
     }
 
-    @Caching(evict = {
-        @CacheEvict(value = "payment-service::payment_coupon", key = "#id", condition = "#id != null"),
-        @CacheEvict(value = "payment-service::S5-F8", allEntries = true)
-    })
     public PaymentCoupon createPaymentCoupon(Long paymentId, Long couponId, PaymentCoupon pc) {
 
         Payment payment = paymentRepository.findById(paymentId)
@@ -52,17 +49,12 @@ public class PaymentCouponService {
         return paymentCouponRepository.findAll();
     }
 
-    @Cacheable(value = "payment-service::payment_coupon", key = "#id")
     public PaymentCoupon getPaymentCouponById(Long id) {
         return paymentCouponRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "PaymentCoupon not found with id: " + id));
     }
 
-    @Caching(evict = {
-        @CacheEvict(value = "payment-service::payment_coupon", key = "#id", condition = "#id != null"),
-        @CacheEvict(value = "payment-service::S5-F8", allEntries = true)
-    })
     public PaymentCoupon updatePaymentCoupon(Long id, PaymentCoupon updatedPaymentCoupon) {
 
         PaymentCoupon existing = getPaymentCouponById(id);
@@ -71,10 +63,6 @@ public class PaymentCouponService {
         return paymentCouponRepository.save(existing);
     }
 
-    @Caching(evict = {
-        @CacheEvict(value = "payment-service::payment_coupon", key = "#id", condition = "#id != null"),
-        @CacheEvict(value = "payment-service::S5-F8", allEntries = true)
-    })
     public void deletePaymentCoupon(Long id) {
         if (!paymentCouponRepository.existsById(id)) {
             throw new ResponseStatusException(
