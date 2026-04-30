@@ -4,10 +4,12 @@ import com.team10.uber.user.dto.AddressDTO;
 import com.team10.uber.user.dto.TopRiderDTO;
 import com.team10.uber.user.dto.UserProfileDTO;
 import com.team10.uber.user.dto.UserRideSummaryDTO;
+import com.team10.uber.user.enums.Role;
 import com.team10.uber.user.enums.Status;
 import com.team10.uber.user.model.SavedAddress;
 import com.team10.uber.user.model.User;
 import com.team10.uber.user.event.AuthEvent;
+import com.team10.uber.user.observer.EntityObserver;
 import com.team10.uber.user.repository.mongo.AuthEventRepository;
 import com.team10.uber.user.repository.SavedAddressRepository;
 import com.team10.uber.user.repository.UserRepository;
@@ -16,6 +18,7 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -29,13 +32,18 @@ public class UserService {
     private final UserRepository userRepository;
     private final SavedAddressRepository savedAddressRepository;
     private final AuthEventRepository authEventRepository;
+    private final EntityObserver observer;
+    private final PasswordEncoder passwordEncoder;
 
     public UserService(UserRepository userRepository,
                        SavedAddressRepository savedAddressRepository,
-                       AuthEventRepository authEventRepository) {
+                       AuthEventRepository authEventRepository, EntityObserver observer,
+                       PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.savedAddressRepository = savedAddressRepository;
         this.authEventRepository = authEventRepository;
+        this.observer = observer;
+        this.passwordEncoder = passwordEncoder;
     }
 
     public Optional<User> findByEmail(String email) {
@@ -253,5 +261,42 @@ public class UserService {
     private User findUserByIdOrThrow(Long id) {
         return userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found with id: " + id));
+    }
+
+    @Transactional
+    public User registerUser(User user) {
+// a) Validation: Check for null OR empty/blank strings
+        if (user.getName() == null || user.getName().isBlank() ||
+                user.getEmail() == null || user.getEmail().isBlank() ||
+                user.getPassword() == null || user.getPassword().isBlank() ||
+                user.getPhone() == null || user.getPhone().isBlank()) {
+
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Field cannot be blank");
+        }
+        // b) Uniqueness Check
+        if (userRepository.existsByEmail(user.getEmail()) ||
+                userRepository.existsByPhone(user.getPhone())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Email or Phone already exists");
+        }
+        // d) Default Role & Status
+        user.setPassword(passwordEncoder.encode(user.getPassword()));
+        user.setRole(Role.RIDER);
+        user.setStatus(Status.ACTIVE);
+
+        // Save to PostgreSQL
+        User savedUser = userRepository.save(user);
+
+        // e) Log to MongoDB via Observer Pattern
+        // This uses your MongoEventLogger and EventFactory internally
+        observer.onEvent("REGISTERED", savedUser);
+
+        return savedUser;
+    }
+    public void logAuthEvent(Long userId, String action, Map<String, Object> details) {
+        try {
+            authEventRepository.save(new AuthEvent(userId, action, details));
+        } catch (Exception e) {
+
+        }
     }
 }
