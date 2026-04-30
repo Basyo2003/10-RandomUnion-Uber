@@ -2,7 +2,9 @@ package com.team10.uber.user.service;
 
 import com.team10.uber.user.adapter.ObjectArrayDtoAdapter;
 import com.team10.uber.user.dto.AddressDTO;
+import com.team10.uber.user.dto.AuthEventDTO;
 import com.team10.uber.user.dto.TopRiderDTO;
+import com.team10.uber.user.dto.UserActivityFeedResponseDTO;
 import com.team10.uber.user.dto.UserProfileDTO;
 import com.team10.uber.user.dto.UserRideSummaryDTO;
 import com.team10.uber.user.enums.Role;
@@ -20,6 +22,8 @@ import com.team10.uber.user.repository.UserRepository;
 import com.team10.uber.user.repository.mongo.AuthEventRepository;
 import jakarta.annotation.PostConstruct;
 import jakarta.transaction.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
@@ -87,6 +91,25 @@ public class UserService extends AbstractObservableService {
     @Cacheable(value = "user-service::user", key = "#id")
     public User getUserById(Long id) {
         return findUserByIdOrThrow(id);
+    }
+
+    @Cacheable(value = "user-service::S1-F12", key = "#id + ':' + #page + ':' + #size")
+    public UserActivityFeedResponseDTO getUserActivityFeed(Long id, int page, int size) {
+        findUserByIdOrThrow(id);
+
+        Page<AuthEvent> eventPage = authEventRepository.findByUserIdOrderByTimestampDesc(
+                id, PageRequest.of(page, size));
+
+        List<AuthEventDTO> content = eventPage.getContent().stream()
+                .map(this::toAuthEventDto)
+                .toList();
+
+        UserActivityFeedResponseDTO response = new UserActivityFeedResponseDTO();
+        response.setContent(content);
+        response.setPage(page);
+        response.setSize(size);
+        response.setTotalElements(eventPage.getTotalElements());
+        return response;
     }
 
     @Caching(evict = {
@@ -335,6 +358,16 @@ public class UserService extends AbstractObservableService {
         observer.onEvent("REGISTERED", savedUser);
 
         return savedUser;
+    }
+
+    private AuthEventDTO toAuthEventDto(AuthEvent event) {
+        AuthEventDTO dto = new AuthEventDTO();
+        dto.setId(event.getId());
+        dto.setUserId(event.getUserId());
+        dto.setAction(event.getAction());
+        dto.setTimestamp(event.getTimestamp());
+        dto.setDetails(event.getDetails());
+        return dto;
     }
 //     public void logAuthEvent(Long userId, String action, Map<String, Object> details) {
 //         try {
