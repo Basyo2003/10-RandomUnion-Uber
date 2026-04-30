@@ -13,6 +13,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import com.team10.uber.location.observer.AbstractObservableService;
+import com.team10.uber.location.observer.MongoEventLogger;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -26,7 +28,7 @@ import java.util.Optional;
 
 import java.time.Duration;
 @Service
-public class LocationService {
+public class LocationService extends AbstractObservableService {
 
     private final LocationRepository locationRepository;
     private final JdbcTemplate jdbcTemplate;
@@ -34,10 +36,17 @@ public class LocationService {
 
     private static final String CACHE_PREFIX = "location-service";
 
-    public LocationService(LocationRepository locationRepository, JdbcTemplate jdbcTemplate , RedisCacheService redisCacheService) {
+    public LocationService(
+            LocationRepository locationRepository,
+            JdbcTemplate jdbcTemplate,
+            RedisCacheService redisCacheService,
+            MongoEventLogger mongoEventLogger
+    ) {
         this.locationRepository = locationRepository;
         this.jdbcTemplate = jdbcTemplate;
         this.redisCacheService = redisCacheService;
+
+        register(mongoEventLogger);
     }
 
     // 4.4.4 Cache Invalidation - create location invalidates feature caches
