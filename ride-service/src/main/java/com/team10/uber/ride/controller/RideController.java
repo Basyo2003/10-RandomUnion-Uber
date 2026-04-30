@@ -113,4 +113,9 @@ public class RideController {
     public RideDetailsDTO GetRideDetailsWithStops(@PathVariable Long rideId){
         return rideService.GetRideDetailsWithStops(rideId);
     }
+
+    @PostMapping("/{rideId}/record-interaction")
+    public String recordInteraction(@PathVariable Long rideId) {
+        return rideService.recordInteraction(rideId);
+    }
 }

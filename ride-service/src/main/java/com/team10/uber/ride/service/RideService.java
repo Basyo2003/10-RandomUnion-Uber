@@ -4,7 +4,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import com.team10.uber.ride.dto.FareEstimateDTO;
 import com.team10.uber.ride.dto.FareEstimateRequestDTO;
@@ -23,6 +25,9 @@ import com.team10.uber.ride.observer.AbstractObservableService;
 import com.team10.uber.ride.observer.MongoEventLogger;
 import com.team10.uber.ride.repository.RideRepository;
 import com.team10.uber.ride.repository.RideStopRepository;
+import org.neo4j.driver.Driver;
+import org.neo4j.driver.Session;
+import org.neo4j.driver.Values;
 import jakarta.annotation.PostConstruct;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
@@ -38,15 +43,18 @@ public class RideService extends AbstractObservableService {
     private final RideStopRepository rideStopRepository;
     private final MongoEventLogger mongoEventLogger;
     private final CacheInvalidationService cacheInvalidation;
+    private final Driver neo4jDriver;
 
     public RideService(RideRepository rideRepository,
                        RideStopRepository rideStopRepository,
                        MongoEventLogger mongoEventLogger,
-                       CacheInvalidationService cacheInvalidation) {
+                       CacheInvalidationService cacheInvalidation,
+                       Driver neo4jDriver) {
         this.rideRepository = rideRepository;
         this.rideStopRepository = rideStopRepository;
         this.mongoEventLogger = mongoEventLogger;
         this.cacheInvalidation = cacheInvalidation;
+        this.neo4jDriver = neo4jDriver;
     }
 
     private void evictRideFeatureCaches() {
@@ -366,5 +374,75 @@ public class RideService extends AbstractObservableService {
 
         List<RideStop> stops = rideStopRepository.findByRideIdOrderByStopOrderAsc(rideId);
         return new RideDetailsDTO(ride, stops);
+    }
+
+    public String recordInteraction(Long rideId) {
+        // Step 1-2: Find ride and verify COMPLETED status
+        Ride ride = rideRepository.findById(rideId)
+                .orElseThrow(() -> new RideNotFoundException("Ride not found with id: " + rideId));
+
+        if (ride.getStatus() != RideStatus.COMPLETED) {
+            throw new InvalidRideStatusException(
+                    "Ride must be COMPLETED to record interaction. Current status: " + ride.getStatus());
+        }
+
+        Long userId = ride.getUserId();
+        Long driverId = ride.getDriverId();
+
+        // Step 3: Validate user and driver exist via shared PG (cross-service native SQL)
+        if (!rideRepository.userExistsById(userId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found with id: " + userId);
+        }
+        if (!rideRepository.driverexists(driverId)) {
+            throw new DriverNotFoundException("Driver not found with id: " + driverId);
+        }
+
+        // Step 4-6: Use raw Neo4j driver to avoid Spring Data Neo4j multi-module wiring issues
+        try (Session session = neo4jDriver.session()) {
+            // Step 4 (idempotency): check if rideId already recorded on the RODE_WITH edge
+            boolean alreadyRecorded = session.executeRead(tx -> {
+                var result = tx.run(
+                    "MATCH (u:User {userId: $userId})-[r:RODE_WITH]->(d:Driver {driverId: $driverId}) " +
+                    "WHERE $rideId IN r.recordedRideIds RETURN count(r) > 0 AS exists",
+                    Values.parameters("userId", userId, "driverId", driverId, "rideId", rideId)
+                );
+                return result.hasNext() && result.next().get("exists").asBoolean(false);
+            });
+
+            if (alreadyRecorded) {
+                return "Interaction already recorded for ride " + rideId;
+            }
+
+            // Step 5-6: MERGE User + Driver nodes, then MERGE RODE_WITH edge, increment rideCount
+            session.executeWrite(tx -> {
+                tx.run(
+                    "MERGE (u:User {userId: $userId}) " +
+                    "MERGE (d:Driver {driverId: $driverId}) " +
+                    "MERGE (u)-[r:RODE_WITH]->(d) " +
+                    "ON CREATE SET r.rideCount = 1, r.lastRideDate = $now, r.recordedRideIds = [$rideId] " +
+                    "ON MATCH SET r.rideCount = r.rideCount + 1, r.lastRideDate = $now, " +
+                    "            r.recordedRideIds = r.recordedRideIds + [$rideId]",
+                    Values.parameters(
+                        "userId", userId,
+                        "driverId", driverId,
+                        "rideId", rideId,
+                        "now", LocalDateTime.now().toString()
+                    )
+                );
+                return null;
+            });
+        }
+
+        // Step 7: Log INTERACTION_RECORDED to MongoDB via Observer
+        Map<String, Object> eventDetails = new HashMap<>();
+        eventDetails.put("rideId", rideId);
+        eventDetails.put("userId", userId);
+        eventDetails.put("driverId", driverId);
+        notifyObservers("INTERACTION_RECORDED", eventDetails);
+
+        // Step 8: Evict S3-F12 recommendation cache
+        cacheInvalidation.evictByPattern("ride-service::S3-F12::*");
+
+        return "Interaction recorded successfully for ride " + rideId;
     }
 }
