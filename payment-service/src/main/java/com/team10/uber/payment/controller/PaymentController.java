@@ -13,6 +13,7 @@ import com.team10.uber.payment.dto.ProcessPaymentDTO;
 import com.team10.uber.payment.dto.CouponUsageDTO;
 import com.team10.uber.payment.dto.PaymentDetailsDTO;
 import com.team10.uber.payment.dto.RevenueReportDTO;
+import com.team10.uber.payment.dto.VehicleTypeRevenueDTO;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -136,5 +137,12 @@ public class PaymentController {
             @PathVariable Long id,
             @RequestBody RefundRequest request) {
         return ResponseEntity.ok(paymentService.refundSurgeAdjusted(id, request));
+    }
+
+    @GetMapping("/analytics/vehicle-type")
+    public ResponseEntity<List<VehicleTypeRevenueDTO>> getFareRevenueByVehicleType(
+            @RequestParam String startDate,
+            @RequestParam String endDate) {
+        return ResponseEntity.ok(paymentService.getFareRevenueByVehicleType(startDate, endDate));
     }
 }
