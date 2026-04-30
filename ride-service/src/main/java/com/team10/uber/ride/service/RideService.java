@@ -6,7 +6,6 @@ import java.time.LocalTime;
 import java.util.*;
 
 import com.team10.uber.ride.dto.*;
-import com.team10.uber.ride.event.RideEvent;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -44,7 +43,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
-import com.team10.uber.ride.repository.mongo.RideEventRepository;
 import jakarta.annotation.PostConstruct;
 
 @Service
@@ -55,17 +53,14 @@ public class RideService extends AbstractObservableService {
     private final MongoEventLogger mongoEventLogger;
     private final CacheInvalidationService cacheInvalidation;
     private final Driver neo4jDriver;
-    private final RideEventRepository rideEventRepository;
-
     public RideService(RideRepository rideRepository,
                        RideStopRepository rideStopRepository,
-                       MongoEventLogger mongoEventLogger, RideEventRepository rideEventRepository,
+                       MongoEventLogger mongoEventLogger,
                        CacheInvalidationService cacheInvalidation,
                        Driver neo4jDriver) {
         this.rideRepository = rideRepository;
         this.rideStopRepository = rideStopRepository;
         this.mongoEventLogger = mongoEventLogger;
-        this.rideEventRepository = rideEventRepository;
         this.cacheInvalidation = cacheInvalidation;
         this.neo4jDriver = neo4jDriver;
     }
@@ -449,12 +444,7 @@ public class RideService extends AbstractObservableService {
                 details.put("userId", userId);
             }
 
-            RideEvent event = new RideEvent();
-            event.setRideId(null); // analytics is not tied to a single ride
-            event.setAction("ANALYTICS_VIEWED");
-            event.setTimestamp(LocalDateTime.now());
-            event.setDetails(details);
-            rideEventRepository.save(event);
+            notifyObservers("ANALYTICS_VIEWED", details);
         } catch (Exception ignored) {
             // Mongo failure must not break the analytics request.
         }
