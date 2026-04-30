@@ -214,7 +214,7 @@ public class DriverService extends AbstractObservableService {
 
         List<Driver> cached = cache.get(key, new TypeReference<List<Driver>>() {});
         if (cached != null) {
-            notifyObservers("S2_F10_SEARCH_EXECUTED", buildFullTextSearchEventPayload(
+            notifyObservers("SEARCH_EXECUTED", buildFullTextSearchEventPayload(
                     normalizedQuery, finalVehicleType, status, minRating, maxRating, cached.size(), true));
             return cached;
         }
@@ -249,7 +249,7 @@ public class DriverService extends AbstractObservableService {
 
         if (hits.isEmpty()) {
             cache.put(key, List.of(), TTL_SEARCH);
-            notifyObservers("S2_F10_SEARCH_EXECUTED", buildFullTextSearchEventPayload(
+            notifyObservers("SEARCH_EXECUTED", buildFullTextSearchEventPayload(
                     normalizedQuery, finalVehicleType, status, minRating, maxRating, 0, false));
             return List.of();
         }
@@ -276,7 +276,7 @@ public class DriverService extends AbstractObservableService {
                 .toList();
 
         cache.put(key, result, TTL_SEARCH);
-        notifyObservers("S2_F10_SEARCH_EXECUTED", buildFullTextSearchEventPayload(
+        notifyObservers("SEARCH_EXECUTED", buildFullTextSearchEventPayload(
                 normalizedQuery, finalVehicleType, status, minRating, maxRating, result.size(), false));
         return result;
     }
@@ -289,7 +289,7 @@ public class DriverService extends AbstractObservableService {
                                                                 int resultCount,
                                                                 boolean cacheHit) {
         Map<String, Object> payload = new HashMap<>();
-        payload.put("action", "S2_F10_SEARCH_EXECUTED");
+        payload.put("action", "SEARCH_EXECUTED");
         payload.put("query", queryText);
         payload.put("vehicleType", vehicleType);
         payload.put("status", status != null ? status.name() : null);
