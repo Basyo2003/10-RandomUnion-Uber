@@ -10,6 +10,9 @@ import com.team10.uber.user.enums.Status;
 import com.team10.uber.user.event.AuthEvent;
 import com.team10.uber.user.model.SavedAddress;
 import com.team10.uber.user.model.User;
+import com.team10.uber.user.event.AuthEvent;
+import com.team10.uber.user.observer.EntityObserver;
+import com.team10.uber.user.repository.mongo.AuthEventRepository;
 import com.team10.uber.user.observer.AbstractObservableService;
 import com.team10.uber.user.observer.MongoEventLogger;
 import com.team10.uber.user.repository.SavedAddressRepository;
@@ -21,6 +24,7 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -34,16 +38,21 @@ public class UserService extends AbstractObservableService {
     private final UserRepository userRepository;
     private final SavedAddressRepository savedAddressRepository;
     private final AuthEventRepository authEventRepository;
+    private final EntityObserver observer;
+    private final PasswordEncoder passwordEncoder;
     private final MongoEventLogger mongoEventLogger;
     private final ObjectArrayDtoAdapter objectArrayDtoAdapter = new ObjectArrayDtoAdapter();
 
     public UserService(UserRepository userRepository,
                        SavedAddressRepository savedAddressRepository,
-                       MongoEventLogger mongoEventLogger, AuthEventRepository authEventRepository) {
+                       AuthEventRepository authEventRepository, EntityObserver observer,
+                       PasswordEncoder passwordEncoder, MongoEventLogger mongoEventLogger) {
         this.userRepository = userRepository;
         this.savedAddressRepository = savedAddressRepository;
-        this.mongoEventLogger = mongoEventLogger;
         this.authEventRepository = authEventRepository;
+        this.observer = observer;
+        this.passwordEncoder = passwordEncoder;
+        this.mongoEventLogger = mongoEventLogger;
     }
 
     @PostConstruct
@@ -297,6 +306,43 @@ public class UserService extends AbstractObservableService {
         return userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found with id: " + id));
     }
+
+    @Transactional
+    public User registerUser(User user) {
+// a) Validation: Check for null OR empty/blank strings
+        if (user.getName() == null || user.getName().isBlank() ||
+                user.getEmail() == null || user.getEmail().isBlank() ||
+                user.getPassword() == null || user.getPassword().isBlank() ||
+                user.getPhone() == null || user.getPhone().isBlank()) {
+
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Field cannot be blank");
+        }
+        // b) Uniqueness Check
+        if (userRepository.existsByEmail(user.getEmail()) ||
+                userRepository.existsByPhone(user.getPhone())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Email or Phone already exists");
+        }
+        // d) Default Role & Status
+        user.setPassword(passwordEncoder.encode(user.getPassword()));
+        user.setRole(Role.RIDER);
+        user.setStatus(Status.ACTIVE);
+
+        // Save to PostgreSQL
+        User savedUser = userRepository.save(user);
+
+        // e) Log to MongoDB via Observer Pattern
+        // This uses your MongoEventLogger and EventFactory internally
+        observer.onEvent("REGISTERED", savedUser);
+
+        return savedUser;
+    }
+//     public void logAuthEvent(Long userId, String action, Map<String, Object> details) {
+//         try {
+//             authEventRepository.save(new AuthEvent(userId, action, details));
+//         } catch (Exception e) {
+
+//         }
+//     }
 // public void logAuthEvent(Long userId, String action, Map<String, Object> details) {
 // logEvent(userId, action, details);
 // }
