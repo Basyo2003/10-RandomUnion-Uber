@@ -4,6 +4,7 @@ import com.team10.uber.location.dto.BatchLocationRequest;
 import com.team10.uber.location.dto.DriverMovementSummaryDTO;
 import com.team10.uber.location.dto.DriverMovementSummaryProjection;
 import com.team10.uber.location.dto.StationaryDriverDTO;
+import com.team10.uber.location.event.LocationEventActions;
 import com.team10.uber.location.model.Location;
 import com.team10.uber.location.observer.AbstractObservableService;
 import com.team10.uber.location.observer.MongoEventLogger;
@@ -45,9 +46,9 @@ public class LocationService extends AbstractObservableService {
     }
 
     public Location createLocation(Location location) {
-        locationRepository.driverExists(jdbcTemplate,location.getDriverId());
+        locationRepository.driverExists(jdbcTemplate, location.getDriverId());
         Location saved = locationRepository.save(location);
-        notifyObservers("LOCATION_UPDATED", saved);
+        notifyObservers(LocationEventActions.LOCATION_UPDATED, saved);
         return saved;
     }
 
@@ -91,14 +92,14 @@ public class LocationService extends AbstractObservableService {
         }
 
         Location saved = locationRepository.save(existing);
-        notifyObservers("LOCATION_UPDATED", saved);
+        notifyObservers(LocationEventActions.LOCATION_UPDATED, saved);
         return saved;
     }
 
     public void deleteLocation(Long id) {
         Location existing = getLocationById(id);
         locationRepository.delete(existing);
-        notifyObservers("LOCATION_DELETED", existing.getDriverId());
+        notifyObservers(LocationEventActions.LOCATION_DELETED, existing);
     }
     
 
@@ -119,7 +120,7 @@ public class LocationService extends AbstractObservableService {
 
         location.setDriverId(driverId);
         Location saved = locationRepository.save(location);
-        notifyObservers("LOCATION_UPDATED", saved);
+        notifyObservers(LocationEventActions.LOCATION_UPDATED, saved);
         return saved;
     }
   
@@ -191,14 +192,22 @@ public class LocationService extends AbstractObservableService {
             locationsToSave.add(location);
         }
 
-        locationRepository.saveAll(locationsToSave);
+        List<Location> savedLocations = locationRepository.saveAll(locationsToSave);
 
-        Map<String, Object> response = new HashMap<>();
-        response.put("count", locationsToSave.size());
-        response.put("message", "Batch locations created successfully");
-        response.put("driverId", request.getDriverId());
+         Map<String, Object> response = new HashMap<>();
+         response.put("count", savedLocations.size());
+         response.put("message", "Batch locations created successfully");
+         response.put("driverId", request.getDriverId());
 
-        notifyObservers("BATCH_LOCATIONS_UPDATED", Map.of("driverId", request.getDriverId(), "count", locationsToSave.size()));
+         notifyObservers(
+                 LocationEventActions.BATCH_LOCATIONS_UPDATED,
+                 Map.of(
+                         "driverId", request.getDriverId(),
+                         "count", savedLocations.size(),
+                         "firstTimestamp", savedLocations.get(0).getTimestamp(),
+                         "lastTimestamp", savedLocations.get(savedLocations.size() - 1).getTimestamp()
+                 )
+         );
         return response;
     }
 
@@ -305,7 +314,15 @@ public class LocationService extends AbstractObservableService {
         int count = locationRepository.countLocationsOlderThan(cutoff);
         locationRepository.deleteLocationsOlderThan(cutoff);
 
-        notifyObservers("OLD_LOCATIONS_PURGED", Map.of("count", count, "olderThanDays", olderThanDays));
+        notifyObservers(
+                LocationEventActions.OLD_LOCATIONS_PURGED,
+                Map.of(
+                        "count", count,
+                        "olderThanDays", olderThanDays,
+                        "cutoff", cutoff
+                )
+        );
+
         return count;
     }
 
@@ -331,7 +348,7 @@ public class LocationService extends AbstractObservableService {
                 locationRepository.getDriverMovementSummary(driverId, startDateTime, endDateTime);
 
         if (optionalSummary.isEmpty()) {
-            return new DriverMovementSummaryDTO(
+            DriverMovementSummaryDTO dto = new DriverMovementSummaryDTO(
                     driverId,
                     0L,
                     0.0,
@@ -339,11 +356,24 @@ public class LocationService extends AbstractObservableService {
                     null,
                     null
             );
+            notifyObservers(
+                    LocationEventActions.ANALYTICS_VIEWED,
+                    Map.of(
+                            "driverId", driverId,
+                            "startDate", startDate,
+                            "endDate", endDate,
+                            "totalLocationPoints", 0,
+                            "averageSpeed", 0.0,
+                            "maxSpeed", 0.0
+                    )
+            );
+
+            return dto;
         }
 
         DriverMovementSummaryProjection summary = optionalSummary.get();
 
-        return new DriverMovementSummaryDTO(
+        DriverMovementSummaryDTO dto = new DriverMovementSummaryDTO(
                 summary.getDriverId(),
                 summary.getTotalLocationPoints(),
                 summary.getAverageSpeed(),
@@ -351,6 +381,22 @@ public class LocationService extends AbstractObservableService {
                 summary.getFirstTimestamp(),
                 summary.getLastTimestamp()
         );
+
+        notifyObservers(
+                LocationEventActions.ANALYTICS_VIEWED,
+                Map.of(
+                        "driverId", driverId,
+                        "startDate", startDate,
+                        "endDate", endDate,
+                        "totalLocationPoints", dto.getTotalLocationPoints(),
+                        "averageSpeed", dto.getAverageSpeed(),
+                        "maxSpeed", dto.getMaxSpeed(),
+                        "firstTimestamp", dto.getFirstTimestamp(),
+                        "lastTimestamp", dto.getLastTimestamp()
+                )
+        );
+
+        return dto;
     }
 
     // S4-F9
@@ -358,14 +404,14 @@ public class LocationService extends AbstractObservableService {
         if (maxSpeed == null || maxSpeed < 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "maxSpeed must be >= 0");
         }
+
         if (sinceMinutes == null || sinceMinutes <= 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "sinceMinutes must be > 0");
         }
 
         LocalDateTime cutoffTime = LocalDateTime.now().minusMinutes(sinceMinutes);
 
-        // Map projection → DTO using Builder
-        return locationRepository.findStationaryDrivers(maxSpeed, cutoffTime)
+        List<StationaryDriverDTO> result = locationRepository.findStationaryDrivers(maxSpeed, cutoffTime)
                 .stream()
                 .map(p -> StationaryDriverDTO.builder()
                         .driverId(p.getDriverId())
@@ -376,6 +422,18 @@ public class LocationService extends AbstractObservableService {
                         .lastUpdated(p.getLastUpdated())
                         .build())
                 .collect(java.util.stream.Collectors.toList());
+
+        notifyObservers(
+                LocationEventActions.ANALYTICS_VIEWED,
+                Map.of(
+                        "analyticsType", "STATIONARY_DRIVERS",
+                        "maxSpeed", maxSpeed,
+                        "sinceMinutes", sinceMinutes,
+                        "resultCount", result.size()
+                )
+        );
+
+        return result;
     }
    
 

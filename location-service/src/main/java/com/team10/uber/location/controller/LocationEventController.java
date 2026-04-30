@@ -1,7 +1,7 @@
 package com.team10.uber.location.controller;
 
 import com.team10.uber.location.event.LocationEvent;
-import com.team10.uber.location.event.LocationEventRepository;
+import com.team10.uber.location.repository.mongo.LocationEventRepository;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
