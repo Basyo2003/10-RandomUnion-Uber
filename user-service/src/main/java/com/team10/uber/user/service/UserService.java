@@ -1,18 +1,24 @@
 package com.team10.uber.user.service;
 
+import com.team10.uber.user.adapter.ObjectArrayDtoAdapter;
 import com.team10.uber.user.dto.AddressDTO;
 import com.team10.uber.user.dto.TopRiderDTO;
 import com.team10.uber.user.dto.UserProfileDTO;
 import com.team10.uber.user.dto.UserRideSummaryDTO;
 import com.team10.uber.user.enums.Role;
 import com.team10.uber.user.enums.Status;
+import com.team10.uber.user.event.AuthEvent;
 import com.team10.uber.user.model.SavedAddress;
 import com.team10.uber.user.model.User;
 import com.team10.uber.user.event.AuthEvent;
 import com.team10.uber.user.observer.EntityObserver;
 import com.team10.uber.user.repository.mongo.AuthEventRepository;
+import com.team10.uber.user.observer.AbstractObservableService;
+import com.team10.uber.user.observer.MongoEventLogger;
 import com.team10.uber.user.repository.SavedAddressRepository;
 import com.team10.uber.user.repository.UserRepository;
+import com.team10.uber.user.repository.mongo.AuthEventRepository;
+import jakarta.annotation.PostConstruct;
 import jakarta.transaction.Transactional;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
@@ -27,23 +33,31 @@ import java.time.format.DateTimeParseException;
 import java.util.*;
 
 @Service
-public class UserService {
+public class UserService extends AbstractObservableService {
 
     private final UserRepository userRepository;
     private final SavedAddressRepository savedAddressRepository;
     private final AuthEventRepository authEventRepository;
     private final EntityObserver observer;
     private final PasswordEncoder passwordEncoder;
+    private final MongoEventLogger mongoEventLogger;
+    private final ObjectArrayDtoAdapter objectArrayDtoAdapter = new ObjectArrayDtoAdapter();
 
     public UserService(UserRepository userRepository,
                        SavedAddressRepository savedAddressRepository,
                        AuthEventRepository authEventRepository, EntityObserver observer,
-                       PasswordEncoder passwordEncoder) {
+                       PasswordEncoder passwordEncoder, MongoEventLogger mongoEventLogger) {
         this.userRepository = userRepository;
         this.savedAddressRepository = savedAddressRepository;
         this.authEventRepository = authEventRepository;
         this.observer = observer;
         this.passwordEncoder = passwordEncoder;
+        this.mongoEventLogger = mongoEventLogger;
+    }
+
+    @PostConstruct
+    public void initObservers() {
+        register(mongoEventLogger);
     }
 
     public Optional<User> findByEmail(String email) {
@@ -56,19 +70,27 @@ public class UserService {
     })
     public User createUser(User user) {
         User saved = userRepository.save(user);
-        logEvent(saved.getId(), "USER_CREATED", Map.of("email", saved.getEmail()));
+        notifyObservers("USER_CREATED", saved);
         return saved;
+    }
+
+    public void logAuthEvent(Long userId, String action, Map<String, String> details) {
+        Map<String, Object> payload = new java.util.HashMap<>(details);
+        payload.put("userId", userId);
+        notifyObservers(action, payload);
     }
 
     public List<User> getAllUsers() {
         return userRepository.findAll();
     }
 
+    @Cacheable(value = "user-service::user", key = "#id")
     public User getUserById(Long id) {
         return findUserByIdOrThrow(id);
     }
 
     @Caching(evict = {
+            @CacheEvict(value = "user-service::user", key = "#id"),
             @CacheEvict(value = "user-service::S1-F8", key = "#id"),
             @CacheEvict(value = "user-service::S1-F3", key = "#id"),
             @CacheEvict(value = "user-service::S1-F1", allEntries = true),
@@ -84,11 +106,12 @@ public class UserService {
         existingUser.setStatus(updatedUser.getStatus());
         existingUser.setPreferences(updatedUser.getPreferences());
         User saved = userRepository.save(existingUser);
-        logEvent(id, "USER_UPDATED", Map.of("userId", id));
+        notifyObservers("USER_UPDATED", saved);
         return saved;
     }
 
     @Caching(evict = {
+            @CacheEvict(value = "user-service::user", key = "#id"),
             @CacheEvict(value = "user-service::S1-F8", key = "#id"),
             @CacheEvict(value = "user-service::S1-F3", key = "#id"),
             @CacheEvict(value = "user-service::S1-F1", allEntries = true),
@@ -97,7 +120,7 @@ public class UserService {
     public void deleteUser(Long id) {
         User user = findUserByIdOrThrow(id);
         userRepository.delete(user);
-        logEvent(id, "USER_DELETED", Map.of("userId", id));
+        notifyObservers("USER_DELETED", id);
     }
 
     @Cacheable(value = "user-service::S1-F1", key = "#name + '_' + #email + '_' + #role")
@@ -109,6 +132,7 @@ public class UserService {
     }
 
     @Caching(evict = {
+            @CacheEvict(value = "user-service::user", key = "#id"),
             @CacheEvict(value = "user-service::S1-F8", key = "#id"),
             @CacheEvict(value = "user-service::S1-F3", key = "#id"),
             @CacheEvict(value = "user-service::S1-F1", allEntries = true)
@@ -119,7 +143,7 @@ public class UserService {
         merged.putAll(newPreferences);
         user.setPreferences(merged);
         User saved = userRepository.save(user);
-        logEvent(id, "USER_UPDATED", Map.of("updatedFields", "preferences"));
+        notifyObservers("USER_UPDATED", Map.of("userId", id, "updatedFields", "preferences"));
         return saved;
     }
 
@@ -156,17 +180,7 @@ public class UserService {
         User user = findUserByIdOrThrow(id);
         List<Object[]> resultRows = userRepository.getRideSummaryByUserId(id);
         Object[] result = resultRows.isEmpty() ? new Object[]{0L, 0L, 0L, 0.0, 0.0} : resultRows.get(0);
-
-        Long totalRides = result[0] == null ? 0L : ((Number) result[0]).longValue();
-        Long completedRides = result[1] == null ? 0L : ((Number) result[1]).longValue();
-        Long cancelledRides = result[2] == null ? 0L : ((Number) result[2]).longValue();
-        Double totalSpent = result[3] == null ? 0.0 : ((Number) result[3]).doubleValue();
-        Double averageFare = result[4] == null ? 0.0 : ((Number) result[4]).doubleValue();
-
-        return new UserRideSummaryDTO(
-                user.getId(), user.getName(),
-                totalRides, completedRides, cancelledRides,
-                totalSpent, averageFare);
+        return objectArrayDtoAdapter.adapt(user.getId(), user.getName(), result);
     }
 
     @Cacheable(value = "user-service::S1-F6", key = "#startDate + '_' + #endDate + '_' + #limit")
@@ -215,6 +229,7 @@ public class UserService {
 
     @Transactional
     @Caching(evict = {
+            @CacheEvict(value = "user-service::user", key = "#id"),
             @CacheEvict(value = "user-service::S1-F8", key = "#id"),
             @CacheEvict(value = "user-service::S1-F1", allEntries = true)
     })
@@ -225,7 +240,7 @@ public class UserService {
         }
         user.setStatus(Status.DEACTIVATED);
         User saved = userRepository.save(user);
-        logEvent(id, "USER_DEACTIVATED", Map.of("userId", id));
+        notifyObservers("USER_DEACTIVATED", Map.of("userId", id, "status", "DEACTIVATED"));
         return saved;
     }
 
@@ -246,15 +261,44 @@ public class UserService {
         }
         targetAddress.setIsDefault(true);
         userRepository.save(user);
-        logEvent(userId, "DEFAULT_ADDRESS_SET", Map.of("addressId", addressId));
+        notifyObservers("DEFAULT_ADDRESS_SET", Map.of("userId", userId, "addressId", addressId));
         return getUserProfile(userId);
+    }
+
+    @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "user-service::user", key = "#id"),
+            @CacheEvict(value = "user-service::S1-F12", allEntries = true)
+    })
+    public User updateUserRole(Long id, String requestedRole) {
+        User user = findUserByIdOrThrow(id);
+
+        if (requestedRole == null || requestedRole.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Role is required");
+        }
+
+        Role newRole;
+        try {
+            newRole = Role.valueOf(requestedRole.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid role value");
+        }
+
+        Role oldRole = user.getRole();
+        user.setRole(newRole);
+        User saved = userRepository.save(user);
+        logEvent(id, "ROLE_CHANGED", Map.of(
+                "oldRole", oldRole.name(),
+                "newRole", newRole.name()));
+        return saved;
     }
 
     private void logEvent(Long userId, String action, Map<String, Object> details) {
         try {
             authEventRepository.save(new AuthEvent(userId, action, details));
         } catch (Exception e) {
-            // Don't fail the main operation if logging fails
+            System.err.println("MongoDB logging failed: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
@@ -292,11 +336,14 @@ public class UserService {
 
         return savedUser;
     }
-    public void logAuthEvent(Long userId, String action, Map<String, Object> details) {
-        try {
-            authEventRepository.save(new AuthEvent(userId, action, details));
-        } catch (Exception e) {
+//     public void logAuthEvent(Long userId, String action, Map<String, Object> details) {
+//         try {
+//             authEventRepository.save(new AuthEvent(userId, action, details));
+//         } catch (Exception e) {
 
-        }
-    }
+//         }
+//     }
+// public void logAuthEvent(Long userId, String action, Map<String, Object> details) {
+// logEvent(userId, action, details);
+// }
 }

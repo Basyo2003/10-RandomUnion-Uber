@@ -1,5 +1,6 @@
 package com.team10.uber.driver.service;
 
+import com.team10.uber.driver.cache.RedisCacheService;
 import com.team10.uber.driver.model.Driver;
 import com.team10.uber.driver.model.DriverDocument;
 import com.team10.uber.driver.dto.DriverWithDocumentsDTO;
@@ -22,15 +23,19 @@ import java.util.Map;
 @Service
 public class DriverDocumentService extends AbstractObservableService {
 
+    private static final long TTL_DETAIL = 15 * 60; // §4.4.2 — 15 min
+
     private final DriverDocumentRepository driverDocumentRepository;
     private final DriverRepository driverRepository;
     private final MongoEventLogger mongoEventLogger;
+    private final RedisCacheService cache;
 
     public DriverDocumentService(DriverDocumentRepository driverDocumentRepository, DriverRepository driverRepository,
-                                 MongoEventLogger mongoEventLogger) {
+                                 MongoEventLogger mongoEventLogger, RedisCacheService cache) {
         this.driverDocumentRepository = driverDocumentRepository;
         this.driverRepository = driverRepository;
         this.mongoEventLogger = mongoEventLogger;
+        this.cache = cache;
     }
 
     @PostConstruct
@@ -38,13 +43,24 @@ public class DriverDocumentService extends AbstractObservableService {
         register(mongoEventLogger);
     }
 
+    // ── §4.4.4 — Cache invalidation helpers ─────────────────────────────────
+
+    private void evictDocumentCaches(Long documentId) {
+        cache.evict("driver-document::" + documentId);
+        cache.evictByPattern("S2-F9::*");
+    }
+
+    // ── CRUD ─────────────────────────────────────────────────────────────────
+
     public DriverDocument createDriverDocument(Long driverId, DriverDocument driverDocument) {
         Driver driver = driverRepository.findById(driverId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Driver not found with id: " + driverId));
-
         driverDocument.setDriver(driver);
-        return driverDocumentRepository.save(driverDocument);
+        DriverDocument saved = driverDocumentRepository.save(driverDocument);
+        notifyObservers("DRIVER_CREATED", driver);
+        cache.evictByPattern("S2-F9::*");
+        return saved;
     }
 
     public List<DriverDocument> getAllDriverDocuments() {
@@ -52,22 +68,27 @@ public class DriverDocumentService extends AbstractObservableService {
     }
 
     public List<DriverDocument> getDriverDocumentsByDriverId(Long driverId) {
-        // Verify driver exists
         driverRepository.findById(driverId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Driver not found with id: " + driverId));
         return driverDocumentRepository.findByDriverId(driverId);
     }
 
+    /** §4.4.2 — GET /api/driver-documents/{id}, cached 15 min. */
     public DriverDocument getDriverDocumentById(Long id) {
-        return driverDocumentRepository.findById(id)
+        String key = "driver-document::" + id;
+        DriverDocument cached = cache.get(key, DriverDocument.class);
+        if (cached != null) return cached;
+
+        DriverDocument doc = driverDocumentRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Driver document not found with id: " + id));
+        cache.put(key, doc, TTL_DETAIL);
+        return doc;
     }
 
     public DriverDocument updateDriverDocument(Long id, DriverDocument updatedDriverDocument) {
         DriverDocument existingDriverDocument = getDriverDocumentById(id);
-
         existingDriverDocument.setType(updatedDriverDocument.getType());
         existingDriverDocument.setDocumentUrl(updatedDriverDocument.getDocumentUrl());
         existingDriverDocument.setExpiryDate(updatedDriverDocument.getExpiryDate());
@@ -81,76 +102,67 @@ public class DriverDocumentService extends AbstractObservableService {
             existingDriverDocument.setDriver(driver);
         }
 
-        return driverDocumentRepository.save(existingDriverDocument);
+        DriverDocument saved = driverDocumentRepository.save(existingDriverDocument);
+        notifyObservers("UPDATED", saved.getDriver());
+        evictDocumentCaches(id);
+        return saved;
     }
 
     public void deleteDriverDocument(Long id) {
         DriverDocument driverDocument = getDriverDocumentById(id);
+        Long driverId = driverDocument.getDriver() != null
+                ? driverDocument.getDriver().getId()
+                : null;
         driverDocumentRepository.delete(driverDocument);
+        notifyObservers("DRIVER_DELETED", driverId);
+        evictDocumentCaches(driverDocument.getId());
     }
 
     @Transactional
     public DriverWithDocumentsDTO verifyDriverDocument(Long driverId, Long documentId, Long verifiedBy) {
-        // Step 1: Find driver by ID → 404 if not found
         Driver driver = driverRepository.findById(driverId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Driver not found with id: " + driverId));
 
-        // Step 2: Find document by ID → 404 if not found
         DriverDocument document = driverDocumentRepository.findById(documentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Driver document not found with id: " + documentId));
 
-        // Step 3: Verify document ownership → 400 if not
-        if (!document.getDriver().getId().equals(driverId)) {
+        if (!document.getDriver().getId().equals(driverId))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Document does not belong to this driver");
-        }
 
-        // Step 4: Check document not expired → 400 if expired
-        if (document.getExpiryDate().isBefore(LocalDate.now())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Document has expired");
-        }
+        if (document.getExpiryDate().isBefore(LocalDate.now()))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Document has expired");
 
-        // Step 5: Check document not already verified → 400 if verified
-        if (Boolean.TRUE.equals(document.getVerified())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Document is already verified");
-        }
+        if (Boolean.TRUE.equals(document.getVerified()))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Document is already verified");
 
-        // Step 6: Verify verifiedBy is ADMIN user → 403 if not
-        if (verifiedBy == null) {
+        if (verifiedBy == null)
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Verifier user ID must be provided");
-        }
+
         String userRole = driverDocumentRepository.findUserRoleById(verifiedBy)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN,
                         "Verifier user not found"));
 
-        if (!"ADMIN".equals(userRole)) {
+        if (!"ADMIN".equals(userRole))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "Only ADMIN users can verify documents");
-        }
 
-        // Step 7: Update metadata and set verified
         document.setVerified(true);
-
         Map<String, Object> metadata = document.getMetadata();
-        if (metadata == null) {
+        if (metadata == null)
             metadata = new HashMap<>();
-        }
         metadata.put("verifiedAt", LocalDateTime.now().toString());
         metadata.put("verifiedBy", verifiedBy);
         document.setMetadata(metadata);
 
-        // Persist the document
         driverDocumentRepository.save(document);
-
         notifyObservers("DOCUMENT_VERIFIED", driver);
+        evictDocumentCaches(documentId);
+        cache.evict("driver::" + driverId);
 
-        // Step 8: Return the full driver with all documents
         return new DriverWithDocumentsDTO(driver, driver.getDriverDocuments());
-
     }
 }

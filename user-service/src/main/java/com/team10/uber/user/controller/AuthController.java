@@ -1,6 +1,5 @@
 package com.team10.uber.user.controller;
 
-
 import com.team10.uber.user.enums.Role;
 import com.team10.uber.user.model.User;
 import com.team10.uber.user.security.JwtUtil;
@@ -53,6 +52,8 @@ public class AuthController {
         if (!passwordEncoder.matches(password, user.getPassword())) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid credentials");
         }
+
+        userService.logAuthEvent(user.getId(), "LOGGED_IN", Map.of("email", user.getEmail()));
 
         String token = jwtUtil.generateToken(user.getEmail(), user.getId(), user.getRole().name());
         return ResponseEntity.ok(Map.of("token", token, "expiresIn", 86400000));

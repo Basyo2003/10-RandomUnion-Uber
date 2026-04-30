@@ -22,9 +22,11 @@ import jakarta.persistence.OneToMany;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 
+import java.io.Serializable;
+
 @Entity
 @Table(name = "rides")
-public class Ride {
+public class Ride implements Serializable {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

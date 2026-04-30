@@ -85,4 +85,7 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     // Check ride already has a payment
     @Query(value = "SELECT COUNT(*) FROM payments WHERE ride_id = :rideId", nativeQuery = true)
     int countPaymentsByRideId(@Param("rideId") Long rideId);
+
+    @Query(value = "SELECT metadata->>'surgeMultiplier' FROM rides WHERE id = :rideId", nativeQuery = true)
+    String findSurgeMultiplierByRideId(@Param("rideId") Long rideId);
 }

@@ -5,8 +5,17 @@ services:
       - "8081:8080"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/uberdb
+      SPRING_DATA_MONGODB_URI: mongodb://root:rootpass@mongo:27017/ubermongo?authSource=admin&authMechanism=SCRAM-SHA-256
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_DATA_REDIS_PASSWORD: redispass
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
   driver-service:
     build: ./driver-service
     ports:
@@ -30,6 +39,21 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/uberdb
     depends_on:
       - postgres
+  cassandra-init:
+    image: cassandra:latest
+    depends_on:
+      cassandra:
+        condition: service_healthy
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        until cqlsh cassandra 9042 -e 'DESCRIBE KEYSPACES'; do
+          echo 'Cassandra not ready yet, retrying in 5s...';
+          sleep 5;
+        done
+        cqlsh cassandra 9042 -e "CREATE KEYSPACE IF NOT EXISTS uberks WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};"
+
   location-service:
     build: ./location-service
     ports:
@@ -37,7 +61,10 @@ services:
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/uberdb
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+      cassandra-init:
+        condition: service_completed_successfully
   payment-service:
     build: ./payment-service
     ports:
@@ -58,7 +85,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d uberdb"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d uberdb" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -76,7 +103,7 @@ services:
     volumes:
       - mongo-data:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -85,9 +112,10 @@ services:
     container_name: uber-redis
     ports:
       - "6379:6379"
-    command: redis-server --requirepass redispass --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: redis-server --requirepass redispass --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "redispass", "ping"]
+      test: [ "CMD", "redis-cli", "-a", "redispass", "ping" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -103,11 +131,11 @@ services:
     volumes:
       - es-data:/usr/share/elasticsearch/data
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      test: [ "CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1" ]
       interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 30s
+      retries: 15
+      start_period: 60s
   neo4j:
     image: neo4j:latest
     container_name: uber-neo4j
@@ -121,7 +149,7 @@ services:
     volumes:
       - neo4j-data:/data
     healthcheck:
-      test: ["CMD", "neo4j", "status"]
+      test: [ "CMD", "neo4j", "status" ]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -140,7 +168,7 @@ services:
     volumes:
       - cassandra-data:/var/lib/cassandra
     healthcheck:
-      test: ["CMD-SHELL", "cqlsh -e 'DESCRIBE KEYSPACES'"]
+      test: [ "CMD-SHELL", "cqlsh -e 'DESCRIBE KEYSPACES'" ]
       interval: 15s
       timeout: 10s
       retries: 10
