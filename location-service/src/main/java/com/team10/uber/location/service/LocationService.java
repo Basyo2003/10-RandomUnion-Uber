@@ -31,12 +31,18 @@ public class LocationService extends AbstractObservableService {
     private final LocationRepository locationRepository;
     private final JdbcTemplate jdbcTemplate;
     private final MongoEventLogger mongoEventLogger;
+    private final LocationTrackingEventService locationTrackingEventService;
 
-    public LocationService(LocationRepository locationRepository, JdbcTemplate jdbcTemplate,
-                           MongoEventLogger mongoEventLogger) {
+    public LocationService(
+            LocationRepository locationRepository,
+            JdbcTemplate jdbcTemplate,
+            MongoEventLogger mongoEventLogger,
+            LocationTrackingEventService locationTrackingEventService
+    ) {
         this.locationRepository = locationRepository;
         this.jdbcTemplate = jdbcTemplate;
         this.mongoEventLogger = mongoEventLogger;
+        this.locationTrackingEventService = locationTrackingEventService;
     }
 
     @PostConstruct
@@ -47,6 +53,7 @@ public class LocationService extends AbstractObservableService {
     public Location createLocation(Location location) {
         locationRepository.driverExists(jdbcTemplate,location.getDriverId());
         Location saved = locationRepository.save(location);
+        locationTrackingEventService.recordTrackingEvent(saved);
         notifyObservers("LOCATION_UPDATED", saved);
         return saved;
     }
@@ -119,6 +126,7 @@ public class LocationService extends AbstractObservableService {
 
         location.setDriverId(driverId);
         Location saved = locationRepository.save(location);
+        locationTrackingEventService.recordTrackingEvent(saved);
         notifyObservers("LOCATION_UPDATED", saved);
         return saved;
     }
@@ -191,7 +199,11 @@ public class LocationService extends AbstractObservableService {
             locationsToSave.add(location);
         }
 
-        locationRepository.saveAll(locationsToSave);
+         List<Location> savedLocations = locationRepository.saveAll(locationsToSave);
+
+         for (Location savedLocation : savedLocations) {
+             locationTrackingEventService.recordTrackingEvent(savedLocation);
+         }
 
         Map<String, Object> response = new HashMap<>();
         response.put("count", locationsToSave.size());
