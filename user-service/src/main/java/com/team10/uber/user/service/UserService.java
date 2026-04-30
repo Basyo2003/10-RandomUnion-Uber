@@ -5,6 +5,7 @@ import com.team10.uber.user.dto.AddressDTO;
 import com.team10.uber.user.dto.TopRiderDTO;
 import com.team10.uber.user.dto.UserProfileDTO;
 import com.team10.uber.user.dto.UserRideSummaryDTO;
+import com.team10.uber.user.enums.Role;
 import com.team10.uber.user.enums.Status;
 import com.team10.uber.user.model.SavedAddress;
 import com.team10.uber.user.model.User;
@@ -70,11 +71,13 @@ public class UserService extends AbstractObservableService {
         return userRepository.findAll();
     }
 
+    @Cacheable(value = "user-service::user", key = "#id")
     public User getUserById(Long id) {
         return findUserByIdOrThrow(id);
     }
 
     @Caching(evict = {
+            @CacheEvict(value = "user-service::user", key = "#id"),
             @CacheEvict(value = "user-service::S1-F8", key = "#id"),
             @CacheEvict(value = "user-service::S1-F3", key = "#id"),
             @CacheEvict(value = "user-service::S1-F1", allEntries = true),
@@ -95,6 +98,7 @@ public class UserService extends AbstractObservableService {
     }
 
     @Caching(evict = {
+            @CacheEvict(value = "user-service::user", key = "#id"),
             @CacheEvict(value = "user-service::S1-F8", key = "#id"),
             @CacheEvict(value = "user-service::S1-F3", key = "#id"),
             @CacheEvict(value = "user-service::S1-F1", allEntries = true),
@@ -115,6 +119,7 @@ public class UserService extends AbstractObservableService {
     }
 
     @Caching(evict = {
+            @CacheEvict(value = "user-service::user", key = "#id"),
             @CacheEvict(value = "user-service::S1-F8", key = "#id"),
             @CacheEvict(value = "user-service::S1-F3", key = "#id"),
             @CacheEvict(value = "user-service::S1-F1", allEntries = true)
@@ -211,6 +216,7 @@ public class UserService extends AbstractObservableService {
 
     @Transactional
     @Caching(evict = {
+            @CacheEvict(value = "user-service::user", key = "#id"),
             @CacheEvict(value = "user-service::S1-F8", key = "#id"),
             @CacheEvict(value = "user-service::S1-F1", allEntries = true)
     })
@@ -246,8 +252,48 @@ public class UserService extends AbstractObservableService {
         return getUserProfile(userId);
     }
 
+    @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "user-service::user", key = "#id"),
+            @CacheEvict(value = "user-service::S1-F12", allEntries = true)
+    })
+    public User updateUserRole(Long id, String requestedRole) {
+        User user = findUserByIdOrThrow(id);
+
+        if (requestedRole == null || requestedRole.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Role is required");
+        }
+
+        Role newRole;
+        try {
+            newRole = Role.valueOf(requestedRole.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid role value");
+        }
+
+        Role oldRole = user.getRole();
+        user.setRole(newRole);
+        User saved = userRepository.save(user);
+        logEvent(id, "ROLE_CHANGED", Map.of(
+                "oldRole", oldRole.name(),
+                "newRole", newRole.name()));
+        return saved;
+    }
+
+    private void logEvent(Long userId, String action, Map<String, Object> details) {
+        try {
+            authEventRepository.save(new AuthEvent(userId, action, details));
+        } catch (Exception e) {
+            System.err.println("MongoDB logging failed: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
     private User findUserByIdOrThrow(Long id) {
         return userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found with id: " + id));
+    }
+    public void logAuthEvent(Long userId, String action, Map<String, Object> details) {
+        logEvent(userId, action, details);
     }
 }
