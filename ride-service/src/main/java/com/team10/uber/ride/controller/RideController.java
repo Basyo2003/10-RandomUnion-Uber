@@ -1,11 +1,10 @@
 package com.team10.uber.ride.controller;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
-import com.team10.uber.ride.dto.RideDetailsDTO;
 
-import com.team10.uber.ride.enums.RideStatus;
-import org.springframework.http.ResponseEntity;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -13,19 +12,18 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.team10.uber.ride.dto.RideStopRequestDTO;
-import com.team10.uber.ride.dto.RideWithStopsDTO;
 import com.team10.uber.ride.dto.FareEstimateDTO;
 import com.team10.uber.ride.dto.FareEstimateRequestDTO;
 import com.team10.uber.ride.dto.RideAnalyticsDTO;
+import com.team10.uber.ride.dto.RideDetailsDTO;
+import com.team10.uber.ride.dto.RideStopRequestDTO;
+import com.team10.uber.ride.dto.RideWithStopsDTO;
+import com.team10.uber.ride.enums.RideStatus;
 import com.team10.uber.ride.model.Ride;
 import com.team10.uber.ride.service.RideService;
-import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.web.bind.annotation.*;
-
-import java.time.LocalDate;
 
 @RestController
 @RequestMapping("/api/rides")
@@ -82,7 +80,7 @@ public class RideController {
     public List<Ride> filterByMetadata(@RequestParam String key, @RequestParam String value) {
         return rideService.filterByMetadata(key, value);
     }
-
+    
     @PostMapping("/estimate")
     public FareEstimateDTO getFareEstimate(@RequestBody FareEstimateRequestDTO request) {
         return rideService.getFareEstimate(request);

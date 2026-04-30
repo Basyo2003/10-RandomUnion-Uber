@@ -71,8 +71,9 @@ public class PaymentController {
     @PostMapping("/ride/{rideId}")
     public ResponseEntity<Payment> processPaymentForRide(
             @PathVariable Long rideId,
-            @RequestBody ProcessPaymentDTO dto) {
-        Payment payment = paymentService.processPaymentForRide(rideId, dto);
+            @RequestBody ProcessPaymentDTO dto,
+            @RequestParam(defaultValue = "false") boolean simulateFailure) {
+        Payment payment = paymentService.processPaymentForRide(rideId, dto, simulateFailure);
         return ResponseEntity.status(HttpStatus.CREATED).body(payment);
     }
 

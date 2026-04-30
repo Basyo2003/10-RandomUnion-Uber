@@ -1,6 +1,10 @@
 package com.team10.uber.ride.dto;
 
-public class RideAnalyticsDTO {
+import java.io.Serializable;
+
+public class RideAnalyticsDTO implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     private long totalRides;
     private long completedRides;
@@ -11,8 +15,12 @@ public class RideAnalyticsDTO {
 
     public RideAnalyticsDTO() {}
 
-    public RideAnalyticsDTO(long totalRides, long completedRides, long cancelledRides,
-                            double totalRevenue, double averageFare, double completionRate) {
+    public RideAnalyticsDTO(long totalRides,
+                            long completedRides,
+                            long cancelledRides,
+                            double totalRevenue,
+                            double averageFare,
+                            double completionRate) {
         this.totalRides = totalRides;
         this.completedRides = completedRides;
         this.cancelledRides = cancelledRides;
