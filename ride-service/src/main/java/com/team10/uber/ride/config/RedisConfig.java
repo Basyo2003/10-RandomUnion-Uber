@@ -49,6 +49,7 @@ public class RedisConfig {
         cacheConfigs.put("ride-service::S3-F5",  defaultConfig.entryTtl(Duration.ofMinutes(5)));
         cacheConfigs.put("ride-service::S3-F6",  defaultConfig.entryTtl(Duration.ofMinutes(10)));
         cacheConfigs.put("ride-service::S3-F9",  defaultConfig.entryTtl(Duration.ofMinutes(10)));
+        cacheConfigs.put("ride-service::S3-F12", defaultConfig.entryTtl(Duration.ofMinutes(5)));
 
         return RedisCacheManager.builder(factory)
                 .cacheDefaults(defaultConfig)
