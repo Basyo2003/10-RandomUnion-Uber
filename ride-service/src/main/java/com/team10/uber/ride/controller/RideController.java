@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import com.team10.uber.ride.dto.*;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -119,6 +120,24 @@ public class RideController {
     @GetMapping("{rideId}/details")
     public RideDetailsDTO GetRideDetailsWithStops(@PathVariable Long rideId){
         return rideService.GetRideDetailsWithStops(rideId);
+    }
+    @GetMapping("/analytics/dashboard")
+    public RideAnalyticsDashboardDTO getRideAnalyticsDashboard(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            HttpServletRequest request
+    ) {
+        rideService.validateDashboardDateRange(startDate, endDate);
+
+        RideAnalyticsDashboardDTO dto = rideService.getRideAnalyticsDashboard(startDate, endDate);
+
+        Object userIdAttr = request.getAttribute("userId");
+        Long userId = (userIdAttr instanceof Long l) ? l
+                : (userIdAttr instanceof Number n) ? n.longValue()
+                : null;
+        rideService.logAnalyticsViewed(startDate, endDate, userId);
+
+        return dto;
     }
 
     @GetMapping("/recommendations")

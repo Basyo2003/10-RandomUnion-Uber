@@ -14,8 +14,7 @@ import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 
 import java.time.Duration;
-import java.util.HashMap;
-import java.util.Map;
+
 
 @Configuration
 @EnableCaching
@@ -49,6 +48,7 @@ public class RedisConfig {
         cacheConfigs.put("ride-service::S3-F5",  defaultConfig.entryTtl(Duration.ofMinutes(5)));
         cacheConfigs.put("ride-service::S3-F6",  defaultConfig.entryTtl(Duration.ofMinutes(10)));
         cacheConfigs.put("ride-service::S3-F9",  defaultConfig.entryTtl(Duration.ofMinutes(10)));
+        cacheConfigs.put("ride-service::S3-F10", defaultConfig.entryTtl(Duration.ofMinutes(10)));
         cacheConfigs.put("ride-service::S3-F12", defaultConfig.entryTtl(Duration.ofMinutes(5)));
 
         return RedisCacheManager.builder(factory)

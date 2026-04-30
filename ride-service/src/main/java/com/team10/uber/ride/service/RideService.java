@@ -3,6 +3,15 @@ package com.team10.uber.ride.service;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.*;
+
+import com.team10.uber.ride.dto.*;
+import com.team10.uber.ride.event.RideEvent;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -35,6 +44,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import com.team10.uber.ride.repository.mongo.RideEventRepository;
+import jakarta.annotation.PostConstruct;
 
 @Service
 public class RideService extends AbstractObservableService {
@@ -44,15 +55,17 @@ public class RideService extends AbstractObservableService {
     private final MongoEventLogger mongoEventLogger;
     private final CacheInvalidationService cacheInvalidation;
     private final Driver neo4jDriver;
+    private final RideEventRepository rideEventRepository;
 
     public RideService(RideRepository rideRepository,
                        RideStopRepository rideStopRepository,
-                       MongoEventLogger mongoEventLogger,
+                       MongoEventLogger mongoEventLogger, RideEventRepository rideEventRepository,
                        CacheInvalidationService cacheInvalidation,
                        Driver neo4jDriver) {
         this.rideRepository = rideRepository;
         this.rideStopRepository = rideStopRepository;
         this.mongoEventLogger = mongoEventLogger;
+        this.rideEventRepository = rideEventRepository;
         this.cacheInvalidation = cacheInvalidation;
         this.neo4jDriver = neo4jDriver;
     }
@@ -375,6 +388,79 @@ public class RideService extends AbstractObservableService {
         List<RideStop> stops = rideStopRepository.findByRideIdOrderByStopOrderAsc(rideId);
         return new RideDetailsDTO(ride, stops);
     }
+
+    public void validateDashboardDateRange(LocalDate startDate, LocalDate endDate) {
+        if (startDate == null || endDate == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "startDate and endDate are required");
+        }
+        if (startDate.isAfter(endDate)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "startDate must be on or before endDate");
+        }
+    }
+    @Cacheable(value ="ride-service::S3-F10", key = "#startDate + '_' + #endDate")
+    public RideAnalyticsDashboardDTO getRideAnalyticsDashboard(LocalDate startDate, LocalDate endDate) {
+
+        validateDashboardDateRange(startDate, endDate);
+
+
+        LocalDateTime startDateTime = startDate.atStartOfDay();
+        LocalDateTime endDateTime   = endDate.atTime(LocalTime.MAX);
+
+        Map<String, Long> ridesByStatus = new LinkedHashMap<>();
+
+        long totalRides = 0L;
+        long completedRides = 0L;
+        List<Object[]> rows = rideRepository.countRidesByStatusBetween(startDateTime, endDateTime);
+        for (Object[] row : rows) {
+            String statusName = String.valueOf(row[0]);
+            long count = ((Number) row[1]).longValue();
+            ridesByStatus.put(statusName, count);
+            totalRides += count;
+            if (RideStatus.COMPLETED.name().equals(statusName)) {
+                completedRides = count;
+            }
+        }
+
+        // Revenue — sum of payments.amount for COMPLETED rides in range.
+        Double revenueSum = rideRepository.sumCompletedRideRevenueBetween(startDateTime, endDateTime);
+        double totalRevenue = revenueSum != null ? revenueSum : 0.0;
+
+        double averageRideFare = completedRides > 0 ? totalRevenue / completedRides : 0.0;
+        double completionRate  = totalRides > 0 ? (double) completedRides / totalRides : 0.0;
+
+        return RideAnalyticsDashboardDTO.builder()
+                .totalRides(totalRides)
+                .totalRevenue(totalRevenue)
+                .averageRideFare(averageRideFare)
+                .completionRate(completionRate)
+                .ridesByStatus(ridesByStatus)
+                .build();
+    }
+    public void logAnalyticsViewed(LocalDate startDate, LocalDate endDate, Long userId) {
+        try {
+            Map<String, Object> details = new HashMap<>();
+            details.put("action", "ANALYTICS_VIEWED");
+            details.put("endpoint", "/api/rides/analytics/dashboard");
+            details.put("startDate", startDate != null ? startDate.toString() : null);
+            details.put("endDate",   endDate   != null ? endDate.toString()   : null);
+            if (userId != null) {
+                details.put("userId", userId);
+            }
+
+            RideEvent event = new RideEvent();
+            event.setRideId(null); // analytics is not tied to a single ride
+            event.setAction("ANALYTICS_VIEWED");
+            event.setTimestamp(LocalDateTime.now());
+            event.setDetails(details);
+            rideEventRepository.save(event);
+        } catch (Exception ignored) {
+            // Mongo failure must not break the analytics request.
+        }
+    }
+
+
 
     public String recordInteraction(Long rideId) {
         // Step 1-2: Find ride and verify COMPLETED status
