@@ -36,6 +36,9 @@ public interface LocationRepository extends JpaRepository<Location, Long> {
         }
     }
 
+    @Query(value = "SELECT EXISTS (SELECT 1 FROM rides WHERE id = :rideId)", nativeQuery = true)
+    boolean rideExists(@Param("rideId") Long rideId);
+
     
 
     
@@ -175,5 +178,64 @@ public interface LocationRepository extends JpaRepository<Location, Long> {
     List<StationaryDriverProjection> findStationaryDrivers(
             @Param("maxSpeed") Double maxSpeed,
             @Param("cutoffTime") LocalDateTime cutoffTime
+    );
+
+
+
+
+    // S4-F10
+    @Query(value = """
+        SELECT COUNT(*)
+        FROM locations
+        WHERE timestamp >= :startDateTime
+          AND timestamp <= :endDateTime
+        """, nativeQuery = true)
+    Long countLocationEventsBetween(
+            @Param("startDateTime") LocalDateTime startDateTime,
+            @Param("endDateTime") LocalDateTime endDateTime
+    );
+
+    @Query(value = """
+        SELECT COUNT(DISTINCT driver_id)
+        FROM locations
+        WHERE timestamp >= :startDateTime
+          AND timestamp <= :endDateTime
+        """, nativeQuery = true)
+    Long countActiveDriversBetween(
+            @Param("startDateTime") LocalDateTime startDateTime,
+            @Param("endDateTime") LocalDateTime endDateTime
+    );
+
+    @Query(value = """
+        SELECT COALESCE(
+            AVG(
+                COALESCE(
+                    CAST(NULLIF(metadata ->> 'speed', '') AS DOUBLE PRECISION),
+                    0
+                )
+            ),
+            0
+        )
+        FROM locations
+        WHERE timestamp >= :startDateTime
+          AND timestamp <= :endDateTime
+        """, nativeQuery = true)
+    Double findAverageSpeedBetween(
+            @Param("startDateTime") LocalDateTime startDateTime,
+            @Param("endDateTime") LocalDateTime endDateTime
+    );
+
+    @Query(value = """
+        SELECT CAST(EXTRACT(HOUR FROM timestamp) AS int) AS hour,
+               COUNT(*) AS count
+        FROM locations
+        WHERE timestamp >= :startDateTime
+          AND timestamp <= :endDateTime
+        GROUP BY CAST(EXTRACT(HOUR FROM timestamp) AS int)
+        ORDER BY hour
+        """, nativeQuery = true)
+    List<Object[]> countEventsByHourBetween(
+            @Param("startDateTime") LocalDateTime startDateTime,
+            @Param("endDateTime") LocalDateTime endDateTime
     );
 }

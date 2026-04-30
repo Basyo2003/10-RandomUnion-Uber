@@ -136,4 +136,10 @@ public class RideController {
 
         return ResponseEntity.ok(recommendationService.getDriverRecommendations(userId, limit));
     }
+
+    @PostMapping("/{rideId}/record-interaction")
+    public String recordInteraction(@PathVariable Long rideId) {
+        return rideService.recordInteraction(rideId);
+
+    }
 }

@@ -56,6 +56,9 @@ public interface RideRepository extends JpaRepository<Ride, Long> {
     @Query(value = "SELECT COUNT(*) > 0 FROM drivers WHERE id = :driverId", nativeQuery = true)
     boolean driverexists(@Param("driverId") Long driverId);
 
+    @Query(value = "SELECT COUNT(*) > 0 FROM users WHERE id = :userId", nativeQuery = true)
+    boolean userExistsById(@Param("userId") Long userId);
+
     @Query(value = "SELECT status FROM drivers WHERE id = :driverId",
             nativeQuery = true)
     String findStatusByDriverId(@Param("driverId") Long driverId);
