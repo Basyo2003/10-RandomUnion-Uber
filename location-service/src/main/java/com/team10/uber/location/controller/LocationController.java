@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import com.team10.uber.location.dto.NearbyDriverDTO;
+import com.team10.uber.location.dto.LocationAnalyticsDTO;
 
 
 import com.team10.uber.location.dto.StationaryDriverDTO;
@@ -205,6 +206,16 @@ public class LocationController {
 
             return ResponseEntity.status(ex.getStatusCode()).body(error);
         }
+    }
+
+
+    // S4-F10
+    @GetMapping("/analytics")
+    public LocationAnalyticsDTO getLocationAnalytics(
+            @RequestParam LocalDate startDate,
+            @RequestParam LocalDate endDate
+    ) {
+        return locationService.getLocationAnalytics(startDate, endDate);
     }
 }
 

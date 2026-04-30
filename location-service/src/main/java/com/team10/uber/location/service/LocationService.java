@@ -8,6 +8,7 @@ import com.team10.uber.location.event.LocationEventActions;
 import com.team10.uber.location.dto.*;
 import com.team10.uber.location.model.Location;
 import com.team10.uber.location.repository.LocationRepository;
+import jakarta.annotation.PostConstruct;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -16,15 +17,11 @@ import org.springframework.web.server.ResponseStatusException;
 import com.team10.uber.location.observer.AbstractObservableService;
 import com.team10.uber.location.observer.MongoEventLogger;
 
-import java.util.ArrayList;
-import java.util.Comparator;
+import java.time.LocalTime;
+import java.util.*;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 
 import java.time.Duration;
 @Service
@@ -50,9 +47,12 @@ public class LocationService extends AbstractObservableService {
     this.redisCacheService = redisCacheService;
     this.mongoEventLogger = mongoEventLogger;
     this.locationTrackingEventService = locationTrackingEventService;
+    }
 
-    register(mongoEventLogger);
-}
+    @PostConstruct
+    public void initObservers() {
+        register(mongoEventLogger);
+    }
 
     // 4.4.4 Cache Invalidation - create location invalidates feature caches
     public Location createLocation(Location location) {
@@ -404,6 +404,7 @@ public Map<String, Object> batchCreateLocations(BatchLocationRequest request) {
         redisCacheService.deleteByPattern(CACHE_PREFIX + "::S4-F6::*");
         redisCacheService.deleteByPattern(CACHE_PREFIX + "::S4-F8::*");
         redisCacheService.deleteByPattern(CACHE_PREFIX + "::S4-F9::*");
+        redisCacheService.deleteByPattern(CACHE_PREFIX + "::S4-F10::*");
 
 
         notifyObservers(
@@ -543,6 +544,74 @@ public List<StationaryDriverDTO> getStationaryDrivers(Double maxSpeed, Integer s
 }
 
 
+
+    // S4-F10 - Location analytics dashboard
+// Redis cache TTL: 10 minutes
+// Logs ANALYTICS_VIEWED in MongoDB on every invocation, including cache hits.
+    public LocationAnalyticsDTO getLocationAnalytics(LocalDate startDate, LocalDate endDate) {
+        if (startDate.isAfter(endDate)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "startDate cannot be after endDate"
+            );
+        }
+
+        LocalDateTime startDateTime = startDate.atStartOfDay();
+        LocalDateTime endDateTime = LocalDateTime.of(
+                endDate,
+                LocalTime.of(23, 59, 59, 999_000_000)
+        );
+
+        String cacheKey = featureKey("S4-F10", startDate, endDate);
+
+        notifyObservers(
+                LocationEventActions.ANALYTICS_VIEWED,
+                Map.of(
+                        "analyticsType", "LOCATION_DASHBOARD",
+                        "startDate", startDate.toString(),
+                        "endDate", endDate.toString(),
+                        "cacheKey", cacheKey
+                )
+        );
+
+        Object cached = redisCacheService.get(cacheKey);
+        if (cached instanceof LocationAnalyticsDTO dto) {
+            return dto;
+        }
+
+        Long totalLocationEvents =
+                locationRepository.countLocationEventsBetween(startDateTime, endDateTime);
+
+        Long activeDrivers =
+                locationRepository.countActiveDriversBetween(startDateTime, endDateTime);
+
+        Double averageSpeed =
+                locationRepository.findAverageSpeedBetween(startDateTime, endDateTime);
+
+        List<Object[]> hourlyRows =
+                locationRepository.countEventsByHourBetween(startDateTime, endDateTime);
+
+        Map<Integer, Long> eventsByHour = new LinkedHashMap<>();
+
+        for (Object[] row : hourlyRows) {
+            Integer hour = ((Number) row[0]).intValue();
+            Long count = ((Number) row[1]).longValue();
+            eventsByHour.put(hour, count);
+        }
+
+        LocationAnalyticsDTO dto = new LocationAnalyticsDTO(
+                totalLocationEvents != null ? totalLocationEvents : 0L,
+                activeDrivers != null ? activeDrivers : 0L,
+                averageSpeed != null ? averageSpeed : 0.0,
+                eventsByHour
+        );
+
+        redisCacheService.set(cacheKey, dto, Duration.ofMinutes(10));
+
+        return dto;
+    }
+
+
     // 4.4 Redis Caching - cache key helpers
     private String locationKey(Long id) {
         return CACHE_PREFIX + "::location::" + id;
@@ -573,6 +642,7 @@ public List<StationaryDriverDTO> getStationaryDrivers(Double maxSpeed, Integer s
         redisCacheService.deleteByPattern(CACHE_PREFIX + "::S4-F5::*");
         redisCacheService.deleteByPattern(CACHE_PREFIX + "::S4-F6::*");
         redisCacheService.deleteByPattern(CACHE_PREFIX + "::S4-F9::*");
+        redisCacheService.deleteByPattern(CACHE_PREFIX + "::S4-F10::*");
     }
    
 
