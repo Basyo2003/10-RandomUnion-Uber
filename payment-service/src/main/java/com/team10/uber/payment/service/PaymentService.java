@@ -1,11 +1,6 @@
 package com.team10.uber.payment.service;
 
 import com.team10.uber.payment.cache.RedisCacheService;
-import com.team10.uber.payment.dto.CouponUsageDTO;
-import com.team10.uber.payment.dto.PaymentDetailsDTO;
-import com.team10.uber.payment.dto.ProcessPaymentDTO;
-import com.team10.uber.payment.dto.RevenueReportDTO;
-import com.team10.uber.payment.dto.UserPaymentSummaryDTO;
 import com.team10.uber.payment.enums.DiscountType;
 import com.team10.uber.payment.enums.PaymentMethod;
 import com.team10.uber.payment.enums.PaymentStatus;
@@ -28,10 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.team10.uber.payment.cache.RedisCacheService;
 import com.team10.uber.payment.dto.*;
@@ -605,6 +597,89 @@ public class PaymentService extends AbstractObservableService {
 
         cache.put(key, result, TTL_ANALYTICS);
         return result;
+    }
+
+    // §10.5.2 — S5-F11: Get Payment Method Breakdown
+    public List<PaymentMethodDTO> getPaymentMethodBreakdown(String startDateStr, String endDateStr) {
+        LocalDateTime startDate = parseDate(startDateStr, false);  // 00:00:00
+        LocalDateTime endDate = parseDate(endDateStr, true);      // 23:59:59.999
+
+        if (startDate.isAfter(endDate)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "startDate must be before endDate");
+        }
+
+        // Log ANALYTICS_VIEWED (pure observability - same pattern as S5-F10)
+        try {
+            PaymentAuditEvent event = new PaymentAuditEvent(
+                    null,
+                    "ANALYTICS_VIEWED",
+                    LocalDateTime.now(),
+                    null,
+                    null,
+                    Map.of("dashboard", "payment-method-breakdown",
+                           "startDate", startDate.toString(),
+                           "endDate", endDate.toString())
+            );
+            auditEventRepository.save(event);
+        } catch (Exception e) {
+            log.warn("MongoDB audit event write failed: {}", e.getMessage());
+        }
+
+        // Redis caching (10 min TTL - matches TTL_ANALYTICS)
+        String key = "S5-F11::" + startDate + "::" + endDate;
+        List<PaymentMethodDTO> cached = cache.get(key, new TypeReference<List<PaymentMethodDTO>>() {});
+        if (cached != null) {
+            return cached;
+        }
+
+        // Query MongoDB (only COMPLETED + FAILED)
+        List<PaymentAuditEvent> events = auditEventRepository
+                .findByTimestampBetweenAndActionIn(startDate, endDate);
+
+        // Group by method
+        Map<String, PaymentMethodStats> statsMap = new HashMap<>();
+        for (PaymentAuditEvent event : events) {
+            String method = event.getMethod();
+            if (method == null) continue;
+
+            PaymentMethodStats stats = statsMap.computeIfAbsent(method, k -> new PaymentMethodStats());
+
+            if ("COMPLETED".equals(event.getAction())) {
+                stats.successCount++;
+                stats.totalAmount += (event.getAmount() != null ? event.getAmount() : 0.0);
+            } else if ("FAILED".equals(event.getAction())) {
+                stats.failureCount++;
+            }
+        }
+
+        // Build DTO list
+        List<PaymentMethodDTO> result = statsMap.entrySet().stream()
+                .map(entry -> {
+                    String method = entry.getKey();
+                    PaymentMethodStats s = entry.getValue();
+                    long total = s.successCount + s.failureCount;
+                    double rate = total == 0 ? 0.0 : (double) s.successCount / total;
+
+                    return PaymentMethodDTO.builder()
+                            .method(method)
+                            .successCount(s.successCount)
+                            .failureCount(s.failureCount)
+                            .successRate(rate)
+                            .totalAmount(s.totalAmount)
+                            .build();
+                })
+                .toList();
+
+        cache.put(key, result, TTL_ANALYTICS);
+        return result;
+    }
+
+    // Tiny helper class for grouping (private inside service)
+    private static class PaymentMethodStats {
+        long successCount = 0;
+        long failureCount = 0;
+        double totalAmount = 0.0;
     }
 
     // §10.5.3 — S5-F12: surge-adjusted refund with Strategy pattern
