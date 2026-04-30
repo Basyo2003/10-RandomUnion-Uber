@@ -7,12 +7,14 @@ import com.team10.uber.user.dto.UserProfileDTO;
 import com.team10.uber.user.dto.UserRideSummaryDTO;
 import com.team10.uber.user.enums.Role;
 import com.team10.uber.user.enums.Status;
+import com.team10.uber.user.event.AuthEvent;
 import com.team10.uber.user.model.SavedAddress;
 import com.team10.uber.user.model.User;
 import com.team10.uber.user.observer.AbstractObservableService;
 import com.team10.uber.user.observer.MongoEventLogger;
 import com.team10.uber.user.repository.SavedAddressRepository;
 import com.team10.uber.user.repository.UserRepository;
+import com.team10.uber.user.repository.mongo.AuthEventRepository;
 import jakarta.annotation.PostConstruct;
 import jakarta.transaction.Transactional;
 import org.springframework.cache.annotation.CacheEvict;
@@ -31,15 +33,17 @@ public class UserService extends AbstractObservableService {
 
     private final UserRepository userRepository;
     private final SavedAddressRepository savedAddressRepository;
+    private final AuthEventRepository authEventRepository;
     private final MongoEventLogger mongoEventLogger;
     private final ObjectArrayDtoAdapter objectArrayDtoAdapter = new ObjectArrayDtoAdapter();
 
     public UserService(UserRepository userRepository,
                        SavedAddressRepository savedAddressRepository,
-                       MongoEventLogger mongoEventLogger) {
+                       MongoEventLogger mongoEventLogger, AuthEventRepository authEventRepository) {
         this.userRepository = userRepository;
         this.savedAddressRepository = savedAddressRepository;
         this.mongoEventLogger = mongoEventLogger;
+        this.authEventRepository = authEventRepository;
     }
 
     @PostConstruct
@@ -293,7 +297,7 @@ public class UserService extends AbstractObservableService {
         return userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found with id: " + id));
     }
-    public void logAuthEvent(Long userId, String action, Map<String, Object> details) {
-        logEvent(userId, action, details);
-    }
+// public void logAuthEvent(Long userId, String action, Map<String, Object> details) {
+// logEvent(userId, action, details);
+// }
 }
