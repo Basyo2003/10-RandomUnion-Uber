@@ -1,9 +1,6 @@
 package com.team10.uber.location.service;
 
-import com.team10.uber.location.dto.BatchLocationRequest;
-import com.team10.uber.location.dto.DriverMovementSummaryDTO;
-import com.team10.uber.location.dto.DriverMovementSummaryProjection;
-import com.team10.uber.location.dto.StationaryDriverDTO;
+import com.team10.uber.location.dto.*;
 import com.team10.uber.location.model.Location;
 import com.team10.uber.location.repository.LocationRepository;
 import org.springframework.http.HttpStatus;
@@ -11,7 +8,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
-import com.team10.uber.location.dto.NearbyDriverDTO;
+
 import java.util.ArrayList;
 import java.util.Comparator;
 
@@ -453,7 +450,20 @@ public class LocationService {
         }
 
         LocalDateTime cutoffTime = LocalDateTime.now().minusMinutes(sinceMinutes);
-        List<StationaryDriverDTO> result = locationRepository.findStationaryDrivers(maxSpeed, cutoffTime);
+
+        List<StationaryDriverProjection> projections =
+                locationRepository.findStationaryDrivers(maxSpeed, cutoffTime);
+
+        List<StationaryDriverDTO> result = projections.stream()
+                .map(p -> new StationaryDriverDTO(
+                        p.getDriverId(),
+                        p.getDriverName(),
+                        p.getLatitude(),
+                        p.getLongitude(),
+                        p.getLastSpeed(),
+                        p.getLastUpdated()
+                ))
+                .toList();
 
         redisCacheService.set(cacheKey, result, Duration.ofMinutes(10));
         return result;
