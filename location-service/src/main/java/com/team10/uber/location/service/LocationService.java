@@ -32,27 +32,33 @@ public class LocationService extends AbstractObservableService {
 
     private final LocationRepository locationRepository;
     private final JdbcTemplate jdbcTemplate;
+    private final MongoEventLogger mongoEventLogger;
+    private final LocationTrackingEventService locationTrackingEventService;
     private final RedisCacheService redisCacheService;
 
     private static final String CACHE_PREFIX = "location-service";
 
     public LocationService(
-            LocationRepository locationRepository,
-            JdbcTemplate jdbcTemplate,
-            RedisCacheService redisCacheService,
-            MongoEventLogger mongoEventLogger
-    ) {
-        this.locationRepository = locationRepository;
-        this.jdbcTemplate = jdbcTemplate;
-        this.redisCacheService = redisCacheService;
+        LocationRepository locationRepository,
+        JdbcTemplate jdbcTemplate,
+        RedisCacheService redisCacheService,
+        MongoEventLogger mongoEventLogger,
+        LocationTrackingEventService locationTrackingEventService
+) {
+    this.locationRepository = locationRepository;
+    this.jdbcTemplate = jdbcTemplate;
+    this.redisCacheService = redisCacheService;
+    this.mongoEventLogger = mongoEventLogger;
+    this.locationTrackingEventService = locationTrackingEventService;
 
-        register(mongoEventLogger);
-    }
+    register(mongoEventLogger);
+}
 
     // 4.4.4 Cache Invalidation - create location invalidates feature caches
     public Location createLocation(Location location) {
         locationRepository.driverExists(jdbcTemplate, location.getDriverId());
         Location saved = locationRepository.save(location);
+        locationTrackingEventService.recordTrackingEvent(saved);
         invalidateLocationCaches(saved.getId(), saved.getDriverId());
         notifyObservers(LocationEventActions.LOCATION_UPDATED, saved);
 
@@ -110,6 +116,8 @@ public class LocationService extends AbstractObservableService {
         }
 
         Location saved = locationRepository.save(existing);
+        ///new line 
+        locationTrackingEventService.recordTrackingEvent(saved);
         invalidateLocationCaches(saved.getId(), saved.getDriverId());
         notifyObservers(LocationEventActions.LOCATION_UPDATED, saved);
         return saved;
@@ -153,6 +161,7 @@ public class LocationService extends AbstractObservableService {
         location.setDriverId(driverId);
 
         Location saved = locationRepository.save(location);
+        locationTrackingEventService.recordTrackingEvent(saved);
         invalidateLocationCaches(saved.getId(), saved.getDriverId());
         notifyObservers(LocationEventActions.LOCATION_UPDATED, saved);
 
@@ -238,9 +247,9 @@ public Map<String, Object> batchCreateLocations(BatchLocationRequest request) {
 
     List<Location> savedLocations = locationRepository.saveAll(locationsToSave);
 
-    // 4.4.4 Cache Invalidation - S4-F4 batch create invalidates affected location feature caches
-    for (Location saved : savedLocations) {
-        invalidateLocationCaches(saved.getId(), saved.getDriverId());
+    for (Location savedLocation : savedLocations) {
+        locationTrackingEventService.recordTrackingEvent(savedLocation);
+        invalidateLocationCaches(savedLocation.getId(), savedLocation.getDriverId());
     }
 
     Map<String, Object> response = new HashMap<>();
