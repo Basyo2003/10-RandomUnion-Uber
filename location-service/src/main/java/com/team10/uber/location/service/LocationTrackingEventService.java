@@ -7,6 +7,7 @@ import com.team10.uber.location.cassandra.LocationTrackingEventRepository;
 import com.team10.uber.location.dto.LocationTrackingEventDTO;
 import com.team10.uber.location.model.Location;
 import org.springframework.stereotype.Service;
+import com.team10.uber.location.dto.TrackingEventRequest;
 
 import java.time.Instant;
 import java.time.ZoneId;
@@ -90,5 +91,55 @@ public class LocationTrackingEventService {
         } catch (NumberFormatException e) {
             return null;
         }
+    }
+
+    // S4-F11 - record GPS tracking payload directly into Cassandra
+    public LocationTrackingEvent recordTrackingEvent(Long driverId, TrackingEventRequest request) {
+        LocationTrackingEventKey key = new LocationTrackingEventKey(
+                driverId,
+                Instant.now()
+        );
+
+        LocationTrackingEvent event = new LocationTrackingEvent(
+                key,
+                request.getLatitude(),
+                request.getLongitude(),
+                request.getSpeed(),
+                request.getHeading(),
+                request.getAccuracy(),
+                request.getRideId(),
+                request.getNotes()
+        );
+
+        return locationTrackingEventRepository.save(event);
+    }
+
+    //S4-F12
+    public List<LocationTrackingEventDTO> getTrackingEventsForDriver(
+            Long driverId,
+            Instant startTime,
+            Instant endTime
+    ) {
+        List<LocationTrackingEvent> events;
+
+        if (startTime != null && endTime != null) {
+            events = locationTrackingEventRepository
+                    .findByKeyDriverIdAndKeyTimestampBetween(driverId, startTime, endTime);
+
+        } else if (startTime != null) {
+            events = locationTrackingEventRepository
+                    .findByKeyDriverIdAndKeyTimestampGreaterThanEqual(driverId, startTime);
+
+        } else if (endTime != null) {
+            events = locationTrackingEventRepository
+                    .findByKeyDriverIdAndKeyTimestampLessThanEqual(driverId, endTime);
+
+        } else {
+            events = locationTrackingEventRepository.findByKeyDriverId(driverId);
+        }
+
+        return events.stream()
+                .map(cassandraRowAdapter::adapt)
+                .toList();
     }
 }

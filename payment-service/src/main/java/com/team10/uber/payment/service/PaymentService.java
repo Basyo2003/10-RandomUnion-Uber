@@ -617,6 +617,13 @@ public class PaymentService extends AbstractObservableService {
         return result;
     }
 
+    // Tiny helper class for grouping (private inside service)
+    private static class PaymentMethodStats {
+        long successCount = 0;
+        long failureCount = 0;
+        double totalAmount = 0.0;
+    }
+
     // §10.5.3 — S5-F12: surge-adjusted refund with Strategy pattern
     @Transactional
     public Payment refundSurgeAdjusted(Long id, RefundRequest request) {

@@ -17,4 +17,14 @@ public interface LocationTrackingEventRepository
             Instant start,
             Instant end
     );
+
+    List<LocationTrackingEvent> findByKeyDriverIdAndKeyTimestampGreaterThanEqual(
+            Long driverId,
+            Instant start
+    );
+
+    List<LocationTrackingEvent> findByKeyDriverIdAndKeyTimestampLessThanEqual(
+            Long driverId,
+            Instant end
+    );
 }
