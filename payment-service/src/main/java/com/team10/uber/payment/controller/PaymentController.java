@@ -14,6 +14,7 @@ import com.team10.uber.payment.dto.CouponUsageDTO;
 import com.team10.uber.payment.dto.PaymentDetailsDTO;
 import com.team10.uber.payment.dto.RevenueReportDTO;
 import com.team10.uber.payment.dto.VehicleTypeRevenueDTO;
+import com.team10.uber.payment.dto.PaymentMethodDTO;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -144,5 +145,13 @@ public class PaymentController {
             @RequestParam String startDate,
             @RequestParam String endDate) {
         return ResponseEntity.ok(paymentService.getFareRevenueByVehicleType(startDate, endDate));
+    }
+
+    // §10.5.2 — S5-F11
+    @GetMapping("/analytics/methods")
+    public ResponseEntity<List<PaymentMethodDTO>> getPaymentMethodBreakdown(
+            @RequestParam String startDate,
+            @RequestParam String endDate) {
+        return ResponseEntity.ok(paymentService.getPaymentMethodBreakdown(startDate, endDate));
     }
 }
