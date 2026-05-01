@@ -1,23 +1,18 @@
 package com.team10.uber.location.controller;
 
-import com.team10.uber.location.dto.BatchLocationRequest;
+import com.team10.uber.location.dto.*;
 
-import com.team10.uber.location.dto.DriverMovementSummaryDTO;
 import com.team10.uber.location.model.Location;
 import com.team10.uber.location.service.LocationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
-import com.team10.uber.location.dto.NearbyDriverDTO;
-import com.team10.uber.location.dto.LocationAnalyticsDTO;
-import com.team10.uber.location.dto.TrackingEventRequest;
 
-
-import com.team10.uber.location.dto.StationaryDriverDTO;
-
-
+import com.team10.uber.location.dto.LocationTrackingEventDTO;
 import org.springframework.format.annotation.DateTimeFormat;
+
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -235,6 +230,31 @@ public class LocationController {
                             "driverId", driverId
                     )
             );
+
+        } catch (ResponseStatusException ex) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("timestamp", LocalDateTime.now());
+            error.put("status", ex.getStatusCode().value());
+            error.put("error", ex.getStatusCode().toString());
+            error.put("message", ex.getReason());
+            error.put("path", "/api/locations/" + driverId + "/tracking");
+
+            return ResponseEntity.status(ex.getStatusCode()).body(error);
+        }
+    }
+
+    // S4-F12
+    @GetMapping("/{driverId}/tracking")
+    public ResponseEntity<?> getLocationTrackingTimeline(
+            @PathVariable Long driverId,
+            @RequestParam(required = false) Instant startTime,
+            @RequestParam(required = false) Instant endTime
+    ) {
+        try {
+            List<LocationTrackingEventDTO> result =
+                    locationService.getLocationTrackingTimeline(driverId, startTime, endTime);
+
+            return ResponseEntity.ok(result);
 
         } catch (ResponseStatusException ex) {
             Map<String, Object> error = new HashMap<>();

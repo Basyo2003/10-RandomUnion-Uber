@@ -18,13 +18,9 @@ import com.team10.uber.location.observer.AbstractObservableService;
 import com.team10.uber.location.observer.MongoEventLogger;
 import com.team10.uber.location.dto.TrackingEventRequest;
 
-import java.time.LocalTime;
+import java.time.*;
 import java.util.*;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-
-import java.time.Duration;
 @Service
 public class LocationService extends AbstractObservableService {
 
@@ -406,6 +402,7 @@ public Map<String, Object> batchCreateLocations(BatchLocationRequest request) {
         redisCacheService.deleteByPattern(CACHE_PREFIX + "::S4-F8::*");
         redisCacheService.deleteByPattern(CACHE_PREFIX + "::S4-F9::*");
         redisCacheService.deleteByPattern(CACHE_PREFIX + "::S4-F10::*");
+        redisCacheService.deleteByPattern(CACHE_PREFIX + "::S4-F12::*");
 
 
         notifyObservers(
@@ -648,6 +645,7 @@ public List<StationaryDriverDTO> getStationaryDrivers(Double maxSpeed, Integer s
         redisCacheService.deleteByPattern(CACHE_PREFIX + "::S4-F8::" + driverId + "::*");
         redisCacheService.deleteByPattern(CACHE_PREFIX + "::S4-F9::*");
         redisCacheService.deleteByPattern(CACHE_PREFIX + "::S4-F10::*");
+        redisCacheService.deleteByPattern(CACHE_PREFIX + "::S4-F12::" + driverId + "::*");
     }
 
     private Long resolveExistingRideIdOrNull(Long rideId) {
@@ -656,6 +654,41 @@ public List<StationaryDriverDTO> getStationaryDrivers(Double maxSpeed, Integer s
         }
 
         return locationRepository.rideExists(rideId) ? rideId : null;
+    }
+
+
+    // S4-F12 - Get Location Tracking Timeline
+    public List<LocationTrackingEventDTO> getLocationTrackingTimeline(
+            Long driverId,
+            Instant startTime,
+            Instant endTime
+    ) {
+        locationRepository.driverExists(jdbcTemplate, driverId);
+
+        if (startTime != null && endTime != null && startTime.isAfter(endTime)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "startTime cannot be after endTime"
+            );
+        }
+
+        String cacheKey = featureKey("S4-F12", driverId, startTime, endTime);
+
+        Object cached = redisCacheService.get(cacheKey);
+        if (cached instanceof List<?> cachedList) {
+            return (List<LocationTrackingEventDTO>) cachedList;
+        }
+
+        List<LocationTrackingEventDTO> result =
+                locationTrackingEventService.getTrackingEventsForDriver(
+                        driverId,
+                        startTime,
+                        endTime
+                );
+
+        redisCacheService.set(cacheKey, result, Duration.ofMinutes(5));
+
+        return result;
     }
 
 
@@ -683,6 +716,7 @@ public List<StationaryDriverDTO> getStationaryDrivers(Double maxSpeed, Integer s
         if (driverId != null) {
             redisCacheService.delete(featureKey("S4-F1", driverId));
             redisCacheService.deleteByPattern(CACHE_PREFIX + "::S4-F8::" + driverId + "::*");
+            redisCacheService.deleteByPattern(CACHE_PREFIX + "::S4-F12::" + driverId + "::*");
         }
 
         redisCacheService.deleteByPattern(CACHE_PREFIX + "::S4-F3::*");
@@ -691,7 +725,7 @@ public List<StationaryDriverDTO> getStationaryDrivers(Double maxSpeed, Integer s
         redisCacheService.deleteByPattern(CACHE_PREFIX + "::S4-F9::*");
         redisCacheService.deleteByPattern(CACHE_PREFIX + "::S4-F10::*");
     }
-   
+
 
 
 }

@@ -113,4 +113,33 @@ public class LocationTrackingEventService {
 
         return locationTrackingEventRepository.save(event);
     }
+
+    //S4-F12
+    public List<LocationTrackingEventDTO> getTrackingEventsForDriver(
+            Long driverId,
+            Instant startTime,
+            Instant endTime
+    ) {
+        List<LocationTrackingEvent> events;
+
+        if (startTime != null && endTime != null) {
+            events = locationTrackingEventRepository
+                    .findByKeyDriverIdAndKeyTimestampBetween(driverId, startTime, endTime);
+
+        } else if (startTime != null) {
+            events = locationTrackingEventRepository
+                    .findByKeyDriverIdAndKeyTimestampGreaterThanEqual(driverId, startTime);
+
+        } else if (endTime != null) {
+            events = locationTrackingEventRepository
+                    .findByKeyDriverIdAndKeyTimestampLessThanEqual(driverId, endTime);
+
+        } else {
+            events = locationTrackingEventRepository.findByKeyDriverId(driverId);
+        }
+
+        return events.stream()
+                .map(cassandraRowAdapter::adapt)
+                .toList();
+    }
 }
