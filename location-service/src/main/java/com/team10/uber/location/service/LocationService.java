@@ -597,12 +597,12 @@ public List<StationaryDriverDTO> getStationaryDrivers(Double maxSpeed, Integer s
             eventsByHour.put(hour, count);
         }
 
-        LocationAnalyticsDTO dto = new LocationAnalyticsDTO(
-                totalLocationEvents != null ? totalLocationEvents : 0L,
-                activeDrivers != null ? activeDrivers : 0L,
-                averageSpeed != null ? averageSpeed : 0.0,
-                eventsByHour
-        );
+        LocationAnalyticsDTO dto = LocationAnalyticsDTO.builder()
+                .totalLocationEvents(totalLocationEvents != null ? totalLocationEvents : 0L)
+                .activeDrivers(activeDrivers != null ? activeDrivers : 0L)
+                .averageSpeed(averageSpeed != null ? averageSpeed : 0.0)
+                .eventsByHour(eventsByHour)
+                .build();
 
         redisCacheService.set(cacheKey, dto, Duration.ofMinutes(10));
 
