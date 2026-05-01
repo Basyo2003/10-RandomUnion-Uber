@@ -312,7 +312,8 @@ public class UserService extends AbstractObservableService {
         Role oldRole = user.getRole();
         user.setRole(newRole);
         User saved = userRepository.save(user);
-        logEvent(id, "ROLE_CHANGED", Map.of(
+        notifyObservers("ROLE_CHANGED", Map.of(
+                "userId", id,
                 "oldRole", oldRole.name(),
                 "newRole", newRole.name()));
         return saved;
@@ -373,14 +374,4 @@ public class UserService extends AbstractObservableService {
         dto.setDetails(event.getDetails());
         return dto;
     }
-//     public void logAuthEvent(Long userId, String action, Map<String, Object> details) {
-//         try {
-//             authEventRepository.save(new AuthEvent(userId, action, details));
-//         } catch (Exception e) {
-
-//         }
-//     }
-// public void logAuthEvent(Long userId, String action, Map<String, Object> details) {
-// logEvent(userId, action, details);
-// }
 }

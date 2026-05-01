@@ -519,24 +519,10 @@ public class PaymentService extends AbstractObservableService {
         }
 
         // §10.5.1(f)
-        try {
-            PaymentAuditEvent event = new PaymentAuditEvent(
-                    null, // Analytics are not tied to a specific payment ID
-                    "ANALYTICS_VIEWED",
-                    LocalDateTime.now(),
-                    null,
-                    null,
-                    Map.of("dashboard", "vehicle-type-revenue", "startDate", startDate.toString(), "endDate", endDate.toString())
-            );
-            //auditEventRepository.save(event);
-            notifyObservers("ANALYTICS_VIEWED", Map.of(
-        "dashboard", "vehicle-type-revenue",
-        "startDate", startDate.toString(),
-        "endDate", endDate.toString()));
-
-        } catch (Exception e) {
-            log.warn("MongoDB audit event write failed: {}", e.getMessage());
-        }
+        notifyObservers("ANALYTICS_VIEWED", Map.of(
+                "dashboard", "vehicle-type-revenue",
+                "startDate", startDate.toString(),
+                "endDate", endDate.toString()));
 
         // (10 min TTL)
         String key = "S5-F10::" + startDate + "::" + endDate;
@@ -573,6 +559,11 @@ public class PaymentService extends AbstractObservableService {
 
         if (startDate.isAfter(endDate))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "startDate must be before endDate");
+        // Log ANALYTICS_VIEWED (pure observability - same pattern as S5-F10)
+        notifyObservers("ANALYTICS_VIEWED", Map.of(
+                "dashboard", "payment-method-breakdown",
+                "startDate", startDate.toString(),
+                "endDate", endDate.toString()));
 
         String key = "S5-F11::" + startDate + "::" + endDate;
         List<PaymentMethodDTO> cached = cache.get(key, new TypeReference<List<PaymentMethodDTO>>() {});
@@ -640,13 +631,10 @@ public class PaymentService extends AbstractObservableService {
 
         // §10.5.3e — NoRefundStrategy path
         if (result.getAmount() == 0.0 && result.getReasonCode().equals("refund window expired")) {
-            // saveAuditEvent(payment, "REFUND_DENIED", Map.of(
-            //         "strategyName", result.getStrategyName(),
-            //         "reason", result.getReasonCode()));
-            // evictPaymentCaches(id);
-            // evictAnalyticsCaches();
-            // throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "refund window expired");
             notifyObservers("REFUND_DENIED", payment);
+            evictPaymentCaches(id);
+            evictAnalyticsCaches();
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "refund window expired");
         }
 
         // §10.5.3f,g — Update payment
@@ -717,6 +705,7 @@ public class PaymentService extends AbstractObservableService {
             log.warn("MongoDB audit event write failed: {}", e.getMessage());
         }
     }
+    // §7.1.6 — Save PaymentAuditEvent to MongoDB via Observer pattern (EventFactory handles creation)
 
     private void logPaymentEvent(Payment payment, String action, Map<String, Object> details) {
         Map<String, Object> merged = new HashMap<>(details);
