@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import com.team10.uber.location.observer.AbstractObservableService;
 import com.team10.uber.location.observer.MongoEventLogger;
+import com.team10.uber.location.dto.TrackingEventRequest;
 
 import java.time.LocalTime;
 import java.util.*;
@@ -609,6 +610,52 @@ public List<StationaryDriverDTO> getStationaryDrivers(Double maxSpeed, Integer s
         redisCacheService.set(cacheKey, dto, Duration.ofMinutes(10));
 
         return dto;
+    }
+
+
+    // S4-F11 - Record Location GPS Event
+    public void recordLocationGpsEvent(Long driverId, TrackingEventRequest request) {
+        locationRepository.driverExists(jdbcTemplate, driverId);
+
+        validateCoordinates(request.getLatitude(), request.getLongitude());
+
+        Long validRideId = resolveExistingRideIdOrNull(request.getRideId());
+        request.setRideId(validRideId);
+
+        locationTrackingEventService.recordTrackingEvent(driverId, request);
+
+        Map<String, Object> details = new HashMap<>();
+        details.put("latitude", request.getLatitude());
+        details.put("longitude", request.getLongitude());
+        details.put("speed", request.getSpeed());
+        details.put("heading", request.getHeading());
+        details.put("accuracy", request.getAccuracy());
+        details.put("rideId", request.getRideId());
+        details.put("notes", request.getNotes());
+        details.put("summary", "Tracking event recorded for driver " + driverId);
+
+        notifyObservers(
+                LocationEventActions.TRACKING_RECORDED,
+                Map.of(
+                        "driverId", driverId,
+                        "latitude", request.getLatitude(),
+                        "longitude", request.getLongitude(),
+                        "details", details
+                )
+        );
+
+        redisCacheService.delete(featureKey("S4-F1", driverId));
+        redisCacheService.deleteByPattern(CACHE_PREFIX + "::S4-F8::" + driverId + "::*");
+        redisCacheService.deleteByPattern(CACHE_PREFIX + "::S4-F9::*");
+        redisCacheService.deleteByPattern(CACHE_PREFIX + "::S4-F10::*");
+    }
+
+    private Long resolveExistingRideIdOrNull(Long rideId) {
+        if (rideId == null) {
+            return null;
+        }
+
+        return locationRepository.rideExists(rideId) ? rideId : null;
     }
 
 

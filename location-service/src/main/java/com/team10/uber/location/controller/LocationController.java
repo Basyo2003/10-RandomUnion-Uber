@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import com.team10.uber.location.dto.NearbyDriverDTO;
 import com.team10.uber.location.dto.LocationAnalyticsDTO;
+import com.team10.uber.location.dto.TrackingEventRequest;
 
 
 import com.team10.uber.location.dto.StationaryDriverDTO;
@@ -216,6 +217,35 @@ public class LocationController {
             @RequestParam LocalDate endDate
     ) {
         return locationService.getLocationAnalytics(startDate, endDate);
+    }
+
+
+    // S4-F11
+    @PostMapping("/{driverId}/tracking")
+    public ResponseEntity<?> recordLocationGpsEvent(
+            @PathVariable Long driverId,
+            @RequestBody TrackingEventRequest request
+    ) {
+        try {
+            locationService.recordLocationGpsEvent(driverId, request);
+
+            return ResponseEntity.status(HttpStatus.CREATED).body(
+                    Map.of(
+                            "message", "Tracking event recorded successfully",
+                            "driverId", driverId
+                    )
+            );
+
+        } catch (ResponseStatusException ex) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("timestamp", LocalDateTime.now());
+            error.put("status", ex.getStatusCode().value());
+            error.put("error", ex.getStatusCode().toString());
+            error.put("message", ex.getReason());
+            error.put("path", "/api/locations/" + driverId + "/tracking");
+
+            return ResponseEntity.status(ex.getStatusCode()).body(error);
+        }
     }
 }
 

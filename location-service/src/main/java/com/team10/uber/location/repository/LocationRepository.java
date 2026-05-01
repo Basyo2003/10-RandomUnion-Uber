@@ -36,6 +36,9 @@ public interface LocationRepository extends JpaRepository<Location, Long> {
         }
     }
 
+    @Query(value = "SELECT EXISTS (SELECT 1 FROM rides WHERE id = :rideId)", nativeQuery = true)
+    boolean rideExists(@Param("rideId") Long rideId);
+
     
 
     
