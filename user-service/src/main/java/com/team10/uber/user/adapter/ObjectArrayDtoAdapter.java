@@ -2,9 +2,12 @@ package com.team10.uber.user.adapter;
 
 import com.team10.uber.user.dto.UserRideSummaryDTO;
 
+// §3.8 — Adapter: Object[] SQL result → UserRideSummaryDTO
 public class ObjectArrayDtoAdapter {
+
     public UserRideSummaryDTO adapt(Object[] row) {
-        throw new UnsupportedOperationException("Use adapt(Long userId, String name, Object[] row)");
+        throw new UnsupportedOperationException(
+                "Use adapt(Long userId, String name, Object[] row)");
     }
 
     public UserRideSummaryDTO adapt(Long userId, String name, Object[] row) {
@@ -13,6 +16,16 @@ public class ObjectArrayDtoAdapter {
         Long cancelledRides = row[2] == null ? 0L : ((Number) row[2]).longValue();
         Double totalSpent   = row[3] == null ? 0.0 : ((Number) row[3]).doubleValue();
         Double averageFare  = row[4] == null ? 0.0 : ((Number) row[4]).doubleValue();
-        return new UserRideSummaryDTO(userId, name, totalRides, completedRides, cancelledRides, totalSpent, averageFare);
+
+        // §3.5 — Use Builder to construct DTO
+        return UserRideSummaryDTO.builder()
+                .userId(userId)
+                .name(name)
+                .totalRides(totalRides)
+                .completedRides(completedRides)
+                .cancelledRides(cancelledRides)
+                .totalSpent(totalSpent)
+                .averageFare(averageFare)
+                .build();
     }
 }

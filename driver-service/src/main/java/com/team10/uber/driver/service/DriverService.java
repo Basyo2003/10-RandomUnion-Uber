@@ -24,6 +24,9 @@ import org.springframework.data.elasticsearch.core.SearchHit;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+import com.team10.uber.driver.adapter.TopRatedDriverAdapter;
+import com.team10.uber.driver.adapter.MongoDocumentAdapter;
+
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -52,6 +55,10 @@ public class DriverService extends AbstractObservableService {
     private final RedisCacheService cache;
     private final ElasticsearchOperations elasticsearchOperations;
     private final ElasticsearchHitAdapter elasticsearchHitAdapter = new ElasticsearchHitAdapter();
+        
+    // §3.8 — Adapter instances
+    private final TopRatedDriverAdapter topRatedDriverAdapter = new TopRatedDriverAdapter();
+    private final MongoDocumentAdapter mongoDocumentAdapter = new MongoDocumentAdapter();
 
     public DriverService(DriverRepository driverRepository,
                          DriverDocumentRepository driverDocumentRepository,
@@ -379,23 +386,17 @@ public class DriverService extends AbstractObservableService {
     /** S2-F6 — top rated drivers, cached 10 min. */
     public List<TopRatedDriverDTO> getTopRatedDrivers(int limit) {
         String key = "S2-F6::" + limit;
-        List<TopRatedDriverDTO> cached = cache.get(key, new TypeReference<List<TopRatedDriverDTO>>() {});
+        List<TopRatedDriverDTO> cached = cache.get(key,
+                new TypeReference<List<TopRatedDriverDTO>>() {});
         if (cached != null) return cached;
 
         List<Object[]> rows = driverRepository.findTopDriversWithRideCount(limit);
-        List<TopRatedDriverDTO> result = new ArrayList<>();
-        for (Object[] row : rows) {
-            result.add(new TopRatedDriverDTO(
-                    ((Number) row[0]).longValue(),
-                    (String) row[1],
-                    ((Number) row[2]).doubleValue(),
-                    ((Number) row[3]).longValue()
-            ));
-        }
+
+        // §3.8 — Use Adapter instead of inline Object[] mapping
+        List<TopRatedDriverDTO> result = topRatedDriverAdapter.adaptAll(rows);
         cache.put(key, result, TTL_DTO);
         return result;
     }
-
     /** S2-F7 — write, no caching. */
     @Transactional
     public Driver rateDriver(Long id, Long rideId, Double rating) {
