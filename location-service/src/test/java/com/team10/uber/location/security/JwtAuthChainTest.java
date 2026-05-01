@@ -7,6 +7,7 @@ import com.team10.uber.location.security.chain.RoleAuthorizationHandler;
 import com.team10.uber.location.security.chain.SignatureValidationHandler;
 import com.team10.uber.location.security.chain.TokenExtractionHandler;
 import com.team10.uber.location.security.chain.UserLoaderHandler;
+import com.team10.uber.location.singleton.JwtConfigurationManager;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,7 +15,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpServletRequest;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -45,8 +45,8 @@ class JwtAuthChainTest {
     @BeforeEach
     void setUp() {
         jdbcTemplate = mock(JdbcTemplate.class);
+        JwtConfigurationManager.initConfig(TEST_SECRET, 3_600_000L);
         jwtService   = new JwtService();
-        ReflectionTestUtils.setField(jwtService, "jwtSecret", TEST_SECRET);
 
         TokenExtractionHandler    tokenHandler = new TokenExtractionHandler();
         SignatureValidationHandler sigHandler   = new SignatureValidationHandler(jwtService);
