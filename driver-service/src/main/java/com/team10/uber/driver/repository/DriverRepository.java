@@ -35,16 +35,15 @@ public interface DriverRepository extends JpaRepository<Driver, Long> {
             @Param("startTs") LocalDateTime startTs,
             @Param("endExclusive") LocalDateTime endExclusive);
 
-    @Query("""
-            SELECT d
-            FROM Driver d
-            WHERE (:status IS NULL OR d.status = :status)
-              AND (:minRating IS NULL OR d.rating >= :minRating)
-              AND (:maxRating IS NULL OR d.rating <= :maxRating)
-            ORDER BY d.rating DESC
-            """)
+    @Query(value = """
+            SELECT * FROM drivers
+            WHERE (:status IS NULL OR CAST(status AS TEXT) = :status)
+              AND (:minRating IS NULL OR rating >= :minRating)
+              AND (:maxRating IS NULL OR rating <= :maxRating)
+            ORDER BY rating DESC
+            """, nativeQuery = true)
     List<Driver> searchDrivers(
-            @Param("status") DriverStatus status,
+            @Param("status") String status,
             @Param("minRating") Double minRating,
             @Param("maxRating") Double maxRating);
 
@@ -85,6 +84,21 @@ public interface DriverRepository extends JpaRepository<Driver, Long> {
             AND status IN ('REQUESTED', 'ACCEPTED', 'IN_PROGRESS')
             """, nativeQuery = true)
     int countActiveRides(@Param("driverId") Long driverId);
+
+    /** boolean alias for countActiveRides — used by tests */
+    default boolean hasActiveRides(Long driverId) {
+        return countActiveRides(driverId) > 0;
+    }
+
+    /** Single-arg overload — no status filter */
+    default List<Driver> findByVehicleType(String type) {
+        return findByVehicleType(type, null);
+    }
+
+    /** Named alias matching test expectations */
+    default List<Driver> findByVehicleTypeAndStatus(String type, String status) {
+        return findByVehicleType(type, status);
+    }
 
     interface DashboardAggregate {
         Long getTotalRides();
