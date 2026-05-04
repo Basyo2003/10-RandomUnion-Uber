@@ -181,7 +181,8 @@ public class DriverService extends AbstractObservableService {
         List<Driver> cached = cache.get(key, new TypeReference<List<Driver>>() {});
         if (cached != null) return cached;
 
-        List<Driver> result = driverRepository.searchDrivers(status, minRating, maxRating);
+        String statusStr = (status != null) ? status.name() : null;
+        List<Driver> result = driverRepository.searchDrivers(statusStr, minRating, maxRating);
         cache.put(key, result, TTL_SEARCH);
         return result;
     }
@@ -487,5 +488,23 @@ public class DriverService extends AbstractObservableService {
 
         cache.put(key, result, TTL_DTO);
         return result;
+    }
+
+    /** S2-F11 — reindex driver to Elasticsearch (delegation to DriverIndexService at controller layer) */
+    public void indexDriver(Long id) {
+        driverRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Driver not found: " + id));
+        notifyObservers("DRIVER_INDEXED", id);
+    }
+
+    /** S2-F8 — verify a driver document */
+    public DriverDocument verifyDocument(Long driverId, Long documentId) {
+        driverRepository.findById(driverId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Driver not found: " + driverId));
+        return driverDocumentRepository.findById(documentId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Document not found: " + documentId));
     }
 }

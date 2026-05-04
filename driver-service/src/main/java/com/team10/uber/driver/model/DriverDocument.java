@@ -61,6 +61,11 @@ public class DriverDocument {
         this.type = type;
     }
 
+    /** Test-compatibility alias — accepts type name as String */
+    public void setDocumentType(String typeName) {
+        this.type = (typeName != null) ? DocumentType.valueOf(typeName) : null;
+    }
+
     public String getDocumentUrl() {
         return documentUrl;
     }
