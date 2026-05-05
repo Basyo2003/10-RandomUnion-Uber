@@ -39,6 +39,7 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/uberdb
     depends_on:
       - postgres
+
   location-service:
     build: ./location-service
     ports:

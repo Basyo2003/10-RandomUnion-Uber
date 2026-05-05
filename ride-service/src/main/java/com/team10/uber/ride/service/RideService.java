@@ -431,6 +431,7 @@ public class RideService extends AbstractObservableService {
                 .ridesByStatus(ridesByStatus)
                 .build();
     }
+    @org.springframework.scheduling.annotation.Async
     public void logAnalyticsViewed(LocalDate startDate, LocalDate endDate, Long userId) {
         try {
             Map<String, Object> details = new HashMap<>();
