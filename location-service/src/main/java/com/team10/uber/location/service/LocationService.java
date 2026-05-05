@@ -155,6 +155,8 @@ public class LocationService extends AbstractObservableService {
     public Location createLocationForDriver(Long driverId, Location location) {
         locationRepository.driverExists(jdbcTemplate, driverId);
 
+        validateCoordinates(location.getLatitude(), location.getLongitude());
+
         location.setDriverId(driverId);
 
         Location saved = locationRepository.save(location);
@@ -166,8 +168,21 @@ public class LocationService extends AbstractObservableService {
     }
 
 
-    // S4-F3 - 4.4.1 Redis cache, TTL 10 min
     public List<NearbyDriverDTO> findNearbyAvailableDrivers(Double lat, Double lon, Double radiusKm) {
+        validateCoordinates(lat, lon);
+
+        if (radiusKm == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "radiusKm is required");
+        }
+
+        if (radiusKm < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "radiusKm must be >= 0");
+        }
+
+        if (radiusKm == 0) {
+            return List.of();
+        }
+
         String cacheKey = featureKey("S4-F3", lat, lon, radiusKm);
 
         Object cached = redisCacheService.get(cacheKey);
@@ -187,13 +202,13 @@ public class LocationService extends AbstractObservableService {
             double distanceKm = calculateDistanceKm(lat, lon, driverLat, driverLon);
 
             if (distanceKm <= radiusKm) {
-                result.add(new NearbyDriverDTO(
-                        driverId,
-                        driverName,
-                        driverLat,
-                        driverLon,
-                        distanceKm
-                ));
+                result.add(NearbyDriverDTO.builder()
+                        .driverId(driverId)
+                        .driverName(driverName)
+                        .latitude(driverLat)
+                        .longitude(driverLon)
+                        .distanceKm(distanceKm)
+                        .build());
             }
         }
 
@@ -307,7 +322,10 @@ public Map<String, Object> batchCreateLocations(BatchLocationRequest request) {
         }
 
         List<Location> result = switch (normalizedOperator) {
-            case "eq" -> locationRepository.findByMetadataEq(key, value);
+            case "eq" -> {
+                validateNumeric(value);
+                yield locationRepository.findByMetadataEq(key, value);
+            }
             case "gt" -> {
                 validateNumeric(value);
                 yield locationRepository.findByMetadataGt(key, value);
@@ -384,16 +402,23 @@ public Map<String, Object> batchCreateLocations(BatchLocationRequest request) {
         redisCacheService.set(cacheKey, result, Duration.ofMinutes(10));
         return result;
     }
-      
+
     // S4-F7 - 4.4.4 Cache Invalidation after purging old locations
     @Transactional
     public int purgeOldLocations(int olderThanDays) {
+        if (olderThanDays < 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "olderThanDays must be >= 0"
+            );
+        }
+
         LocalDateTime cutoff = LocalDateTime.now().minusDays(olderThanDays);
 
         int count = locationRepository.countLocationsOlderThan(cutoff);
         locationRepository.deleteLocationsOlderThan(cutoff);
-      
-      // Purge can affect many drivers/locations, so clear all Location Service feature caches
+
+        // Purge can affect many drivers/locations, so clear all Location Service feature caches
         redisCacheService.deleteByPattern(CACHE_PREFIX + "::location::*");
         redisCacheService.deleteByPattern(CACHE_PREFIX + "::S4-F1::*");
         redisCacheService.deleteByPattern(CACHE_PREFIX + "::S4-F3::*");
@@ -404,7 +429,6 @@ public Map<String, Object> batchCreateLocations(BatchLocationRequest request) {
         redisCacheService.deleteByPattern(CACHE_PREFIX + "::S4-F10::*");
         redisCacheService.deleteByPattern(CACHE_PREFIX + "::S4-F12::*");
 
-
         notifyObservers(
                 LocationEventActions.OLD_LOCATIONS_PURGED,
                 Map.of(
@@ -413,7 +437,7 @@ public Map<String, Object> batchCreateLocations(BatchLocationRequest request) {
                         "cutoff", cutoff
                 )
         );
-        
+
         return count;
     }
 
@@ -572,10 +596,13 @@ public List<StationaryDriverDTO> getStationaryDrivers(Double maxSpeed, Integer s
                 )
         );
 
+
         Object cached = redisCacheService.get(cacheKey);
-        if (cached instanceof LocationAnalyticsDTO dto) {
-            return dto;
+        LocationAnalyticsDTO cachedDto = toLocationAnalyticsDTO(cached);
+        if (cachedDto != null) {
+            return cachedDto;
         }
+
 
         Long totalLocationEvents =
                 locationRepository.countLocationEventsBetween(startDateTime, endDateTime);
@@ -607,6 +634,71 @@ public List<StationaryDriverDTO> getStationaryDrivers(Double maxSpeed, Integer s
         redisCacheService.set(cacheKey, dto, Duration.ofMinutes(10));
 
         return dto;
+    }
+
+
+
+    @SuppressWarnings("unchecked")
+    private LocationAnalyticsDTO toLocationAnalyticsDTO(Object cached) {
+        if (cached == null) {
+            return null;
+        }
+
+        if (cached instanceof LocationAnalyticsDTO dto) {
+            return dto;
+        }
+
+        if (!(cached instanceof Map<?, ?> map)) {
+            return null;
+        }
+
+        Long totalLocationEvents = toLong(map.get("totalLocationEvents"));
+        Long activeDrivers = toLong(map.get("activeDrivers"));
+        Double averageSpeed = toDouble(map.get("averageSpeed"));
+
+        Map<Integer, Long> eventsByHour = new LinkedHashMap<>();
+
+        Object rawEventsByHour = map.get("eventsByHour");
+        if (rawEventsByHour instanceof Map<?, ?> rawMap) {
+            for (Map.Entry<?, ?> entry : rawMap.entrySet()) {
+                if (entry.getKey() != null && entry.getValue() != null) {
+                    Integer hour = Integer.parseInt(entry.getKey().toString());
+                    Long count = toLong(entry.getValue());
+                    eventsByHour.put(hour, count);
+                }
+            }
+        }
+
+        return LocationAnalyticsDTO.builder()
+                .totalLocationEvents(totalLocationEvents != null ? totalLocationEvents : 0L)
+                .activeDrivers(activeDrivers != null ? activeDrivers : 0L)
+                .averageSpeed(averageSpeed != null ? averageSpeed : 0.0)
+                .eventsByHour(eventsByHour)
+                .build();
+    }
+
+    private Long toLong(Object value) {
+        if (value == null) {
+            return null;
+        }
+
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+
+        return Long.parseLong(value.toString());
+    }
+
+    private Double toDouble(Object value) {
+        if (value == null) {
+            return null;
+        }
+
+        if (value instanceof Number number) {
+            return number.doubleValue();
+        }
+
+        return Double.parseDouble(value.toString());
     }
 
 

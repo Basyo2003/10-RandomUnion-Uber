@@ -104,14 +104,22 @@ public class LocationController {
     }
 
 
-    //S4-F2
+    // S4-F2
     @PostMapping("/driver/{driverId}")
     public ResponseEntity<Location> createLocationForDriver(
             @PathVariable Long driverId,
             @RequestBody Map<String, Object> body
     ) {
+        if (body.get("latitude") == null || body.get("longitude") == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Latitude and longitude are required"
+            );
+        }
+
         Double latitude = Double.valueOf(body.get("latitude").toString());
         Double longitude = Double.valueOf(body.get("longitude").toString());
+
         Map<String, Object> metadata = (Map<String, Object>) body.get("metadata");
 
         Location location = new Location();

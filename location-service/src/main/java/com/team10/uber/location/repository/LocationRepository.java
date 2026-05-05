@@ -60,13 +60,13 @@ public interface LocationRepository extends JpaRepository<Location, Long> {
         """, nativeQuery = true)
     List<Object[]> findLatestAvailableDriverLocations();
 
-    
+
 
     // S4-F5
     @Query(value = """
-            SELECT * FROM locations
-            WHERE metadata ->> :key = :value
-            """, nativeQuery = true)
+          SELECT * FROM locations
+          WHERE CAST(metadata ->> :key AS DOUBLE PRECISION) = CAST(:value AS DOUBLE PRECISION)
+          """, nativeQuery = true)
     List<Location> findByMetadataEq(
             @Param("key") String key,
             @Param("value") String value
