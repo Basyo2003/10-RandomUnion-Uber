@@ -751,19 +751,22 @@ public List<StationaryDriverDTO> getStationaryDrivers(Double maxSpeed, Integer s
     //S4-F12
     public List<LocationTrackingEventDTO> getLocationTrackingTimeline(
             Long driverId,
-            Instant startTime,
-            Instant endTime
+            LocalDateTime startTime,
+            LocalDateTime endTime
     ) {
         locationRepository.driverExists(jdbcTemplate, driverId);
 
-        if (startTime != null && endTime != null && startTime.isAfter(endTime)) {
+        Instant startInstant = startTime != null ? startTime.toInstant(ZoneOffset.UTC) : null;
+        Instant endInstant   = endTime   != null ? endTime.toInstant(ZoneOffset.UTC)   : null;
+
+        if (startInstant != null && endInstant != null && startInstant.isAfter(endInstant)) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "startTime cannot be after endTime"
             );
         }
 
-        String cacheKey = featureKey("S4-F12", driverId, startTime, endTime);
+        String cacheKey = featureKey("S4-F12", driverId, startInstant, endInstant);
 
         Object cached = redisCacheService.get(cacheKey);
         if (cached instanceof List<?> cachedList) {
@@ -773,8 +776,8 @@ public List<StationaryDriverDTO> getStationaryDrivers(Double maxSpeed, Integer s
         List<LocationTrackingEventDTO> result =
                 locationTrackingEventService.getTrackingEventsForDriver(
                         driverId,
-                        startTime,
-                        endTime
+                        startInstant,
+                        endInstant
                 );
 
         redisCacheService.set(cacheKey, result, Duration.ofMinutes(5));

@@ -85,20 +85,13 @@ public class PaymentController {
     public ResponseEntity<List<Payment>> searchPayments(
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String startDate,
-            @RequestParam(required = false) String endDate) {
+            @RequestParam(required = false) String endDate,
+            @RequestParam(required = false) Long userId) {
 
-        if (startDate == null || endDate == null) {
-            return ResponseEntity.ok(List.of());
-        }
-
-        try {
-            LocalDateTime start = paymentService.parseDate(startDate, false);
-            LocalDateTime end = paymentService.parseDate(endDate, true);
-            List<Payment> payments = paymentService.searchPayments(status, start, end);
-            return ResponseEntity.ok(payments);
-        } catch (Exception e) {
-            return ResponseEntity.ok(List.of());
-        }
+        LocalDateTime start = startDate != null ? paymentService.parseDate(startDate, false) : null;
+        LocalDateTime end   = endDate   != null ? paymentService.parseDate(endDate,   true)  : null;
+        List<Payment> payments = paymentService.searchPayments(status, start, end, userId);
+        return ResponseEntity.ok(payments);
     }
 
     @GetMapping("/reports/revenue")

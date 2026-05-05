@@ -103,13 +103,14 @@ public class RideController {
     }
     @GetMapping("/search")
     public List<Ride> getRidesByStatusAndDateRange(
-            @RequestParam(required = false,name = "status") RideStatus status,
-            @RequestParam(name = "startDate") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-            @RequestParam(name = "endDate") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+            @RequestParam(required = false, name = "status") RideStatus status,
+            @RequestParam(required = false, name = "startDate") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false, name = "endDate") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false, name = "userId") Long userId) {
 
-        LocalDateTime start = startDate.atStartOfDay();
-        LocalDateTime end   = endDate.atTime(23, 59, 59);
-        return rideService.getRidesByStatusAndDateRange(status, start, end);
+        LocalDateTime start = startDate != null ? startDate.atStartOfDay() : null;
+        LocalDateTime end   = endDate != null ? endDate.atTime(23, 59, 59) : null;
+        return rideService.getRidesByStatusAndDateRange(status, start, end, userId);
     }
 
     @PutMapping("/{rideId}/assign")

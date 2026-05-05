@@ -120,26 +120,9 @@ public class DriverDocumentService extends AbstractObservableService {
 
     @Transactional
     public DriverWithDocumentsDTO verifyDriverDocument(Long driverId, Long documentId, Long verifiedBy) {
-        Driver driver = driverRepository.findById(driverId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "Driver not found with id: " + driverId));
-
-        DriverDocument document = driverDocumentRepository.findById(documentId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "Driver document not found with id: " + documentId));
-
-        if (!document.getDriver().getId().equals(driverId))
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Document does not belong to this driver");
-
-        if (document.getExpiryDate().isBefore(LocalDate.now()))
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Document has expired");
-
-        if (Boolean.TRUE.equals(document.getVerified()))
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Document is already verified");
-
+        // Role check first — ensures 403 is returned before any 400 validation
         if (verifiedBy == null)
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "Verifier user ID must be provided");
 
         String userRole = driverDocumentRepository.findUserRoleById(verifiedBy)
@@ -149,6 +132,24 @@ public class DriverDocumentService extends AbstractObservableService {
         if (!"ADMIN".equals(userRole))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "Only ADMIN users can verify documents");
+
+        Driver driver = driverRepository.findById(driverId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Driver not found with id: " + driverId));
+
+        DriverDocument document = driverDocumentRepository.findById(documentId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Driver document not found with id: " + documentId));
+
+        if (!document.getDriver().getId().equals(driverId))
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "Document does not belong to this driver");
+
+        if (document.getExpiryDate().isBefore(LocalDate.now()))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Document has expired");
+
+        if (Boolean.TRUE.equals(document.getVerified()))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Document is already verified");
 
         document.setVerified(true);
         Map<String, Object> metadata = document.getMetadata();

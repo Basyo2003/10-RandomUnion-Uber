@@ -364,6 +364,9 @@ public class DriverService extends AbstractObservableService {
     public List<Driver> filterByVehicleType(String type, String status) {
         if (type == null || type.isBlank())
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vehicle type is required");
+        if (!ALLOWED_VEHICLE_TYPES.contains(type.trim().toUpperCase()))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Unknown vehicle type: " + type + ". Must be one of " + ALLOWED_VEHICLE_TYPES);
 
         DriverStatus driverStatus = null;
         if (status != null) {

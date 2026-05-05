@@ -40,7 +40,6 @@ services:
     depends_on:
       - postgres
 
-
   location-service:
     build: ./location-service
     ports:

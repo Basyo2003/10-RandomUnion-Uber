@@ -12,7 +12,6 @@ import org.springframework.web.server.ResponseStatusException;
 
 import org.springframework.format.annotation.DateTimeFormat;
 
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -255,8 +254,8 @@ public class LocationController {
     @GetMapping("/{driverId}/tracking")
     public ResponseEntity<?> getLocationTrackingTimeline(
             @PathVariable Long driverId,
-            @RequestParam(required = false) Instant startTime,
-            @RequestParam(required = false) Instant endTime
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime
     ) {
         try {
             List<LocationTrackingEventDTO> result =

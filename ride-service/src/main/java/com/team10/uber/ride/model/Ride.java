@@ -35,7 +35,7 @@ public class Ride implements Serializable {
     @Column(nullable = false)
     private Long userId;
 
-    @Column
+    @Column(name = "driver_id")
     private Long driverId;
 
     @Column(nullable = false)

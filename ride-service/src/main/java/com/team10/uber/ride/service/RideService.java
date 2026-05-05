@@ -162,18 +162,6 @@ public class RideService extends AbstractObservableService {
             );
         }
 
-        int driverExists = rideRepository.countDriversById(ride.getDriverId());
-        if (driverExists == 0) {
-            throw new DriverNotFoundException("Driver not found with id: " + ride.getDriverId());
-        }
-
-        int busyDriver = rideRepository.countBusyDriversById(ride.getDriverId());
-        if (busyDriver == 0) {
-            throw new InvalidRideStatusException(
-                    "Ride can only be completed when ride is IN_PROGRESS and driver is BUSY. Current driver status is not BUSY"
-            );
-        }
-
         ride.setStatus(RideStatus.COMPLETED);
         ride.setCompletedAt(LocalDateTime.now());
 
@@ -214,9 +202,9 @@ public class RideService extends AbstractObservableService {
         Ride ride = rideRepository.findById(rideId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Ride not found"));
 
-        if (ride.getStatus() != RideStatus.REQUESTED && ride.getStatus() != RideStatus.ACCEPTED) {
+        if (ride.getStatus() == RideStatus.COMPLETED || ride.getStatus() == RideStatus.CANCELLED) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Cannot add stops to a ride that is not REQUESTED or ACCEPTED");
+                    "Cannot add stops to a completed or cancelled ride");
         }
 
         for (RideStopRequestDTO req : stopRequests) {
@@ -261,6 +249,11 @@ public class RideService extends AbstractObservableService {
 
     @Cacheable(value = "ride-service::S3-F3", key = "#request.pickupLatitude + '_' + #request.pickupLongitude + '_' + #request.dropoffLatitude + '_' + #request.dropoffLongitude")
     public FareEstimateDTO getFareEstimate(FareEstimateRequestDTO request) {
+        if (request.getPickupLatitude() == null || request.getPickupLongitude() == null
+                || request.getDropoffLatitude() == null || request.getDropoffLongitude() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "pickupLatitude, pickupLongitude, dropoffLatitude, and dropoffLongitude are required");
+        }
         double distance = Math.sqrt(
                 Math.pow(request.getDropoffLatitude() - request.getPickupLatitude(), 2) +
                         Math.pow(request.getDropoffLongitude() - request.getPickupLongitude(), 2)
@@ -316,7 +309,7 @@ public class RideService extends AbstractObservableService {
                 .sum();
 
         double averageFare = completedRides > 0 ? totalRevenue / completedRides : 0.0;
-        double completionRate = totalRides > 0 ? ((double) completedRides / totalRides) * 100 : 0.0;
+        double completionRate = totalRides > 0 ? (double) completedRides / totalRides : 0.0;
 
         return new RideAnalyticsDTO(
                 totalRides,
@@ -332,6 +325,11 @@ public class RideService extends AbstractObservableService {
     public List<Ride> getRidesByStatusAndDateRange(RideStatus status, LocalDateTime startDate, LocalDateTime endDate) {
         String statusName = status != null ? status.name() : null;
         return rideRepository.getRidesByStatusAndDateRange(startDate, endDate, statusName);
+    }
+
+    public List<Ride> getRidesByStatusAndDateRange(RideStatus status, LocalDateTime startDate, LocalDateTime endDate, Long userId) {
+        String statusName = status != null ? status.name() : null;
+        return rideRepository.searchRides(startDate, endDate, statusName, userId);
     }
 
     @Transactional

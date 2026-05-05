@@ -53,6 +53,18 @@ public interface RideRepository extends JpaRepository<Ride, Long> {
                                             @Param("endDate") LocalDateTime endDate,
                                             @Param("status") String status);
 
+    @Query(value = "SELECT * FROM rides " +
+            "WHERE (:startDate IS NULL OR requested_at >= :startDate) " +
+            "AND (:endDate IS NULL OR requested_at <= :endDate) " +
+            "AND (:status IS NULL OR status::text = :status) " +
+            "AND (:userId IS NULL OR user_id = :userId) " +
+            "ORDER BY requested_at DESC",
+            nativeQuery = true)
+    List<Ride> searchRides(@Param("startDate") LocalDateTime startDate,
+                           @Param("endDate") LocalDateTime endDate,
+                           @Param("status") String status,
+                           @Param("userId") Long userId);
+
     @Query(value = "SELECT COUNT(*) > 0 FROM drivers WHERE id = :driverId", nativeQuery = true)
     boolean driverexists(@Param("driverId") Long driverId);
 

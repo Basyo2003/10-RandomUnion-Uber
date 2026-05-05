@@ -39,6 +39,19 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
             @Param("endDate") LocalDateTime endDate);
 
     @Query(value = "SELECT * FROM payments WHERE " +
+            "(:startDate IS NULL OR created_at >= :startDate) " +
+            "AND (:endDate IS NULL OR created_at <= :endDate) " +
+            "AND (:status IS NULL OR CAST(status AS TEXT) = :status) " +
+            "AND (:userId IS NULL OR user_id = :userId) " +
+            "ORDER BY created_at DESC",
+            nativeQuery = true)
+    List<Payment> searchPayments(
+            @Param("status") String status,
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDate") LocalDateTime endDate,
+            @Param("userId") Long userId);
+
+    @Query(value = "SELECT * FROM payments WHERE " +
             "user_id = :userId AND status = 'COMPLETED'",
             nativeQuery = true)
     List<Payment> findCompletedPaymentsByUserId(@Param("userId") Long userId);

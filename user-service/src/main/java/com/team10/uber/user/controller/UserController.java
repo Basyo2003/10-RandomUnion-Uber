@@ -36,19 +36,33 @@ public class UserController {
     }
 
     @GetMapping("/{id}")
-    public User getUserById(@PathVariable Long id) {
+    public User getUserById(@PathVariable Long id, HttpServletRequest request) {
+        checkSelfOrAdmin(id, request);
         return userService.getUserById(id);
     }
 
     @PutMapping("/{id}")
-    public User updateUser(@PathVariable Long id, @RequestBody User updatedUser) {
+    public User updateUser(@PathVariable Long id, @RequestBody User updatedUser, HttpServletRequest request) {
+        checkSelfOrAdmin(id, request);
         return userService.updateUser(id, updatedUser);
     }
 
     @DeleteMapping("/{id}")
-    public String deleteUser(@PathVariable Long id) {
+    public String deleteUser(@PathVariable Long id, HttpServletRequest request) {
+        checkSelfOrAdmin(id, request);
         userService.deleteUser(id);
         return "User deleted successfully";
+    }
+
+    private void checkSelfOrAdmin(Long targetId, HttpServletRequest request) {
+        Object requesterIdAttr = request.getAttribute("userId");
+        Object requesterRoleAttr = request.getAttribute("userRole");
+        if (!(requesterIdAttr instanceof Long requesterId) || !(requesterRoleAttr instanceof String requesterRole)) {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.UNAUTHORIZED, "Unauthorized");
+        }
+        if (!requesterId.equals(targetId) && !"ADMIN".equals(requesterRole)) {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, "Forbidden");
+        }
     }
 
     @GetMapping("/search")
@@ -119,10 +133,12 @@ public class UserController {
             throw new ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, "Forbidden");
         }
 
-        int normalizedPage = Math.max(page, 0);
-        int normalizedSize = Math.min(Math.max(size, 1), 100);
+        if (page < 0 || size <= 0) {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST,
+                    "page and size must be >= 0, size must be >= 1");
+        }
 
-        return ResponseEntity.ok(userService.getUserActivityFeed(id, normalizedPage, normalizedSize));
+        return ResponseEntity.ok(userService.getUserActivityFeed(id, page, size));
     }
 
     @PutMapping("/{id}/role")

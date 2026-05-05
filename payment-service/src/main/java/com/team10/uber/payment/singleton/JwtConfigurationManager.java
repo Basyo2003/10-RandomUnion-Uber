@@ -27,7 +27,7 @@ public class JwtConfigurationManager {
         return instance;
     }
 
-    // §3.6 — Bridge method: called by Spring @Configuration bean during @PostConstruct
+    // §3.6 — Bridge method: called by Spring config bean during @PostConstruct
     public static void initConfig(String secret, long expirationMs) {
         JwtConfigurationManager mgr = getInstance();
         mgr.secretKey = Keys.hmacShaKeyFor(Base64.getDecoder().decode(secret));
