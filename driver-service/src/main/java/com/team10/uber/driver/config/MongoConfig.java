@@ -16,7 +16,7 @@ import org.springframework.data.mongodb.core.SimpleMongoClientDatabaseFactory;
 @Configuration
 public class MongoConfig {
 
-    @Value("${spring.data.mongodb.uri:mongodb://root:rootpass@mongo:27017/ubermongo?authSource=admin}")
+    @Value("${spring.data.mongodb.uri}")
     private String mongoUri;
 
     @Value("${spring.data.mongodb.connect-timeout-ms:3000}")
@@ -28,6 +28,9 @@ public class MongoConfig {
     @Bean
     @Primary
     public MongoClient mongoClient() {
+        if (mongoUri == null || mongoUri.trim().isEmpty()) {
+            throw new IllegalStateException("Required property 'spring.data.mongodb.uri' must be configured");
+        }
         ConnectionString cs = new ConnectionString(mongoUri);
         MongoClientSettings settings = MongoClientSettings.builder()
                 .applyConnectionString(cs)
