@@ -193,9 +193,6 @@ public class DriverService extends AbstractObservableService {
                                               DriverStatus status,
                                               Double minRating,
                                               Double maxRating) {
-        if (queryText == null || queryText.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "query is required");
-        }
         if (minRating != null && minRating < 0.0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "minRating must be >= 0.0");
         }
@@ -216,9 +213,10 @@ public class DriverService extends AbstractObservableService {
         }
         final String finalVehicleType = normalizedVehicleType;
 
-        String normalizedQuery = queryText.trim();
-        String key = "S2-F10::" + normalizedQuery.toLowerCase() + "::" + finalVehicleType + "::" + status + "::"
-                + minRating + "::" + maxRating;
+        String normalizedQuery = (queryText != null && !queryText.isBlank()) ? queryText.trim() : null;
+        final boolean hasQuery = normalizedQuery != null;
+        String key = "S2-F10::" + (normalizedQuery != null ? normalizedQuery.toLowerCase() : "") + "::"
+                + finalVehicleType + "::" + status + "::" + minRating + "::" + maxRating;
 
         List<Driver> cached = cache.get(key, new TypeReference<List<Driver>>() {});
         if (cached != null) {
@@ -229,10 +227,14 @@ public class DriverService extends AbstractObservableService {
 
         NativeQuery searchQuery = NativeQuery.builder()
                 .withQuery(q -> q.bool(b -> {
-                    b.must(m -> m.multiMatch(mm -> mm
-                            .query(normalizedQuery)
-                            .fields("name", "description")
-                            .type(co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType.BoolPrefix)));
+                    if (hasQuery) {
+                        b.must(m -> m.multiMatch(mm -> mm
+                                .query(normalizedQuery)
+                                .fields("name", "description")
+                                .type(co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType.BoolPrefix)));
+                    } else {
+                        b.must(m -> m.matchAll(ma -> ma));
+                    }
                     if (finalVehicleType != null) {
                         b.filter(f -> f.term(t -> t.field("vehicleType").value(finalVehicleType)));
                     }
