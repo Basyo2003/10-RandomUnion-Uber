@@ -19,14 +19,20 @@ public class MongoConfig {
     @Value("${spring.data.mongodb.uri:mongodb://root:rootpass@mongo:27017/ubermongo?authSource=admin}")
     private String mongoUri;
 
+    @Value("${spring.data.mongodb.connect-timeout-ms:3000}")
+    private int mongoConnectTimeoutMs;
+
+    @Value("${spring.data.mongodb.server-selection-timeout-ms:3000}")
+    private int mongoServerSelectionTimeoutMs;
+
     @Bean
     @Primary
     public MongoClient mongoClient() {
         ConnectionString cs = new ConnectionString(mongoUri);
         MongoClientSettings settings = MongoClientSettings.builder()
                 .applyConnectionString(cs)
-                .applyToSocketSettings(b -> b.connectTimeout(3000, java.util.concurrent.TimeUnit.MILLISECONDS))
-                .applyToClusterSettings(b -> b.serverSelectionTimeout(3000, java.util.concurrent.TimeUnit.MILLISECONDS))
+                .applyToSocketSettings(b -> b.connectTimeout(mongoConnectTimeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS))
+                .applyToClusterSettings(b -> b.serverSelectionTimeout(mongoServerSelectionTimeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS))
                 .build();
         System.out.println("[MongoConfig] Connecting to: " + cs.getHosts() + " db=" + cs.getDatabase() + " user="
                 + cs.getUsername());
