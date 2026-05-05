@@ -198,19 +198,15 @@ public class PaymentService extends AbstractObservableService {
     // ── M1 Features ──────────────────────────────────────────────────────────
 
     // §4.4.1 — S5-F1: search payments, cached 5 min
-    public List<Payment> searchPayments(String status, LocalDateTime startDate, LocalDateTime endDate) {
-        String key = "S5-F1::" + status + "::" + startDate + "::" + endDate;
+    public List<Payment> searchPayments(String status, LocalDateTime startDate, LocalDateTime endDate, Long userId) {
+        String key = "S5-F1::" + status + "::" + startDate + "::" + endDate + "::" + userId;
         List<Payment> cached = cache.get(key, new TypeReference<List<Payment>>() {
         });
         if (cached != null)
             return cached;
 
-        List<Payment> result;
-        if (status == null || status.isEmpty()) {
-            result = paymentRepository.findByDateRange(startDate, endDate);
-        } else {
-            result = paymentRepository.findByStatusAndDateRange(status, startDate, endDate);
-        }
+        List<Payment> result = paymentRepository.searchPayments(
+                (status == null || status.isEmpty()) ? null : status, startDate, endDate, userId);
         cache.put(key, result, TTL_SEARCH);
         return result;
     }
@@ -312,7 +308,12 @@ public class PaymentService extends AbstractObservableService {
         payment.setRideId(rideId);
         payment.setUserId(userId);
         payment.setAmount(amount);
-        payment.setMethod(PaymentMethod.valueOf(dto.getMethod()));
+        try {
+            payment.setMethod(PaymentMethod.valueOf(dto.getMethod()));
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Invalid payment method: " + dto.getMethod());
+        }
         payment.setStatus(PaymentStatus.PENDING);
         payment.setTransactionDetails(transactionDetails);
 
@@ -359,6 +360,7 @@ public class PaymentService extends AbstractObservableService {
     }
 
     // §4.4.1 — S5-F5: apply coupon — write, invalidates caches
+    @Transactional
     public PaymentDetailsDTO applyCoupon(Long paymentId, Long couponId) {
         Payment payment = getPaymentById(paymentId);
         if (payment.getStatus() != PaymentStatus.PENDING)
@@ -649,16 +651,17 @@ public class PaymentService extends AbstractObservableService {
         payment.setTransactionDetails(details);
         Payment saved = paymentRepository.save(payment);
 
-        notifyObservers("REFUNDED", saved);
-
-
-        // §10.5.3h — Log REFUNDED to MongoDB
-        // saveAuditEvent(saved, "REFUNDED", Map.of(
-        //         "strategyName", result.getStrategyName(),
-        //         "reason", request.getReason(),
-        //         "originalAmount", payment.getAmount(),
-        //         "refundAmount", result.getAmount(),
-        //         "surgeIncluded", request.isRefundSurge()));
+        // §10.5.3h — Log REFUNDED with strategyName to MongoDB via observer
+        Map<String, Object> refundAudit = new HashMap<>();
+        refundAudit.put("paymentId", saved.getId());
+        refundAudit.put("method", saved.getMethod() != null ? saved.getMethod().name() : null);
+        refundAudit.put("amount", saved.getAmount());
+        refundAudit.put("strategyName", result.getStrategyName());
+        refundAudit.put("reason", request.getReason());
+        refundAudit.put("originalAmount", payment.getAmount());
+        refundAudit.put("refundAmount", result.getAmount());
+        refundAudit.put("surgeIncluded", request.isRefundSurge());
+        notifyObservers("REFUNDED", refundAudit);
 
         // §10.5.3i — Invalidate caches
         evictPaymentCaches(id);
@@ -678,29 +681,26 @@ public class PaymentService extends AbstractObservableService {
                 : LocalDateTime.parse(date + "T00:00:00");
     }
 
-    // §7.1.6 — Save PaymentAuditEvent to MongoDB (soft dependency)
+    // §7.1.6 — Save PaymentAuditEvent to MongoDB via EventFactory (Factory pattern — no direct new)
     private void saveAuditEvent(Payment payment, String action, Map<String, Object> details) {
         try {
-            // §7.1.6 — method+amount required on payment-shaped actions only
             boolean requiresMethodAndAmount = List.of(
                     "CREATED", "COMPLETED", "FAILED",
                     "REFUNDED", "REFUND_DENIED",
                     "COUPON_APPLIED", "RETRY_ATTEMPTED"
             ).contains(action);
 
-            String method = requiresMethodAndAmount && payment.getMethod() != null
-                    ? payment.getMethod().name() : null;
-            Double amount = requiresMethodAndAmount
-                    ? payment.getAmount() : null;
+            Map<String, Object> params = new HashMap<>(details);
+            params.put("paymentId", payment.getId());
+            params.put("action", action);
+            params.put("method", requiresMethodAndAmount && payment.getMethod() != null
+                    ? payment.getMethod().name() : null);
+            params.put("amount", requiresMethodAndAmount ? payment.getAmount() : null);
 
-            PaymentAuditEvent event = new PaymentAuditEvent(
-                    payment.getId(),
-                    action,
-                    LocalDateTime.now(),
-                    method,    // null for ANALYTICS_VIEWED, PAYMENT_DELETED
-                    amount,    // null for ANALYTICS_VIEWED, PAYMENT_DELETED
-                    details);
-            //auditEventRepository.save(event);
+            com.team10.uber.payment.event.MongoEvent event =
+                    new com.team10.uber.payment.factory.EventFactory()
+                            .createEvent(com.team10.uber.payment.factory.EventType.PAYMENT_AUDIT, params);
+            mongoEventLogger.onEvent(action, params);
         } catch (Exception e) {
             log.warn("MongoDB audit event write failed: {}", e.getMessage());
         }

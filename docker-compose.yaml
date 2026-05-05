@@ -39,21 +39,6 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/uberdb
     depends_on:
       - postgres
-  cassandra-init:
-    image: cassandra:latest
-    depends_on:
-      cassandra:
-        condition: service_healthy
-    entrypoint:
-      - /bin/bash
-      - -c
-      - |
-        until cqlsh cassandra 9042 -e 'DESCRIBE KEYSPACES'; do
-          echo 'Cassandra not ready yet, retrying in 5s...';
-          sleep 5;
-        done
-        cqlsh cassandra 9042 -e "CREATE KEYSPACE IF NOT EXISTS uberks WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};"
-
   location-service:
     build: ./location-service
     ports:
@@ -78,8 +63,6 @@ services:
         condition: service_healthy
       cassandra:
         condition: service_healthy
-      cassandra-init:
-        condition: service_completed_successfully
   payment-service:
     build: ./payment-service
     ports:
