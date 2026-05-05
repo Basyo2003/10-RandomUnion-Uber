@@ -56,7 +56,7 @@ public class DriverController {
 
     @GetMapping("/search/full-text")
     public List<Driver> searchDriversFullText(
-            @RequestParam("query") String query,
+            @RequestParam(required = false) String query,
             @RequestParam(required = false) String vehicleType,
             @RequestParam(required = false) DriverStatus status,
             @RequestParam(required = false) Double minRating,
