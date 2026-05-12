@@ -1,11 +1,13 @@
 package com.team10.uber.driver;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mongodb.client.MongoClient;
 import com.team10.uber.contracts.feign.RideServiceClient;
 import com.team10.uber.contracts.feign.UserServiceClient;
 import com.team10.uber.driver.repository.elastic.DriverSearchRepository;
 import com.team10.uber.driver.repository.mongo.DriverEventRepository;
 import org.junit.jupiter.api.Test;
+import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.mongodb.MongoDatabaseFactory;
@@ -26,6 +28,8 @@ class DriverServiceApplicationTests {
     @MockitoBean MongoTemplate mongoTemplate;
     @MockitoBean RideServiceClient rideServiceClient;
     @MockitoBean UserServiceClient userServiceClient;
+    @MockitoBean ConnectionFactory connectionFactory;
+    @MockitoBean ObjectMapper objectMapper;
 
     @Test
     void contextLoads() {

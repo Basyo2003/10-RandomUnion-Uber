@@ -40,7 +40,8 @@ class DriverDashboardServiceTest {
                 logger,
                 cache,
                 mock(ElasticsearchOperations.class),
-                rideServiceClient
+                rideServiceClient,
+                mock(com.team10.uber.driver.messaging.DriverEventPublisher.class)
         );
         driverService.initObservers();
     }

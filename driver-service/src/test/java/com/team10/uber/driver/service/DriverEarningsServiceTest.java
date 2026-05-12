@@ -43,7 +43,8 @@ class DriverEarningsServiceTest {
                 mock(MongoEventLogger.class),
                 cache,
                 mock(ElasticsearchOperations.class),
-                rideServiceClient
+                rideServiceClient,
+                mock(com.team10.uber.driver.messaging.DriverEventPublisher.class)
         );
         driverService.initObservers();
     }

@@ -3,6 +3,7 @@ package com.team10.uber.driver.service;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.team10.uber.contracts.dto.DriverRideSummaryDTO;
 import com.team10.uber.contracts.feign.RideServiceClient;
+import com.team10.uber.driver.messaging.DriverEventPublisher;
 import com.team10.uber.driver.adapter.ElasticsearchHitAdapter;
 import com.team10.uber.driver.cache.RedisCacheService;
 import com.team10.uber.driver.dto.DriverDashboardDTO;
@@ -61,6 +62,7 @@ public class DriverService extends AbstractObservableService {
     private final RedisCacheService cache;
     private final ElasticsearchOperations elasticsearchOperations;
     private final RideServiceClient rideServiceClient;
+    private final DriverEventPublisher eventPublisher;
     private final ElasticsearchHitAdapter elasticsearchHitAdapter = new ElasticsearchHitAdapter();
 
     // §3.8 — Adapter instances
@@ -72,13 +74,15 @@ public class DriverService extends AbstractObservableService {
                          MongoEventLogger mongoEventLogger,
                          RedisCacheService cache,
                          ElasticsearchOperations elasticsearchOperations,
-                         RideServiceClient rideServiceClient) {
+                         RideServiceClient rideServiceClient,
+                         DriverEventPublisher eventPublisher) {
         this.driverRepository = driverRepository;
         this.driverDocumentRepository = driverDocumentRepository;
         this.mongoEventLogger = mongoEventLogger;
         this.cache = cache;
         this.elasticsearchOperations = elasticsearchOperations;
         this.rideServiceClient = rideServiceClient;
+        this.eventPublisher = eventPublisher;
     }
 
     @PostConstruct
@@ -368,6 +372,7 @@ public class DriverService extends AbstractObservableService {
     @Transactional
     public void updateDriverAvailability(Long driverId, DriverStatus newStatus) {
         Driver driver = getDriverById(driverId);
+        String oldStatus = driver.getStatus() != null ? driver.getStatus().name() : null;
         if (newStatus == DriverStatus.OFFLINE) {
             int activeRides = driverRepository.countActiveRides(driverId);
             if (activeRides > 0)
@@ -378,6 +383,7 @@ public class DriverService extends AbstractObservableService {
         Driver saved = driverRepository.save(driver);
         notifyObservers("AVAILABILITY_UPDATED", saved);
         evictDriverCaches(driverId);
+        eventPublisher.publishStatusChanged(driverId, oldStatus, newStatus.name());
     }
 
     /** S2-F5 — filter by vehicle type, cached 5 min. */
@@ -423,7 +429,7 @@ public class DriverService extends AbstractObservableService {
     }
     /** S2-F7 — write, no caching. */
     @Transactional
-    public Driver rateDriver(Long id, Long rideId, Double rating) {
+    public Driver rateDriver(Long id, Long rideId, Double rating, Long callerId) {
         Driver driver = getDriverById(id);
 
         Driver rideDriver = driverRepository.findDriverByRideId(rideId)
@@ -453,6 +459,7 @@ public class DriverService extends AbstractObservableService {
         Driver saved = driverRepository.save(driver);
         notifyObservers("RATING_RECORDED", saved);
         evictDriverCaches(id);
+        eventPublisher.publishRated(id, rideId, rating, callerId);
         return saved;
     }
 

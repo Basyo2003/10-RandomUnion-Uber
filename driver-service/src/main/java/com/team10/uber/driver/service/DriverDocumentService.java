@@ -1,6 +1,7 @@
 package com.team10.uber.driver.service;
 
 import com.team10.uber.driver.cache.RedisCacheService;
+import com.team10.uber.driver.messaging.DriverEventPublisher;
 import com.team10.uber.driver.model.Driver;
 import com.team10.uber.driver.model.DriverDocument;
 import com.team10.uber.driver.dto.DriverWithDocumentsDTO;
@@ -29,13 +30,16 @@ public class DriverDocumentService extends AbstractObservableService {
     private final DriverRepository driverRepository;
     private final MongoEventLogger mongoEventLogger;
     private final RedisCacheService cache;
+    private final DriverEventPublisher eventPublisher;
 
     public DriverDocumentService(DriverDocumentRepository driverDocumentRepository, DriverRepository driverRepository,
-                                 MongoEventLogger mongoEventLogger, RedisCacheService cache) {
+                                 MongoEventLogger mongoEventLogger, RedisCacheService cache,
+                                 DriverEventPublisher eventPublisher) {
         this.driverDocumentRepository = driverDocumentRepository;
         this.driverRepository = driverRepository;
         this.mongoEventLogger = mongoEventLogger;
         this.cache = cache;
+        this.eventPublisher = eventPublisher;
     }
 
     @PostConstruct
@@ -163,6 +167,7 @@ public class DriverDocumentService extends AbstractObservableService {
         notifyObservers("DOCUMENT_VERIFIED", driver);
         evictDocumentCaches(documentId);
         cache.evict("driver::" + driverId);
+        eventPublisher.publishDocumentVerified(driverId, documentId, verifiedBy);
 
         return new DriverWithDocumentsDTO(driver, driver.getDriverDocuments());
     }
