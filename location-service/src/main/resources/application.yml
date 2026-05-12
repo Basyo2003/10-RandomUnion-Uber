@@ -2,7 +2,7 @@ spring:
   application:
     name: location-service
   datasource:
-    url: jdbc:postgresql://postgres:5432/uberdb
+    url: jdbc:postgresql://location-postgres:5432/uberdb-locations
     username: postgres
     password: postgres
   jpa:
@@ -22,6 +22,19 @@ spring:
     local-datacenter: datacenter1
     keyspace-name: uberks
     schema-action: CREATE_IF_NOT_EXISTS
+  rabbitmq:
+    host: rabbitmq
+    port: 5672
+    username: guest
+    password: guest
+    listener:
+      simple:
+        acknowledge-mode: auto
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          initial-interval: 1000
+          max-attempts: 3
 
 server:
   port: 8080
@@ -29,3 +42,7 @@ server:
 jwt:
   secret: dVJlckp3dFNoYXJlZFNlY3JldEtleUZvckFsbEZpdmVTZXJ2aWNlczEyMzQ1Ng==
   expiration: 86400000
+
+feign:
+  driver-service:
+    url: http://driver-service:8080
