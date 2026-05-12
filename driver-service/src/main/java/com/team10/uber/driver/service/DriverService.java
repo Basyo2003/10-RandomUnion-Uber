@@ -34,7 +34,6 @@ import com.team10.uber.driver.adapter.MongoDocumentAdapter;
 
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -343,15 +342,24 @@ public class DriverService extends AbstractObservableService {
         DriverEarningsDTO cached = cache.get(key, DriverEarningsDTO.class);
         if (cached != null) return cached;
 
-        LocalDateTime startTs = startDate.atStartOfDay();
-        LocalDateTime endExclusive = endDate.plusDays(1).atStartOfDay();
-        DriverRepository.EarningsAggregate agg = driverRepository.getEarningsAggregate(driverId, startTs, endExclusive);
+        // M3: Feign → ride-service replaces cross-service SQL aggregation on rides table
+        DriverRideSummaryDTO summary;
+        try {
+            summary = rideServiceClient.getDriverRideSummary(driverId, startDate.toString(), endDate.toString());
+        } catch (FeignException.NotFound e) {
+            summary = DriverRideSummaryDTO.empty();
+        } catch (FeignException e) {
+            log.warn("ride-service unavailable for driver {} earnings: {}", driverId, e.getMessage());
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Ride service temporarily unavailable");
+        }
 
-        long totalRides = (agg == null || agg.getTotalRides() == null) ? 0L : agg.getTotalRides();
-        double totalEarnings = (agg == null || agg.getTotalEarnings() == null) ? 0.0 : agg.getTotalEarnings();
-        double averageFare = totalRides == 0L ? 0.0 : totalEarnings / totalRides;
+        long totalRides      = summary.totalRides()    != null ? summary.totalRides()    : 0L;
+        double totalEarnings = summary.totalEarnings() != null ? summary.totalEarnings() : 0.0;
+        double averageFare   = summary.averageFare()   != null ? summary.averageFare()   : 0.0;
 
-        DriverEarningsDTO result = new DriverEarningsDTO(driver.getId(), driver.getName(), totalRides, totalEarnings, averageFare);
+        DriverEarningsDTO result = new DriverEarningsDTO(driver.getId(), driver.getName(),
+                totalRides, totalEarnings, averageFare);
         cache.put(key, result, TTL_DTO);
         return result;
     }
