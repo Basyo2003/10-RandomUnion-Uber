@@ -1,6 +1,8 @@
 package com.team10.uber.driver.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.team10.uber.contracts.dto.DriverRideSummaryDTO;
+import com.team10.uber.contracts.feign.RideServiceClient;
 import com.team10.uber.driver.adapter.ElasticsearchHitAdapter;
 import com.team10.uber.driver.cache.RedisCacheService;
 import com.team10.uber.driver.dto.DriverDashboardDTO;
@@ -14,9 +16,12 @@ import com.team10.uber.driver.observer.AbstractObservableService;
 import com.team10.uber.driver.observer.MongoEventLogger;
 import com.team10.uber.driver.repository.DriverDocumentRepository;
 import com.team10.uber.driver.repository.DriverRepository;
+import feign.FeignException;
 import jakarta.annotation.PostConstruct;
 import jakarta.transaction.Transactional;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.elasticsearch.client.elc.NativeQuery;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
@@ -42,6 +47,8 @@ import java.util.stream.Collectors;
 @Service
 public class DriverService extends AbstractObservableService {
 
+    private static final Logger log = LoggerFactory.getLogger(DriverService.class);
+
     private static final long TTL_DETAIL = 15 * 60; // §4.4.2 — 15 min
     // TTLs in seconds — §4.4.1 only
     private static final long TTL_SEARCH = 5  * 60; // F1, F5 — 5 min
@@ -54,8 +61,9 @@ public class DriverService extends AbstractObservableService {
     private final MongoEventLogger mongoEventLogger;
     private final RedisCacheService cache;
     private final ElasticsearchOperations elasticsearchOperations;
+    private final RideServiceClient rideServiceClient;
     private final ElasticsearchHitAdapter elasticsearchHitAdapter = new ElasticsearchHitAdapter();
-        
+
     // §3.8 — Adapter instances
     private final TopRatedDriverAdapter topRatedDriverAdapter = new TopRatedDriverAdapter();
     private final MongoDocumentAdapter mongoDocumentAdapter = new MongoDocumentAdapter();
@@ -64,12 +72,14 @@ public class DriverService extends AbstractObservableService {
                          DriverDocumentRepository driverDocumentRepository,
                          MongoEventLogger mongoEventLogger,
                          RedisCacheService cache,
-                         ElasticsearchOperations elasticsearchOperations) {
+                         ElasticsearchOperations elasticsearchOperations,
+                         RideServiceClient rideServiceClient) {
         this.driverRepository = driverRepository;
         this.driverDocumentRepository = driverDocumentRepository;
         this.mongoEventLogger = mongoEventLogger;
         this.cache = cache;
         this.elasticsearchOperations = elasticsearchOperations;
+        this.rideServiceClient = rideServiceClient;
     }
 
     @PostConstruct
@@ -468,18 +478,27 @@ public class DriverService extends AbstractObservableService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Driver not found with id: " + driverId));
 
-        // Log every invocation — outside cache
         notifyObservers("DASHBOARD_VIEWED", driver);
 
         String key = "S2-F12::" + driverId;
         DriverDashboardDTO cached = cache.get(key, DriverDashboardDTO.class);
         if (cached != null) return cached;
 
-        DriverRepository.DashboardAggregate agg = driverRepository.getDashboardAggregate(driverId);
+        // M3: Feign → ride-service replaces cross-service SQL JOIN on rides+payments
+        DriverRideSummaryDTO summary;
+        try {
+            summary = rideServiceClient.getDriverRideSummary(driverId, null, null);
+        } catch (FeignException.NotFound e) {
+            summary = DriverRideSummaryDTO.empty();
+        } catch (FeignException e) {
+            log.warn("ride-service unavailable for driver {}: {}", driverId, e.getMessage());
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Ride service temporarily unavailable");
+        }
 
-        long totalRides      = (agg == null || agg.getTotalRides() == null)      ? 0L  : agg.getTotalRides();
-        double totalEarnings = (agg == null || agg.getTotalEarnings() == null)   ? 0.0 : agg.getTotalEarnings();
-        double avgRideFare   = (agg == null || agg.getAverageRideFare() == null) ? 0.0 : agg.getAverageRideFare();
+        long totalRides      = summary.totalRides()    != null ? summary.totalRides()    : 0L;
+        double totalEarnings = summary.totalEarnings() != null ? summary.totalEarnings() : 0.0;
+        double avgRideFare   = summary.averageFare()   != null ? summary.averageFare()   : 0.0;
 
         DriverDashboardDTO result = DriverDashboardDTO.builder()
                 .driverId(driver.getId())
