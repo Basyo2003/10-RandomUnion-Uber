@@ -2,7 +2,7 @@ spring:
   application:
     name: ride-service
   datasource:
-    url: jdbc:postgresql://postgres:5432/uberdb
+    url: jdbc:postgresql://ride-postgres:5432/uberdb-rides
     username: postgres
     password: postgres
   jpa:
@@ -21,6 +21,19 @@ spring:
       password: redispass
     mongodb:
       uri: mongodb://root:rootpass@mongo:27017/ubermongo?authSource=admin
+  rabbitmq:
+    host: rabbitmq
+    port: 5672
+    username: guest
+    password: guest
+    listener:
+      simple:
+        acknowledge-mode: auto
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          initial-interval: 1000
+          max-attempts: 3
 
 server:
   port: 8080
@@ -28,3 +41,13 @@ server:
 jwt:
   secret: dVJlckp3dFNoYXJlZFNlY3JldEtleUZvckFsbEZpdmVTZXJ2aWNlczEyMzQ1Ng==
   expiration: 86400000
+
+feign:
+  driver-service:
+    url: http://driver-service:8080
+  user-service:
+    url: http://user-service:8080
+  location-service:
+    url: http://location-service:8080
+  payment-service:
+    url: http://payment-service:8080
