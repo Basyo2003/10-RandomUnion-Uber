@@ -12,7 +12,6 @@ import com.team10.uber.driver.model.DriverDocument;
 import com.team10.uber.driver.service.DriverDocumentService;
 import com.team10.uber.driver.service.DriverIndexService;
 import com.team10.uber.driver.service.DriverService;
-import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -158,11 +157,12 @@ public class DriverController {
     }
 
     @PutMapping("/{driverId}/documents/{documentId}/verify")
-    public DriverWithDocumentsDTO verifyDriverDocument(@PathVariable Long driverId, @PathVariable Long documentId,
-            HttpServletRequest request) {
-        Object userIdAttr = request.getAttribute("userId");
-        Long verifiedBy = userIdAttr instanceof Number n ? n.longValue() : null;
-        return driverDocumentService.verifyDriverDocument(driverId, documentId, verifiedBy);
+    public ResponseEntity<DriverWithDocumentsDTO> verifyDriverDocument(
+            @PathVariable Long driverId,
+            @PathVariable Long documentId,
+            @RequestHeader("X-User-Id") Long callerId) {
+        DriverWithDocumentsDTO result = driverDocumentService.verifyDriverDocument(driverId, documentId, callerId);
+        return ResponseEntity.ok(result);
     }
 
 }
