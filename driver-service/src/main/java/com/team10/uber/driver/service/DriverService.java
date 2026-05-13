@@ -373,16 +373,27 @@ public class DriverService extends AbstractObservableService {
     public void updateDriverAvailability(Long driverId, DriverStatus newStatus) {
         Driver driver = getDriverById(driverId);
         String oldStatus = driver.getStatus() != null ? driver.getStatus().name() : null;
+
         if (newStatus == DriverStatus.OFFLINE) {
-            int activeRides = driverRepository.countActiveRides(driverId);
+            int activeRides;
+            try {
+                activeRides = rideServiceClient.getDriverActiveRideCount(driverId);
+            } catch (FeignException e) {
+                log.warn("Feign call to ride-service failed for driverId={}: {}", driverId, e.getMessage());
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                        "ride-service unavailable, please retry");
+            }
             if (activeRides > 0)
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "Driver has active rides and cannot go OFFLINE");
         }
+
         driver.setStatus(newStatus);
         Driver saved = driverRepository.save(driver);
         notifyObservers("AVAILABILITY_UPDATED", saved);
         evictDriverCaches(driverId);
+
+        // §2.11 publish-after-commit: PG committed above, now publish event
         eventPublisher.publishStatusChanged(driverId, oldStatus, newStatus.name());
     }
 
