@@ -21,7 +21,7 @@ import java.util.List;
 public interface LocationRepository extends JpaRepository<Location, Long> {
 
 
-    default void driverExists(JdbcTemplate jdbcTemplate, Long driverId) {
+    /*default void driverExists(JdbcTemplate jdbcTemplate, Long driverId) {
         Integer count = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM drivers WHERE id = ?",
                 Integer.class,
@@ -34,10 +34,10 @@ public interface LocationRepository extends JpaRepository<Location, Long> {
                     "Driver not found"
             );
         }
-    }
+    }*/
 
-    @Query(value = "SELECT EXISTS (SELECT 1 FROM rides WHERE id = :rideId)", nativeQuery = true)
-    boolean rideExists(@Param("rideId") Long rideId);
+    /*@Query(value = "SELECT EXISTS (SELECT 1 FROM rides WHERE id = :rideId)", nativeQuery = true)
+    boolean rideExists(@Param("rideId") Long rideId);*/
 
     
 
@@ -47,19 +47,16 @@ public interface LocationRepository extends JpaRepository<Location, Long> {
   
   
   //S4-F3
-    @Query(value = """
-        SELECT l.driver_id, d.name, l.latitude, l.longitude
-        FROM locations l
-        JOIN drivers d ON d.id = l.driver_id
-        WHERE d.status = 'AVAILABLE'
-          AND l.timestamp = (
-              SELECT MAX(l2.timestamp)
-              FROM locations l2
-              WHERE l2.driver_id = l.driver_id
-          )
-        """, nativeQuery = true)
-    List<Object[]> findLatestAvailableDriverLocations();
-
+  @Query(value = """
+    SELECT l.driver_id, l.latitude, l.longitude
+    FROM locations l
+    WHERE l.timestamp = (
+        SELECT MAX(l2.timestamp)
+        FROM locations l2
+        WHERE l2.driver_id = l.driver_id
+    )
+    """, nativeQuery = true)
+  List<Object[]> findLatestDriverLocations();
 
 
     // S4-F5
@@ -130,8 +127,8 @@ public interface LocationRepository extends JpaRepository<Location, Long> {
     int deleteLocationsOlderThan(@Param("cutoff") LocalDateTime cutoff);
 
     // S4-F8
-    @Query(value = "SELECT EXISTS (SELECT 1 FROM drivers WHERE id = :driverId)", nativeQuery = true)
-    boolean driverExists(@Param("driverId") Long driverId);
+    /*@Query(value = "SELECT EXISTS (SELECT 1 FROM drivers WHERE id = :driverId)", nativeQuery = true)
+    boolean driverExists(@Param("driverId") Long driverId);*/
 
     // S4-F8
     @Query(value = """
@@ -156,25 +153,23 @@ public interface LocationRepository extends JpaRepository<Location, Long> {
 
     // S4-F9
     @Query(value = """
-            SELECT
-                l.driver_id AS driverId,
-                d.name AS driverName,
-                l.latitude AS latitude,
-                l.longitude AS longitude,
-                CAST(l.metadata ->> 'speed' AS DOUBLE PRECISION) AS lastSpeed,
-                l.timestamp AS lastUpdated
-            FROM locations l
-            JOIN drivers d ON d.id = l.driver_id
-            JOIN (
-                SELECT driver_id, MAX(timestamp) AS max_timestamp
-                FROM locations
-                GROUP BY driver_id
-            ) latest
-                ON l.driver_id = latest.driver_id
-               AND l.timestamp = latest.max_timestamp
-            WHERE CAST(l.metadata ->> 'speed' AS DOUBLE PRECISION) <= :maxSpeed
-              AND l.timestamp >= :cutoffTime
-            """, nativeQuery = true)
+        SELECT
+            l.driver_id AS driverId,
+            l.latitude AS latitude,
+            l.longitude AS longitude,
+            CAST(l.metadata ->> 'speed' AS DOUBLE PRECISION) AS lastSpeed,
+            l.timestamp AS lastUpdated
+        FROM locations l
+        JOIN (
+            SELECT driver_id, MAX(timestamp) AS max_timestamp
+            FROM locations
+            GROUP BY driver_id
+        ) latest
+            ON l.driver_id = latest.driver_id
+           AND l.timestamp = latest.max_timestamp
+        WHERE CAST(l.metadata ->> 'speed' AS DOUBLE PRECISION) <= :maxSpeed
+          AND l.timestamp >= :cutoffTime
+        """, nativeQuery = true)
     List<StationaryDriverProjection> findStationaryDrivers(
             @Param("maxSpeed") Double maxSpeed,
             @Param("cutoffTime") LocalDateTime cutoffTime
