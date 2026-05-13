@@ -378,6 +378,10 @@ public class DriverService extends AbstractObservableService {
             int activeRides;
             try {
                 activeRides = rideServiceClient.getDriverActiveRideCount(driverId);
+            } catch (FeignException.NotFound e) {
+                // ride-service endpoint not yet implemented — treat as 0 active rides
+                log.warn("ride-service active-count endpoint not found for driverId={}, assuming 0", driverId);
+                activeRides = 0;
             } catch (FeignException e) {
                 log.warn("Feign call to ride-service failed for driverId={}: {}", driverId, e.getMessage());
                 throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,

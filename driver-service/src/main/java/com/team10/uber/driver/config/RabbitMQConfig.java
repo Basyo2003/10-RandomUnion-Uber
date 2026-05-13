@@ -1,5 +1,6 @@
 package com.team10.uber.driver.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.amqp.core.*;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -7,6 +8,8 @@ import org.springframework.amqp.support.converter.JacksonJsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
+
 
 @Configuration
 public class RabbitMQConfig {
@@ -76,6 +79,13 @@ public class RabbitMQConfig {
     }
 
     // ── Converter + Template ─────────────────────────────────────────────────
+
+    /** Exposed as a Spring bean so RideEventConsumer can inject it for message deserialization. */
+    @Bean
+    @Primary
+    public ObjectMapper objectMapper() {
+        return new ObjectMapper();
+    }
 
     @Bean
     public MessageConverter jsonMessageConverter() {
