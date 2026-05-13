@@ -440,37 +440,49 @@ public class DriverService extends AbstractObservableService {
     }
     /** S2-F7 — write, no caching. */
     @Transactional
-    public Driver rateDriver(Long id, Long rideId, Double rating, Long callerId) {
-        Driver driver = getDriverById(id);
+    public Driver rateDriver(Long id, Long rideId, Double rating) {
+        // 1. Local driver existence check (404 if not in driver-postgres)
+        getDriverById(id);
 
-        Driver rideDriver = driverRepository.findDriverByRideId(rideId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "No driver assigned to ride with id: " + rideId));
+        // 2. Rating range validation BEFORE Feign (fast fail, no network cost)
+        if (rating == null || rating < 1.0 || rating > 5.0)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Rating must be between 1.0 and 5.0");
 
-        String rideStatus = driverRepository.findRideStatusById(rideId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "Ride not found with id: " + rideId));
+        // 3. Feign → ride-service (replaces TWO cross-service SQL queries)
+        com.team10.uber.contracts.dto.RideDTO ride;
+        try {
+            ride = rideServiceClient.getRide(rideId);
+        } catch (FeignException.NotFound e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "Ride not found with id: " + rideId);
+        } catch (FeignException e) {
+            log.warn("Feign call to ride-service failed for rideId={}: {}", rideId, e.getMessage());
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "ride-service unavailable, please retry");
+        }
 
-        if (!driver.getId().equals(rideDriver.getId()))
+        // 4. Validate ride belongs to this driver
+        if (ride.driverId() == null || !ride.driverId().equals(id))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Ride does not belong to the requested driver");
 
-        if (!rideStatus.equals("COMPLETED"))
+        // 5. Validate ride is completed
+        if (!"COMPLETED".equals(ride.status()))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Cannot rate driver for a ride that is not completed");
 
-        if (rating == null || rating < 1.0 || rating > 5.0)
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Rating must be between 1.0 and 5.0");
+        // 6. Atomic UPDATE — no read-modify-write (§spec atomic SQL requirement)
+        driverRepository.applyRating(id, rating);
 
-        double totalRatingScore = (driver.getRating() * driver.getTotalRatings()) + rating;
-        int updatedTotalRatings = driver.getTotalRatings() + 1;
-        driver.setTotalRatings(updatedTotalRatings);
-        driver.setRating(totalRatingScore / updatedTotalRatings);
-
-        Driver saved = driverRepository.save(driver);
+        // 7. Re-fetch to get updated state for response and event
+        Driver saved = getDriverById(id);
         notifyObservers("RATING_RECORDED", saved);
         evictDriverCaches(id);
-        eventPublisher.publishRated(id, rideId, rating, callerId);
+
+        // 8. §2.11 publish-after-commit: PG committed above, now publish
+        eventPublisher.publishDriverRated(id, rideId, rating, ride.userId());
+
         return saved;
     }
 

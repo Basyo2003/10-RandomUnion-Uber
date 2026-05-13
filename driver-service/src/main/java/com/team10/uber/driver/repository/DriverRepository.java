@@ -4,6 +4,7 @@ import com.team10.uber.driver.enums.DriverStatus;
 import com.team10.uber.driver.model.Driver;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.repository.query.Param;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import jakarta.transaction.Transactional;
 
@@ -89,6 +90,11 @@ public interface DriverRepository extends JpaRepository<Driver, Long> {
     default boolean hasActiveRides(Long driverId) {
         return countActiveRides(driverId) > 0;
     }
+
+    @Modifying
+    @Query("UPDATE Driver d SET d.rating = (d.rating * d.totalRatings + :newRating) / (d.totalRatings + 1), " +
+           "d.totalRatings = d.totalRatings + 1 WHERE d.id = :driverId")
+    int applyRating(@Param("driverId") Long driverId, @Param("newRating") Double newRating);
 
     /** Single-arg overload — no status filter */
     default List<Driver> findByVehicleType(String type) {

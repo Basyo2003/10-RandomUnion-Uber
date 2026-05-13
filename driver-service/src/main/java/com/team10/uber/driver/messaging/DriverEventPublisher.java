@@ -26,7 +26,7 @@ public class DriverEventPublisher {
         log.debug("Published driver.status-changed for driver {}: {} → {}", driverId, oldStatus, newStatus);
     }
 
-    public void publishRated(Long driverId, Long rideId, Double rating, Long userId) {
+    public void publishDriverRated(Long driverId, Long rideId, Double rating, Long userId) {
         var event = new DriverRatedEvent(driverId, rideId, rating, userId);
         rabbitTemplate.convertAndSend(RabbitMQConfig.DRIVER_EVENTS_EXCHANGE, "driver.rated", event);
         log.debug("Published driver.rated for driver {} ride {} rating {}", driverId, rideId, rating);

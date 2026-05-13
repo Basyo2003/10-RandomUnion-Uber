@@ -132,11 +132,8 @@ public class DriverController {
     }
 
     @PostMapping("/{id}/rate")
-    public Driver rateDriver(@PathVariable Long id, @RequestBody RateDriverDTO rateDriverDTO,
-                             HttpServletRequest request) {
-        Object userIdAttr = request.getAttribute("userId");
-        Long callerId = userIdAttr instanceof Number n ? n.longValue() : null;
-        return driverService.rateDriver(id, rateDriverDTO.getRideId(), rateDriverDTO.getRating(), callerId);
+    public Driver rateDriver(@PathVariable Long id, @RequestBody RateDriverDTO rateDriverDTO) {
+        return driverService.rateDriver(id, rateDriverDTO.getRideId(), rateDriverDTO.getRating());
     }
 
     @PostMapping("/{driverId}/documents")

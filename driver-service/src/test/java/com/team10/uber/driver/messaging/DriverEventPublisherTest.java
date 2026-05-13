@@ -48,8 +48,8 @@ class DriverEventPublisherTest {
     // ── driver.rated (S2-F7) ─────────────────────────────────────────────────
 
     @Test
-    void publishRated_sendsToDriverEventsExchangeWithCorrectRoutingKey() {
-        publisher.publishRated(1L, 10L, 5.0, 7L);
+    void publishDriverRated_sendsToDriverEventsExchangeWithCorrectRoutingKey() {
+        publisher.publishDriverRated(1L, 10L, 5.0, 7L);
 
         verify(rabbitTemplate).convertAndSend(
                 RabbitMQConfig.DRIVER_EVENTS_EXCHANGE,
@@ -59,8 +59,8 @@ class DriverEventPublisherTest {
     }
 
     @Test
-    void publishRated_payloadContainsAllFields() {
-        publisher.publishRated(2L, 20L, 4.0, 99L);
+    void publishDriverRated_payloadContainsAllFields() {
+        publisher.publishDriverRated(2L, 20L, 4.0, 99L);
 
         verify(rabbitTemplate).convertAndSend(
                 eq(RabbitMQConfig.DRIVER_EVENTS_EXCHANGE),
