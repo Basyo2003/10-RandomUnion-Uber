@@ -8,11 +8,12 @@ import com.team10.uber.user.dto.UserRideSummaryDTO;
 import com.team10.uber.user.enums.Role;
 import com.team10.uber.user.enums.Status;
 import com.team10.uber.user.event.AuthEvent;
+import com.team10.uber.user.messaging.events.UserDeactivatedEvent;
+import com.team10.uber.user.messaging.events.UserRegisteredEvent;
+import com.team10.uber.user.messaging.publishers.UserEventPublisher;
 import com.team10.uber.user.model.SavedAddress;
 import com.team10.uber.user.model.User;
-import com.team10.uber.user.event.AuthEvent;
 import com.team10.uber.user.observer.EntityObserver;
-import com.team10.uber.user.repository.mongo.AuthEventRepository;
 import com.team10.uber.user.observer.AbstractObservableService;
 import com.team10.uber.user.observer.MongoEventLogger;
 import com.team10.uber.user.repository.SavedAddressRepository;
@@ -26,6 +27,8 @@ import org.springframework.cache.annotation.Caching;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
@@ -41,18 +44,21 @@ public class UserService extends AbstractObservableService {
     private final EntityObserver observer;
     private final PasswordEncoder passwordEncoder;
     private final MongoEventLogger mongoEventLogger;
+    private final UserEventPublisher userEventPublisher;
     private final ObjectArrayDtoAdapter objectArrayDtoAdapter = new ObjectArrayDtoAdapter();
 
     public UserService(UserRepository userRepository,
                        SavedAddressRepository savedAddressRepository,
                        AuthEventRepository authEventRepository, EntityObserver observer,
-                       PasswordEncoder passwordEncoder, MongoEventLogger mongoEventLogger) {
+                       PasswordEncoder passwordEncoder, MongoEventLogger mongoEventLogger,
+                       UserEventPublisher userEventPublisher) {
         this.userRepository = userRepository;
         this.savedAddressRepository = savedAddressRepository;
         this.authEventRepository = authEventRepository;
         this.observer = observer;
         this.passwordEncoder = passwordEncoder;
         this.mongoEventLogger = mongoEventLogger;
+        this.userEventPublisher = userEventPublisher;
     }
 
     @PostConstruct
@@ -235,12 +241,16 @@ public class UserService extends AbstractObservableService {
     })
     public User deactivateUser(Long id) {
         User user = findUserByIdOrThrow(id);
+        if (user.getStatus() == Status.DEACTIVATED) {
+            return user;
+        }
         if (userRepository.hasActiveRides(id)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User has active rides");
         }
         user.setStatus(Status.DEACTIVATED);
         User saved = userRepository.save(user);
         notifyObservers("USER_DEACTIVATED", Map.of("userId", id, "status", "DEACTIVATED"));
+        afterCommit(() -> userEventPublisher.publishUserDeactivated(new UserDeactivatedEvent(saved.getId())));
         return saved;
     }
 
@@ -333,8 +343,23 @@ public class UserService extends AbstractObservableService {
         // e) Log to MongoDB via Observer Pattern
         // This uses your MongoEventLogger and EventFactory internally
         observer.onEvent("REGISTERED", savedUser);
+        afterCommit(() -> userEventPublisher.publishUserRegistered(
+                new UserRegisteredEvent(savedUser.getId(), savedUser.getEmail(), savedUser.getRole().name())));
 
         return savedUser;
+    }
+
+    private void afterCommit(Runnable action) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            action.run();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                action.run();
+            }
+        });
     }
 //     public void logAuthEvent(Long userId, String action, Map<String, Object> details) {
 //         try {

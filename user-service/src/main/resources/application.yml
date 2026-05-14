@@ -5,6 +5,19 @@ spring:
     url: jdbc:postgresql://postgres:5432/uberdb
     username: postgres
     password: postgres
+  rabbitmq:
+    host: rabbitmq
+    port: 5672
+    username: guest
+    password: guest
+    listener:
+      simple:
+        acknowledge-mode: auto
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          initial-interval: 1000
+          max-attempts: 3
   jpa:
     hibernate:
       ddl-auto: update
@@ -23,3 +36,13 @@ server:
 jwt:
   secret: dVJlckp3dFNoYXJlZFNlY3JldEtleUZvckFsbEZpdmVTZXJ2aWNlczEyMzQ1Ng==
   expiration: 86400000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "prometheus,health,info"
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
