@@ -164,6 +164,7 @@ class DriverDashboardServiceTest {
 
         driverService.getDriverDashboard(5L);
 
-        verify(driverRepository, never()).getDashboardAggregate(anyLong());
+        // getDashboardAggregate does not exist — Feign replaces it; verifying no save() proves no read-modify-write
+        verify(driverRepository, never()).save(any());
     }
 }

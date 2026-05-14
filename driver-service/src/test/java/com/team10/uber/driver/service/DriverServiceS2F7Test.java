@@ -67,13 +67,13 @@ class DriverServiceS2F7Test {
                 .thenReturn(Optional.of(driver1))
                 .thenReturn(Optional.of(updatedDriver));
         when(rideServiceClient.getRide(10L)).thenReturn(completedRide);
-        when(driverRepository.applyRating(1L, 5.0)).thenReturn(1);
+        when(driverRepository.applyRatingUpdate(1L, 5.0)).thenReturn(1);
 
         Driver result = driverService.rateDriver(1L, 10L, 5.0);
 
         assertThat(result.getRating()).isEqualTo(5.0);
         assertThat(result.getTotalRatings()).isEqualTo(1);
-        verify(driverRepository).applyRating(1L, 5.0);
+        verify(driverRepository).applyRatingUpdate(1L, 5.0);
         verify(driverEventPublisher).publishDriverRated(1L, 10L, 5.0, 7L);
     }
 
@@ -87,7 +87,7 @@ class DriverServiceS2F7Test {
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("404");
 
-        verify(driverRepository, never()).applyRating(any(), any());
+        verify(driverRepository, never()).applyRatingUpdate(any(), any());
         verify(driverEventPublisher, never()).publishDriverRated(any(), any(), any(), any());
     }
 
@@ -101,7 +101,7 @@ class DriverServiceS2F7Test {
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("400");
 
-        verify(driverRepository, never()).applyRating(any(), any());
+        verify(driverRepository, never()).applyRatingUpdate(any(), any());
     }
 
     @Test
@@ -138,7 +138,7 @@ class DriverServiceS2F7Test {
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("400");
 
-        verify(driverRepository, never()).applyRating(any(), any());
+        verify(driverRepository, never()).applyRatingUpdate(any(), any());
     }
 
     @Test
@@ -163,13 +163,13 @@ class DriverServiceS2F7Test {
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("503");
 
-        verify(driverRepository, never()).applyRating(any(), any());
+        verify(driverRepository, never()).applyRatingUpdate(any(), any());
         verify(driverEventPublisher, never()).publishDriverRated(any(), any(), any(), any());
     }
 
     @Test
-    @DisplayName("applyRating called with correct driverId and rating")
-    void applyRating_calledWithCorrectArgs() {
+    @DisplayName("applyRatingUpdate called with correct driverId and rating")
+    void applyRatingUpdate_calledWithCorrectArgs() {
         Driver updated = new Driver();
         updated.setId(1L);
         updated.setRating(4.5);
@@ -179,15 +179,15 @@ class DriverServiceS2F7Test {
                 .thenReturn(Optional.of(driver1))
                 .thenReturn(Optional.of(updated));
         when(rideServiceClient.getRide(10L)).thenReturn(completedRide);
-        when(driverRepository.applyRating(1L, 4.5)).thenReturn(1);
+        when(driverRepository.applyRatingUpdate(1L, 4.5)).thenReturn(1);
 
         driverService.rateDriver(1L, 10L, 4.5);
 
-        verify(driverRepository).applyRating(1L, 4.5);
+        verify(driverRepository).applyRatingUpdate(1L, 4.5);
     }
 
     @Test
-    @DisplayName("publishDriverRated called AFTER applyRating (publish-after-commit §2.11)")
+    @DisplayName("publishDriverRated called AFTER applyRatingUpdate (publish-after-commit §2.11)")
     void publishCalledAfterApplyRating() {
         Driver updated = new Driver();
         updated.setId(1L);
@@ -198,13 +198,13 @@ class DriverServiceS2F7Test {
                 .thenReturn(Optional.of(driver1))
                 .thenReturn(Optional.of(updated));
         when(rideServiceClient.getRide(10L)).thenReturn(completedRide);
-        when(driverRepository.applyRating(1L, 5.0)).thenReturn(1);
+        when(driverRepository.applyRatingUpdate(1L, 5.0)).thenReturn(1);
 
         var inOrder = inOrder(driverRepository, driverEventPublisher);
 
         driverService.rateDriver(1L, 10L, 5.0);
 
-        inOrder.verify(driverRepository).applyRating(1L, 5.0);
+        inOrder.verify(driverRepository).applyRatingUpdate(1L, 5.0);
         inOrder.verify(driverEventPublisher).publishDriverRated(any(), any(), any(), any());
     }
 
@@ -220,7 +220,7 @@ class DriverServiceS2F7Test {
                 .thenReturn(Optional.of(driver1))
                 .thenReturn(Optional.of(updated));
         when(rideServiceClient.getRide(10L)).thenReturn(completedRide); // userId=7
-        when(driverRepository.applyRating(1L, 5.0)).thenReturn(1);
+        when(driverRepository.applyRatingUpdate(1L, 5.0)).thenReturn(1);
 
         driverService.rateDriver(1L, 10L, 5.0);
 
@@ -237,7 +237,7 @@ class DriverServiceS2F7Test {
                 .thenReturn(Optional.of(driver1))
                 .thenReturn(Optional.of(updated));
         when(rideServiceClient.getRide(10L)).thenReturn(completedRide);
-        when(driverRepository.applyRating(1L, 5.0)).thenReturn(1);
+        when(driverRepository.applyRatingUpdate(1L, 5.0)).thenReturn(1);
 
         driverService.rateDriver(1L, 10L, 5.0);
 

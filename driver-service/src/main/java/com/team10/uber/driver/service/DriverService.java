@@ -5,6 +5,7 @@ import com.team10.uber.contracts.dto.DriverRideSummaryDTO;
 import com.team10.uber.contracts.feign.RideServiceClient;
 import com.team10.uber.driver.messaging.DriverEventPublisher;
 import com.team10.uber.driver.adapter.ElasticsearchHitAdapter;
+import com.team10.uber.driver.adapter.TopRatedDriverAdapter;
 import com.team10.uber.driver.cache.RedisCacheService;
 import com.team10.uber.driver.dto.DriverDashboardDTO;
 import com.team10.uber.driver.dto.DriverDocumentAlertDTO;
@@ -92,7 +93,7 @@ public class DriverService extends AbstractObservableService {
     private DriverRideSummaryDTO fetchDriverRideSummary(Long driverId, LocalDate startDate, LocalDate endDate) {
         String start = startDate != null ? startDate.toString() : null;
         String end = endDate != null ? endDate.toString() : null;
-        log.info("Calling RideServiceClient.getDriverRideSummary with args={}", List.of(driverId, start, end));
+        log.info("Calling RideServiceClient.getDriverRideSummary with args=[{}, {}, {}]", driverId, start, end);
         try {
             DriverRideSummaryDTO dto = rideServiceClient.getDriverRideSummary(driverId, start, end);
             log.info("RideServiceClient.getDriverRideSummary returned successfully");

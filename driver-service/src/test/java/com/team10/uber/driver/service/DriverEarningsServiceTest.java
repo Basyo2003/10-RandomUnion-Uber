@@ -187,6 +187,7 @@ class DriverEarningsServiceTest {
 
         driverService.getDriverEarningsSummary(1L, START, END);
 
-        verify(driverRepository, never()).getEarningsAggregate(anyLong(), any(), any());
+        // getEarningsAggregate does not exist — Feign replaces cross-service SQL; verifying rideServiceClient was called is sufficient
+        verify(rideServiceClient).getDriverRideSummary(anyLong(), any(), any());
     }
 }
