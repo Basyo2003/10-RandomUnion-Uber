@@ -51,6 +51,12 @@ public class User {
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(nullable = false)
+    private Long totalRides = 0L;
+
+    @Column(nullable = false)
+    private Double totalSpent = 0.0;
+
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonIgnore
     private List<SavedAddress> savedAddresses = new ArrayList<>();
@@ -85,6 +91,12 @@ public class User {
     public void setPreferences(Map<String, Object> preferences) { this.preferences = preferences; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
+
+    public Long getTotalRides() { return totalRides; }
+    public void setTotalRides(Long totalRides) { this.totalRides = totalRides; }
+
+    public Double getTotalSpent() { return totalSpent; }
+    public void setTotalSpent(Double totalSpent) { this.totalSpent = totalSpent; }
 
     public List<SavedAddress> getSavedAddresses() { return savedAddresses; }
     public void setSavedAddresses(List<SavedAddress> savedAddresses) { this.savedAddresses = savedAddresses; }
