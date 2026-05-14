@@ -111,35 +111,41 @@ public interface RideRepository extends JpaRepository<Ride, Long> {
     @Query(value = "SELECT COUNT(*) FROM rides WHERE user_id = :userId", nativeQuery = true)
     long countTotalRidesByUserId(@Param("userId") Long userId);
 
-    @Query(value = "SELECT COUNT(*) FROM rides WHERE user_id = :userId AND status = 'COMPLETED'", nativeQuery = true)
+    // Spec: completed-count = status IN (COMPLETED, PAID)
+    @Query(value = "SELECT COUNT(*) FROM rides WHERE user_id = :userId AND status IN ('COMPLETED', 'PAID')", nativeQuery = true)
     long countCompletedRidesByUserId(@Param("userId") Long userId);
 
     @Query(value = "SELECT COUNT(*) FROM rides WHERE user_id = :userId AND status = 'CANCELLED'", nativeQuery = true)
     long countCancelledRidesByUserId(@Param("userId") Long userId);
 
-    @Query(value = "SELECT COALESCE(SUM(fare), 0) FROM rides WHERE user_id = :userId AND status = 'COMPLETED'", nativeQuery = true)
+    // Spec: totalSpent = fare sum for COMPLETED or PAID rides
+    @Query(value = "SELECT COALESCE(SUM(fare), 0) FROM rides WHERE user_id = :userId AND status IN ('COMPLETED', 'PAID')", nativeQuery = true)
     Double sumFareByUserId(@Param("userId") Long userId);
 
-    @Query(value = "SELECT COUNT(*) FROM rides WHERE user_id = :userId AND status IN ('REQUESTED', 'ACCEPTED', 'IN_PROGRESS')", nativeQuery = true)
+    // Spec: active-count for user = REQUESTED, ACCEPTED, IN_PROGRESS, COMPLETED, PAYMENT_PENDING
+    @Query(value = "SELECT COUNT(*) FROM rides WHERE user_id = :userId AND status IN ('REQUESTED', 'ACCEPTED', 'IN_PROGRESS', 'COMPLETED', 'PAYMENT_PENDING')", nativeQuery = true)
     int countActiveRidesByUserId(@Param("userId") Long userId);
 
-    @Query(value = "SELECT COUNT(*) FROM rides WHERE driver_id = :driverId" +
+    // Spec: driver summary totalRides = completed rides (COMPLETED or PAID) in optional date range
+    @Query(value = "SELECT COUNT(*) FROM rides WHERE driver_id = :driverId AND status IN ('COMPLETED', 'PAID')" +
             " AND (:startDate IS NULL OR requested_at >= :startDate)" +
             " AND (:endDate IS NULL OR requested_at <= :endDate)", nativeQuery = true)
-    long countTotalRidesByDriverIdInRange(@Param("driverId") Long driverId,
-                                          @Param("startDate") LocalDateTime startDate,
-                                          @Param("endDate") LocalDateTime endDate);
+    long countCompletedRidesByDriverIdInRange(@Param("driverId") Long driverId,
+                                              @Param("startDate") LocalDateTime startDate,
+                                              @Param("endDate") LocalDateTime endDate);
 
-    @Query(value = "SELECT COALESCE(SUM(fare), 0) FROM rides WHERE driver_id = :driverId AND status = 'COMPLETED'" +
+    @Query(value = "SELECT COALESCE(SUM(fare), 0) FROM rides WHERE driver_id = :driverId AND status IN ('COMPLETED', 'PAID')" +
             " AND (:startDate IS NULL OR requested_at >= :startDate)" +
             " AND (:endDate IS NULL OR requested_at <= :endDate)", nativeQuery = true)
     Double sumFareByDriverIdInRange(@Param("driverId") Long driverId,
                                     @Param("startDate") LocalDateTime startDate,
                                     @Param("endDate") LocalDateTime endDate);
 
-    @Query(value = "SELECT COUNT(*) FROM rides WHERE driver_id = :driverId AND status IN ('REQUESTED', 'ACCEPTED', 'IN_PROGRESS')", nativeQuery = true)
+    // Spec: active-count for driver = ACCEPTED, IN_PROGRESS, COMPLETED, PAYMENT_PENDING (no REQUESTED)
+    @Query(value = "SELECT COUNT(*) FROM rides WHERE driver_id = :driverId AND status IN ('ACCEPTED', 'IN_PROGRESS', 'COMPLETED', 'PAYMENT_PENDING')", nativeQuery = true)
     int countActiveRidesByDriverId(@Param("driverId") Long driverId);
 
-    @Query(value = "SELECT COUNT(*) FROM rides WHERE driver_id = :driverId AND status = 'COMPLETED'", nativeQuery = true)
+    // Spec: completed-count for driver = COMPLETED or PAID
+    @Query(value = "SELECT COUNT(*) FROM rides WHERE driver_id = :driverId AND status IN ('COMPLETED', 'PAID')", nativeQuery = true)
     long countCompletedRidesByDriverId(@Param("driverId") Long driverId);
 }

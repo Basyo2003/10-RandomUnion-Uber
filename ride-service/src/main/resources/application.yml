@@ -51,3 +51,13 @@ feign:
     url: http://location-service:8080
   payment-service:
     url: http://payment-service:8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "prometheus,health,info"
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true

@@ -1,35 +1,35 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
-    <springProperty scope="context" name="appName" source="spring.application.name" defaultValue="ride-service"/>
-
-    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder>
-            <pattern>{"timestamp":"%d{yyyy-MM-dd'T'HH:mm:ss.SSSZ}","level":"%level","logger":"%logger{36}","thread":"%thread","message":"%message","rideId":"%X{rideId:-}","userId":"%X{userId:-}","driverId":"%X{driverId:-}","paymentId":"%X{paymentId:-}","routingKey":"%X{routingKey:-}","correlationId":"%X{correlationId:-}"}%n</pattern>
-        </encoder>
-    </appender>
-
     <appender name="LOKI" class="com.github.loki4j.logback.Loki4jAppender">
         <http>
-            <url>http://loki:3100/loki/api/v1/push</url>
+            <url>http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push</url>
         </http>
         <format>
             <label>
-                <pattern>app=${appName},level=%level,host=${HOSTNAME:-unknown}</pattern>
+                <pattern>app=uber,service=${spring.application.name},level=%level,env=k8s</pattern>
             </label>
             <message>
-                <pattern>{"timestamp":"%d{yyyy-MM-dd'T'HH:mm:ss.SSSZ}","level":"%level","logger":"%logger{36}","thread":"%thread","message":"%message","rideId":"%X{rideId:-}","userId":"%X{userId:-}","driverId":"%X{driverId:-}","paymentId":"%X{paymentId:-}","routingKey":"%X{routingKey:-}","correlationId":"%X{correlationId:-}"}</pattern>
+                <pattern>
+                    {
+                      "timestamp": "%d{ISO8601}",
+                      "level": "%level",
+                      "service": "${spring.application.name}",
+                      "thread": "%thread",
+                      "logger": "%logger{36}",
+                      "correlationId": "%X{correlationId:-}",
+                      "userId": "%X{userId:-}",
+                      "driverId": "%X{driverId:-}",
+                      "rideId": "%X{rideId:-}",
+                      "paymentId": "%X{paymentId:-}",
+                      "routingKey": "%X{routingKey:-}",
+                      "message": "%msg"
+                    }
+                </pattern>
             </message>
-            <sortByTime>true</sortByTime>
         </format>
     </appender>
 
-    <logger name="com.team10.uber.ride" level="DEBUG" additivity="false">
-        <appender-ref ref="CONSOLE"/>
-        <appender-ref ref="LOKI"/>
-    </logger>
-
     <root level="INFO">
-        <appender-ref ref="CONSOLE"/>
         <appender-ref ref="LOKI"/>
     </root>
 </configuration>

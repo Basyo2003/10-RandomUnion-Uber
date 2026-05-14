@@ -598,7 +598,7 @@ public class RideService extends AbstractObservableService {
         LocalDateTime start = startDate != null ? LocalDate.parse(startDate).atStartOfDay() : null;
         LocalDateTime end = endDate != null ? LocalDate.parse(endDate).atTime(LocalTime.MAX) : null;
 
-        long totalRides = rideRepository.countTotalRidesByDriverIdInRange(driverId, start, end);
+        long totalRides = rideRepository.countCompletedRidesByDriverIdInRange(driverId, start, end);
         Double totalEarnings = rideRepository.sumFareByDriverIdInRange(driverId, start, end);
         double earnings = totalEarnings != null ? totalEarnings : 0.0;
         double avgFare = totalRides > 0 ? earnings / totalRides : 0.0;

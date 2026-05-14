@@ -2,9 +2,9 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: ride-postgres
-  namespace: default
+  namespace: uber
 spec:
-  serviceName: ride-postgres-headless
+  serviceName: ride-postgres
   replicas: 1
   selector:
     matchLabels:
@@ -19,22 +19,22 @@ spec:
           image: postgres:17
           ports:
             - containerPort: 5432
-              name: postgres
           env:
-            - name: POSTGRES_DB
-              value: uberdb-rides
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
                   name: ride-postgres-secret
-                  key: username
+                  key: POSTGRES_USER
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: ride-postgres-secret
-                  key: password
-            - name: PGDATA
-              value: /var/lib/postgresql/data/pgdata
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: ride-postgres-secret
+                  key: POSTGRES_DB
           resources:
             requests:
               memory: "256Mi"
@@ -48,30 +48,22 @@ spec:
                 - pg_isready
                 - -U
                 - postgres
-                - -d
-                - uberdb-rides
-            initialDelaySeconds: 30
+            initialDelaySeconds: 15
             periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 3
           readinessProbe:
             exec:
               command:
                 - pg_isready
                 - -U
                 - postgres
-                - -d
-                - uberdb-rides
-            initialDelaySeconds: 10
-            periodSeconds: 5
-            timeoutSeconds: 3
-            failureThreshold: 3
+            initialDelaySeconds: 15
+            periodSeconds: 10
           volumeMounts:
-            - name: ride-postgres-data
+            - name: data
               mountPath: /var/lib/postgresql/data
   volumeClaimTemplates:
     - metadata:
-        name: ride-postgres-data
+        name: data
       spec:
         accessModes:
           - ReadWriteOnce
