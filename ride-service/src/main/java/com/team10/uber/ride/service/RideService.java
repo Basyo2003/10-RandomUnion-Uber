@@ -5,6 +5,8 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.*;
 
+import com.team10.uber.contracts.dto.DriverRideSummaryDTO;
+import com.team10.uber.contracts.dto.RideDTO;
 import com.team10.uber.ride.dto.*;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
@@ -98,6 +100,55 @@ public class RideService extends AbstractObservableService {
         return rideRepository.findById(id)
                 .orElseThrow(() -> new RideNotFoundException("Ride not found with id: " + id));
     }
+
+    @Transactional(readOnly = true)
+    public RideDTO getRideDto(Long id) {
+        Ride ride = getRideById(id);
+        return toRideDto(ride);
+    }
+
+    private static RideDTO toRideDto(Ride ride) {
+        return new RideDTO(
+                ride.getId(),
+                ride.getUserId(),
+                ride.getDriverId(),
+                ride.getStatus() != null ? ride.getStatus().name() : null,
+                ride.getFare(),
+                ride.getRequestedAt(),
+                ride.getCompletedAt(),
+                ride.getMetadata()
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public DriverRideSummaryDTO getDriverRideSummary(Long driverId, LocalDate startDate, LocalDate endDate) {
+        LocalDateTime start = startDate != null ? startDate.atStartOfDay() : null;
+        LocalDateTime end = endDate != null ? endDate.plusDays(1).atStartOfDay() : null;
+        Object[] row = rideRepository.summarizeDriverCompletedRides(driverId, start, end);
+        long totalRides = ((Number) row[0]).longValue();
+        double totalEarnings = ((Number) row[1]).doubleValue();
+        double averageFare = totalRides == 0L ? 0.0 : totalEarnings / totalRides;
+        return new DriverRideSummaryDTO(totalRides, totalEarnings, averageFare);
+    }
+
+    @Transactional(readOnly = true)
+    public int getDriverActiveRideCount(Long driverId) {
+        return (int) rideRepository.countByDriverIdAndStatusIn(driverId, List.of(
+                RideStatus.ACCEPTED,
+                RideStatus.IN_PROGRESS,
+                RideStatus.COMPLETED,
+                RideStatus.PAYMENT_PENDING
+        ));
+    }
+
+    @Transactional(readOnly = true)
+    public long getDriverCompletedRideCount(Long driverId) {
+        return rideRepository.countByDriverIdAndStatusIn(driverId, List.of(
+                RideStatus.COMPLETED,
+                RideStatus.PAID
+        ));
+    }
+
     @CacheEvict(value = "ride-service::ride", key = "#id")
     public Ride updateRide(Long id, Ride updatedRide) {
         Ride existing = getRideById(id);

@@ -1,5 +1,4 @@
 services:
-
   # ── PostgreSQL — one instance per service (M3 DB isolation) ──────────
 
   user-postgres:
