@@ -5,30 +5,37 @@ spring:
     password:
     driver-class-name: org.h2.Driver
   jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
     hibernate:
       ddl-auto: create-drop
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
   data:
-    redis:
-      host: 127.0.0.1
-      port: 6379
-      password: redispass
     mongodb:
-      uri: mongodb://127.0.0.1:27017/drivertest?serverSelectionTimeoutMS=2000&connectTimeoutMS=2000
-  elasticsearch:
-    uris: http://127.0.0.1:9200
-
-feign:
-  ride-service:
-    url: http://127.0.0.1:18081
-  user-service:
-    url: http://127.0.0.1:18082
+      uri: mongodb://localhost:27017/testdb
+      connect-timeout-ms: 500
+      server-selection-timeout-ms: 500
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+      - org.springframework.boot.mongodb.autoconfigure.MongoAutoConfiguration
+      - org.springframework.boot.data.mongodb.autoconfigure.DataMongoAutoConfiguration
+      - org.springframework.boot.data.mongodb.autoconfigure.DataMongoReactiveAutoConfiguration
+      - org.springframework.boot.data.mongodb.autoconfigure.DataMongoReactiveRepositoriesAutoConfiguration
+      - org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration
+      - org.springframework.boot.amqp.autoconfigure.RabbitAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.elasticsearch.ElasticsearchRepositoriesAutoConfiguration
+      - org.springframework.boot.autoconfigure.elasticsearch.ElasticsearchClientAutoConfiguration
+      - org.springframework.boot.autoconfigure.elasticsearch.ElasticsearchRestClientAutoConfiguration
 
 jwt:
   secret: dVJlckp3dFNoYXJlZFNlY3JldEtleUZvckFsbEZpdmVTZXJ2aWNlczEyMzQ1Ng==
   expiration: 86400000
+
+feign:
+  ride-service:
+    url: http://localhost:9999
+  user-service:
+    url: http://localhost:9999
 
 logging:
   config: classpath:logback-test.xml

@@ -1,7 +1,11 @@
 package com.team10.uber.driver.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.team10.uber.contracts.dto.DriverRideSummaryDTO;
+import com.team10.uber.contracts.feign.RideServiceClient;
+import com.team10.uber.driver.messaging.DriverEventPublisher;
 import com.team10.uber.driver.adapter.ElasticsearchHitAdapter;
+import com.team10.uber.driver.adapter.TopRatedDriverAdapter;
 import com.team10.uber.driver.cache.RedisCacheService;
 import com.team10.uber.driver.dto.DriverDashboardDTO;
 import com.team10.uber.driver.dto.DriverDocumentAlertDTO;
@@ -15,16 +19,13 @@ import com.team10.uber.driver.observer.MongoEventLogger;
 import com.team10.uber.driver.repository.DriverDocumentRepository;
 import com.team10.uber.driver.repository.DriverRepository;
 import com.team10.uber.contracts.dto.DriverAvailabilityDTO;
-import com.team10.uber.contracts.dto.DriverRideSummaryDTO;
 import com.team10.uber.contracts.dto.RideDTO;
-import com.team10.uber.contracts.feign.RideServiceClient;
 import feign.FeignException;
 import jakarta.annotation.PostConstruct;
 import jakarta.transaction.Transactional;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.elasticsearch.client.elc.NativeQuery;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
@@ -36,7 +37,6 @@ import com.team10.uber.driver.adapter.MongoDocumentAdapter;
 
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -63,9 +63,10 @@ public class DriverService extends AbstractObservableService {
     private final MongoEventLogger mongoEventLogger;
     private final RedisCacheService cache;
     private final ElasticsearchOperations elasticsearchOperations;
-    private final ElasticsearchHitAdapter elasticsearchHitAdapter = new ElasticsearchHitAdapter();
     private final RideServiceClient rideServiceClient;
-
+    private final DriverEventPublisher eventPublisher;
+    private final ElasticsearchHitAdapter elasticsearchHitAdapter = new ElasticsearchHitAdapter();
+    private final TopRatedDriverAdapter topRatedDriverAdapter = new TopRatedDriverAdapter();
     private final MongoDocumentAdapter mongoDocumentAdapter = new MongoDocumentAdapter();
 
     public DriverService(DriverRepository driverRepository,
@@ -73,13 +74,15 @@ public class DriverService extends AbstractObservableService {
                          MongoEventLogger mongoEventLogger,
                          RedisCacheService cache,
                          ElasticsearchOperations elasticsearchOperations,
-                         RideServiceClient rideServiceClient) {
+                         RideServiceClient rideServiceClient,
+                         DriverEventPublisher eventPublisher) {
         this.driverRepository = driverRepository;
         this.driverDocumentRepository = driverDocumentRepository;
         this.mongoEventLogger = mongoEventLogger;
         this.cache = cache;
         this.elasticsearchOperations = elasticsearchOperations;
         this.rideServiceClient = rideServiceClient;
+        this.eventPublisher = eventPublisher;
     }
 
     @PostConstruct
@@ -90,7 +93,7 @@ public class DriverService extends AbstractObservableService {
     private DriverRideSummaryDTO fetchDriverRideSummary(Long driverId, LocalDate startDate, LocalDate endDate) {
         String start = startDate != null ? startDate.toString() : null;
         String end = endDate != null ? endDate.toString() : null;
-        log.info("Calling RideServiceClient.getDriverRideSummary with args={}", List.of(driverId, start, end));
+        log.info("Calling RideServiceClient.getDriverRideSummary with args=[{}, {}, {}]", driverId, start, end);
         try {
             DriverRideSummaryDTO dto = rideServiceClient.getDriverRideSummary(driverId, start, end);
             log.info("RideServiceClient.getDriverRideSummary returned successfully");
@@ -400,7 +403,8 @@ public class DriverService extends AbstractObservableService {
         double totalEarnings = summary.totalEarnings() != null ? summary.totalEarnings() : 0.0;
         double averageFare = summary.averageFare() != null ? summary.averageFare() : 0.0;
 
-        DriverEarningsDTO result = new DriverEarningsDTO(driver.getId(), driver.getName(), totalRides, totalEarnings, averageFare);
+        DriverEarningsDTO result = new DriverEarningsDTO(driver.getId(), driver.getName(),
+                totalRides, totalEarnings, averageFare);
         cache.put(key, result, TTL_DTO);
         return result;
     }
@@ -409,6 +413,8 @@ public class DriverService extends AbstractObservableService {
     @Transactional
     public void updateDriverAvailability(Long driverId, DriverStatus newStatus) {
         Driver driver = getDriverById(driverId);
+        String oldStatus = driver.getStatus() != null ? driver.getStatus().name() : null;
+
         if (newStatus == DriverStatus.OFFLINE) {
             int activeRides = fetchDriverActiveRideCount(driverId);
             if (activeRides > 0) {
@@ -416,10 +422,14 @@ public class DriverService extends AbstractObservableService {
                         "Driver has active rides and cannot go OFFLINE");
             }
         }
+
         driver.setStatus(newStatus);
         Driver saved = driverRepository.save(driver);
         notifyObservers("AVAILABILITY_UPDATED", saved);
         evictDriverCaches(driverId);
+
+        // §2.11 publish-after-commit: PG committed above, now publish event
+        eventPublisher.publishStatusChanged(driverId, oldStatus, newStatus.name());
     }
 
     /** S2-F5 — filter by vehicle type, cached 5 min. */
@@ -494,29 +504,32 @@ public class DriverService extends AbstractObservableService {
     @Transactional
     public Driver rateDriver(Long id, Long rideId, Double rating) {
         Driver driver = getDriverById(id);
+
+        if (rating == null || rating < 1.0 || rating > 5.0)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Rating must be between 1.0 and 5.0");
+
         RideDTO ride = fetchRide(rideId);
 
-        if (ride.driverId() == null || !driver.getId().equals(ride.driverId())) {
+        if (ride.driverId() == null || !ride.driverId().equals(id))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Ride does not belong to the requested driver");
-        }
 
-        if (!"COMPLETED".equals(ride.status())) {
+        if (!"COMPLETED".equals(ride.status()))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Cannot rate driver for a ride that is not completed");
-        }
 
-        if (rating == null || rating < 1.0 || rating > 5.0) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Rating must be between 1.0 and 5.0");
-        }
-
-        int updated = driverRepository.applyRatingUpdate(driver.getId(), rating);
-        if (updated == 0) {
+        int updated = driverRepository.applyRatingUpdate(id, rating);
+        if (updated == 0)
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Driver not found with id: " + id);
-        }
-        Driver saved = driverRepository.findById(driver.getId()).orElse(driver);
+
+        Driver saved = driverRepository.findById(id).orElse(driver);
         notifyObservers("RATING_RECORDED", saved);
         evictDriverCaches(id);
+
+        // 8. §2.11 publish-after-commit: PG committed above, now publish
+        eventPublisher.publishDriverRated(id, rideId, rating, ride.userId());
+
         return saved;
     }
 
@@ -550,7 +563,6 @@ public class DriverService extends AbstractObservableService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Driver not found with id: " + driverId));
 
-        // Log every invocation — outside cache
         notifyObservers("DASHBOARD_VIEWED", driver);
 
         String key = "S2-F12::" + driverId;
