@@ -53,8 +53,23 @@ public interface RideRepository extends JpaRepository<Ride, Long> {
                                             @Param("endDate") LocalDateTime endDate,
                                             @Param("status") String status);
 
+    @Query(value = "SELECT * FROM rides " +
+            "WHERE (:startDate IS NULL OR requested_at >= :startDate) " +
+            "AND (:endDate IS NULL OR requested_at <= :endDate) " +
+            "AND (:status IS NULL OR status::text = :status) " +
+            "AND (:userId IS NULL OR user_id = :userId) " +
+            "ORDER BY requested_at DESC",
+            nativeQuery = true)
+    List<Ride> searchRides(@Param("startDate") LocalDateTime startDate,
+                           @Param("endDate") LocalDateTime endDate,
+                           @Param("status") String status,
+                           @Param("userId") Long userId);
+
     @Query(value = "SELECT COUNT(*) > 0 FROM drivers WHERE id = :driverId", nativeQuery = true)
     boolean driverexists(@Param("driverId") Long driverId);
+
+    @Query(value = "SELECT COUNT(*) > 0 FROM users WHERE id = :userId", nativeQuery = true)
+    boolean userExistsById(@Param("userId") Long userId);
 
     @Query(value = "SELECT status FROM drivers WHERE id = :driverId",
             nativeQuery = true)
@@ -66,6 +81,29 @@ public interface RideRepository extends JpaRepository<Ride, Long> {
     @Query(value = "UPDATE drivers SET status = 'BUSY' WHERE id = :driverId AND status = 'AVAILABLE'", nativeQuery = true)
     int updateDriverStatusToBusy(@Param("driverId") Long driverId);
 
+    @Query(value = "SELECT COUNT(*) > 0 FROM users WHERE id = :userId", nativeQuery = true)
+    boolean userExists(@Param("userId") Long userId);
 
+    @Query(value = """
+        SELECT COALESCE(SUM(p.amount), 0)
+        FROM rides r
+        JOIN payments p ON p.ride_id = r.id
+        WHERE r.status = 'COMPLETED'
+          AND r.requested_at BETWEEN :startDateTime AND :endDateTime
+        """, nativeQuery = true)
+    Double sumCompletedRideRevenueBetween(@Param("startDateTime") LocalDateTime startDateTime,
+                                          @Param("endDateTime") LocalDateTime endDateTime);
+
+    @Query(value = """
+        SELECT r.status::text AS status, COUNT(*) AS cnt
+        FROM rides r
+        WHERE r.requested_at BETWEEN :startDateTime AND :endDateTime
+        GROUP BY r.status
+        """, nativeQuery = true)
+    List<Object[]> countRidesByStatusBetween(@Param("startDateTime") LocalDateTime startDateTime,
+                                             @Param("endDateTime") LocalDateTime endDateTime);
+
+    @Query(value = "SELECT name, vehicle_details->>'vehicleType' AS vehicleType FROM drivers WHERE id = :driverId", nativeQuery = true)
+    Object[] findDriverDetailsById(@Param("driverId") Long driverId);
 
 }

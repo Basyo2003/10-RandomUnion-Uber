@@ -1,21 +1,17 @@
 package com.team10.uber.location.controller;
 
-import com.team10.uber.location.dto.BatchLocationRequest;
+import com.team10.uber.location.dto.*;
 
-import com.team10.uber.location.dto.DriverMovementSummaryDTO;
 import com.team10.uber.location.model.Location;
 import com.team10.uber.location.service.LocationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
-import com.team10.uber.location.dto.NearbyDriverDTO;
-
-
-import com.team10.uber.location.dto.StationaryDriverDTO;
 
 
 import org.springframework.format.annotation.DateTimeFormat;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -107,14 +103,22 @@ public class LocationController {
     }
 
 
-    //S4-F2
+    // S4-F2
     @PostMapping("/driver/{driverId}")
     public ResponseEntity<Location> createLocationForDriver(
             @PathVariable Long driverId,
             @RequestBody Map<String, Object> body
     ) {
+        if (body.get("latitude") == null || body.get("longitude") == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Latitude and longitude are required"
+            );
+        }
+
         Double latitude = Double.valueOf(body.get("latitude").toString());
         Double longitude = Double.valueOf(body.get("longitude").toString());
+
         Map<String, Object> metadata = (Map<String, Object>) body.get("metadata");
 
         Location location = new Location();
@@ -202,6 +206,90 @@ public class LocationController {
             error.put("status", ex.getStatusCode().value());
             error.put("error", ex.getStatusCode().toString());
             error.put("message", ex.getReason());
+
+            return ResponseEntity.status(ex.getStatusCode()).body(error);
+        }
+    }
+
+
+    // S4-F10
+    @GetMapping("/analytics")
+    public LocationAnalyticsDTO getLocationAnalytics(
+            @RequestParam LocalDate startDate,
+            @RequestParam LocalDate endDate
+    ) {
+        return locationService.getLocationAnalytics(startDate, endDate);
+    }
+
+
+    // S4-F11
+    @PostMapping("/{driverId}/tracking")
+    public ResponseEntity<?> recordLocationGpsEvent(
+            @PathVariable Long driverId,
+            @RequestBody TrackingEventRequest request
+    ) {
+        try {
+            locationService.recordLocationGpsEvent(driverId, request);
+
+            return ResponseEntity.status(HttpStatus.CREATED).body(
+                    Map.of(
+                            "message", "Tracking event recorded successfully",
+                            "driverId", driverId
+                    )
+            );
+
+        } catch (ResponseStatusException ex) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("timestamp", LocalDateTime.now());
+            error.put("status", ex.getStatusCode().value());
+            error.put("error", ex.getStatusCode().toString());
+            error.put("message", ex.getReason());
+            error.put("path", "/api/locations/" + driverId + "/tracking");
+
+            return ResponseEntity.status(ex.getStatusCode()).body(error);
+        }
+    }
+
+    // S4-F12
+    @GetMapping("/{driverId}/tracking")
+    public ResponseEntity<?> getLocationTrackingTimeline(
+            @PathVariable Long driverId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime
+    ) {
+        try {
+            List<LocationTrackingEventDTO> result =
+                    locationService.getLocationTrackingTimeline(driverId, startTime, endTime);
+
+            return ResponseEntity.ok(result);
+
+        } catch (ResponseStatusException ex) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("timestamp", LocalDateTime.now());
+            error.put("status", ex.getStatusCode().value());
+            error.put("error", ex.getStatusCode().toString());
+            error.put("message", ex.getReason());
+            error.put("path", "/api/locations/" + driverId + "/tracking");
+
+            return ResponseEntity.status(ex.getStatusCode()).body(error);
+        }
+    }
+
+    @GetMapping("/driver/{driverId}/recent")
+    public ResponseEntity<?> getRecentLocation(@PathVariable Long driverId) {
+        try {
+            Location location = locationService.getRecentLocation(driverId);
+
+            return ResponseEntity.ok(location);
+
+        } catch (ResponseStatusException ex) {
+
+            Map<String, Object> error = new HashMap<>();
+            error.put("timestamp", LocalDateTime.now());
+            error.put("status", ex.getStatusCode().value());
+            error.put("error", ex.getStatusCode().toString());
+            error.put("message", ex.getReason());
+            error.put("path", "/api/locations/driver/" + driverId + "/recent");
 
             return ResponseEntity.status(ex.getStatusCode()).body(error);
         }

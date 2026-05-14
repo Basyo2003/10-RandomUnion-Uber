@@ -2,12 +2,15 @@ package com.team10.uber.user.controller;
 
 import com.team10.uber.user.dto.RoleUpdateRequest;
 import com.team10.uber.user.dto.TopRiderDTO;
+import com.team10.uber.user.dto.UserActivityFeedResponseDTO;
 import com.team10.uber.user.dto.UserProfileDTO;
 import com.team10.uber.user.dto.UserRideSummaryDTO;
 import com.team10.uber.user.model.User;
 import com.team10.uber.user.service.UserService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Map;
@@ -33,19 +36,33 @@ public class UserController {
     }
 
     @GetMapping("/{id}")
-    public User getUserById(@PathVariable Long id) {
+    public User getUserById(@PathVariable Long id, HttpServletRequest request) {
+        checkSelfOrAdmin(id, request);
         return userService.getUserById(id);
     }
 
     @PutMapping("/{id}")
-    public User updateUser(@PathVariable Long id, @RequestBody User updatedUser) {
+    public User updateUser(@PathVariable Long id, @RequestBody User updatedUser, HttpServletRequest request) {
+        checkSelfOrAdmin(id, request);
         return userService.updateUser(id, updatedUser);
     }
 
     @DeleteMapping("/{id}")
-    public String deleteUser(@PathVariable Long id) {
+    public String deleteUser(@PathVariable Long id, HttpServletRequest request) {
+        checkSelfOrAdmin(id, request);
         userService.deleteUser(id);
         return "User deleted successfully";
+    }
+
+    private void checkSelfOrAdmin(Long targetId, HttpServletRequest request) {
+        Object requesterIdAttr = request.getAttribute("userId");
+        Object requesterRoleAttr = request.getAttribute("userRole");
+        if (!(requesterIdAttr instanceof Long requesterId) || !(requesterRoleAttr instanceof String requesterRole)) {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.UNAUTHORIZED, "Unauthorized");
+        }
+        if (!requesterId.equals(targetId) && !"ADMIN".equals(requesterRole)) {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, "Forbidden");
+        }
     }
 
     @GetMapping("/search")
@@ -96,6 +113,32 @@ public class UserController {
     @PutMapping("/{id}/deactivate")
     public User deactivateUser(@PathVariable Long id) {
         return userService.deactivateUser(id);
+    }
+
+    @GetMapping("/{id}/activity")
+    public ResponseEntity<UserActivityFeedResponseDTO> getUserActivityFeed(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            HttpServletRequest request) {
+
+        Object requesterIdAttribute = request.getAttribute("userId");
+        Object requesterRoleAttribute = request.getAttribute("userRole");
+
+        if (!(requesterIdAttribute instanceof Long requesterId) || !(requesterRoleAttribute instanceof String requesterRole)) {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.UNAUTHORIZED, "Unauthorized");
+        }
+
+        if (!requesterId.equals(id) && !"ADMIN".equals(requesterRole)) {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, "Forbidden");
+        }
+
+        if (page < 0 || size <= 0) {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST,
+                    "page and size must be >= 0, size must be >= 1");
+        }
+
+        return ResponseEntity.ok(userService.getUserActivityFeed(id, page, size));
     }
 
     @PutMapping("/{id}/role")

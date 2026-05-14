@@ -21,7 +21,7 @@ import java.util.List;
 public interface LocationRepository extends JpaRepository<Location, Long> {
 
 
-    default void driverExists(JdbcTemplate jdbcTemplate, Long driverId) {
+    /*default void driverExists(JdbcTemplate jdbcTemplate, Long driverId) {
         Integer count = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM drivers WHERE id = ?",
                 Integer.class,
@@ -34,7 +34,10 @@ public interface LocationRepository extends JpaRepository<Location, Long> {
                     "Driver not found"
             );
         }
-    }
+    }*/
+
+    /*@Query(value = "SELECT EXISTS (SELECT 1 FROM rides WHERE id = :rideId)", nativeQuery = true)
+    boolean rideExists(@Param("rideId") Long rideId);*/
 
     
 
@@ -44,26 +47,23 @@ public interface LocationRepository extends JpaRepository<Location, Long> {
   
   
   //S4-F3
-    @Query(value = """
-        SELECT l.driver_id, d.name, l.latitude, l.longitude
-        FROM locations l
-        JOIN drivers d ON d.id = l.driver_id
-        WHERE d.status = 'AVAILABLE'
-          AND l.timestamp = (
-              SELECT MAX(l2.timestamp)
-              FROM locations l2
-              WHERE l2.driver_id = l.driver_id
-          )
-        """, nativeQuery = true)
-    List<Object[]> findLatestAvailableDriverLocations();
+  @Query(value = """
+    SELECT l.driver_id, l.latitude, l.longitude
+    FROM locations l
+    WHERE l.timestamp = (
+        SELECT MAX(l2.timestamp)
+        FROM locations l2
+        WHERE l2.driver_id = l.driver_id
+    )
+    """, nativeQuery = true)
+  List<Object[]> findLatestDriverLocations();
 
-    
 
     // S4-F5
     @Query(value = """
-            SELECT * FROM locations
-            WHERE metadata ->> :key = :value
-            """, nativeQuery = true)
+          SELECT * FROM locations
+          WHERE CAST(metadata ->> :key AS DOUBLE PRECISION) = CAST(:value AS DOUBLE PRECISION)
+          """, nativeQuery = true)
     List<Location> findByMetadataEq(
             @Param("key") String key,
             @Param("value") String value
@@ -127,8 +127,8 @@ public interface LocationRepository extends JpaRepository<Location, Long> {
     int deleteLocationsOlderThan(@Param("cutoff") LocalDateTime cutoff);
 
     // S4-F8
-    @Query(value = "SELECT EXISTS (SELECT 1 FROM drivers WHERE id = :driverId)", nativeQuery = true)
-    boolean driverExists(@Param("driverId") Long driverId);
+    /*@Query(value = "SELECT EXISTS (SELECT 1 FROM drivers WHERE id = :driverId)", nativeQuery = true)
+    boolean driverExists(@Param("driverId") Long driverId);*/
 
     // S4-F8
     @Query(value = """
@@ -153,27 +153,84 @@ public interface LocationRepository extends JpaRepository<Location, Long> {
 
     // S4-F9
     @Query(value = """
-            SELECT
-                l.driver_id AS driverId,
-                d.name AS driverName,
-                l.latitude AS latitude,
-                l.longitude AS longitude,
-                CAST(l.metadata ->> 'speed' AS DOUBLE PRECISION) AS lastSpeed,
-                l.timestamp AS lastUpdated
-            FROM locations l
-            JOIN drivers d ON d.id = l.driver_id
-            JOIN (
-                SELECT driver_id, MAX(timestamp) AS max_timestamp
-                FROM locations
-                GROUP BY driver_id
-            ) latest
-                ON l.driver_id = latest.driver_id
-               AND l.timestamp = latest.max_timestamp
-            WHERE CAST(l.metadata ->> 'speed' AS DOUBLE PRECISION) <= :maxSpeed
-              AND l.timestamp >= :cutoffTime
-            """, nativeQuery = true)
+        SELECT
+            l.driver_id AS driverId,
+            l.latitude AS latitude,
+            l.longitude AS longitude,
+            CAST(l.metadata ->> 'speed' AS DOUBLE PRECISION) AS lastSpeed,
+            l.timestamp AS lastUpdated
+        FROM locations l
+        JOIN (
+            SELECT driver_id, MAX(timestamp) AS max_timestamp
+            FROM locations
+            GROUP BY driver_id
+        ) latest
+            ON l.driver_id = latest.driver_id
+           AND l.timestamp = latest.max_timestamp
+        WHERE CAST(l.metadata ->> 'speed' AS DOUBLE PRECISION) <= :maxSpeed
+          AND l.timestamp >= :cutoffTime
+        """, nativeQuery = true)
     List<StationaryDriverProjection> findStationaryDrivers(
             @Param("maxSpeed") Double maxSpeed,
             @Param("cutoffTime") LocalDateTime cutoffTime
+    );
+
+
+
+
+    // S4-F10
+    @Query(value = """
+        SELECT COUNT(*)
+        FROM locations
+        WHERE timestamp >= :startDateTime
+          AND timestamp <= :endDateTime
+        """, nativeQuery = true)
+    Long countLocationEventsBetween(
+            @Param("startDateTime") LocalDateTime startDateTime,
+            @Param("endDateTime") LocalDateTime endDateTime
+    );
+
+    @Query(value = """
+        SELECT COUNT(DISTINCT driver_id)
+        FROM locations
+        WHERE timestamp >= :startDateTime
+          AND timestamp <= :endDateTime
+        """, nativeQuery = true)
+    Long countActiveDriversBetween(
+            @Param("startDateTime") LocalDateTime startDateTime,
+            @Param("endDateTime") LocalDateTime endDateTime
+    );
+
+    @Query(value = """
+        SELECT COALESCE(
+            AVG(
+                COALESCE(
+                    CAST(NULLIF(metadata ->> 'speed', '') AS DOUBLE PRECISION),
+                    0
+                )
+            ),
+            0
+        )
+        FROM locations
+        WHERE timestamp >= :startDateTime
+          AND timestamp <= :endDateTime
+        """, nativeQuery = true)
+    Double findAverageSpeedBetween(
+            @Param("startDateTime") LocalDateTime startDateTime,
+            @Param("endDateTime") LocalDateTime endDateTime
+    );
+
+    @Query(value = """
+        SELECT CAST(EXTRACT(HOUR FROM timestamp) AS int) AS hour,
+               COUNT(*) AS count
+        FROM locations
+        WHERE timestamp >= :startDateTime
+          AND timestamp <= :endDateTime
+        GROUP BY CAST(EXTRACT(HOUR FROM timestamp) AS int)
+        ORDER BY hour
+        """, nativeQuery = true)
+    List<Object[]> countEventsByHourBetween(
+            @Param("startDateTime") LocalDateTime startDateTime,
+            @Param("endDateTime") LocalDateTime endDateTime
     );
 }

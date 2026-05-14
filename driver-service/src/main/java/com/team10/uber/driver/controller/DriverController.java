@@ -6,13 +6,13 @@ import com.team10.uber.driver.dto.DriverDocumentAlertDTO;
 import com.team10.uber.driver.dto.DriverEarningsDTO;
 import com.team10.uber.driver.dto.DriverWithDocumentsDTO;
 import com.team10.uber.driver.dto.RateDriverDTO;
-import com.team10.uber.driver.dto.VerifyDriverDTO;
 import com.team10.uber.driver.enums.DriverStatus;
 import com.team10.uber.driver.model.Driver;
 import com.team10.uber.driver.model.DriverDocument;
 import com.team10.uber.driver.service.DriverDocumentService;
 import com.team10.uber.driver.service.DriverIndexService;
 import com.team10.uber.driver.service.DriverService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -56,7 +56,7 @@ public class DriverController {
 
     @GetMapping("/search/full-text")
     public List<Driver> searchDriversFullText(
-            @RequestParam("query") String query,
+            @RequestParam(required = false) String query,
             @RequestParam(required = false) String vehicleType,
             @RequestParam(required = false) DriverStatus status,
             @RequestParam(required = false) Double minRating,
@@ -159,8 +159,10 @@ public class DriverController {
 
     @PutMapping("/{driverId}/documents/{documentId}/verify")
     public DriverWithDocumentsDTO verifyDriverDocument(@PathVariable Long driverId, @PathVariable Long documentId,
-            @RequestBody VerifyDriverDTO verifyRequest) {
-        return driverDocumentService.verifyDriverDocument(driverId, documentId, verifyRequest.getVerifiedBy());
+            HttpServletRequest request) {
+        Object userIdAttr = request.getAttribute("userId");
+        Long verifiedBy = userIdAttr instanceof Number n ? n.longValue() : null;
+        return driverDocumentService.verifyDriverDocument(driverId, documentId, verifiedBy);
     }
 
 }

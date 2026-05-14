@@ -1,10 +1,8 @@
 package com.team10.uber.location.security;
 
+import com.team10.uber.location.singleton.JwtConfigurationManager;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.io.Decoders;
-import io.jsonwebtoken.security.Keys;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
@@ -12,13 +10,9 @@ import javax.crypto.SecretKey;
 @Service
 public class JwtService {
 
-    @Value("${jwt.secret}")
-    private String jwtSecret;
-
-    // 5.2 JWT Token - build signing key from shared secret
+    // 3.6 Singleton - read JWT config from the single shared manager instance
     private SecretKey getSigningKey() {
-        byte[] keyBytes = Decoders.BASE64.decode(jwtSecret);
-        return Keys.hmacShaKeyFor(keyBytes);
+        return JwtConfigurationManager.getInstance().getSecretKey();
     }
 
     // 5.2 JWT Token - extract token payload claims

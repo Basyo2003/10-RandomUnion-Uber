@@ -4,7 +4,11 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import com.team10.uber.ride.dto.*;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -15,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.team10.uber.ride.dto.DriverRecommendationDTO;
 import com.team10.uber.ride.dto.FareEstimateDTO;
 import com.team10.uber.ride.dto.FareEstimateRequestDTO;
 import com.team10.uber.ride.dto.RideAnalyticsDTO;
@@ -23,6 +28,7 @@ import com.team10.uber.ride.dto.RideStopRequestDTO;
 import com.team10.uber.ride.dto.RideWithStopsDTO;
 import com.team10.uber.ride.enums.RideStatus;
 import com.team10.uber.ride.model.Ride;
+import com.team10.uber.ride.service.RecommendationService;
 import com.team10.uber.ride.service.RideService;
 
 @RestController
@@ -30,9 +36,11 @@ import com.team10.uber.ride.service.RideService;
 public class RideController {
 
     private final RideService rideService;
+    private final RecommendationService recommendationService;
 
-    public RideController(RideService rideService) {
+    public RideController(RideService rideService, RecommendationService recommendationService) {
         this.rideService = rideService;
+        this.recommendationService = recommendationService;
     }
 
     @PostMapping
@@ -95,13 +103,14 @@ public class RideController {
     }
     @GetMapping("/search")
     public List<Ride> getRidesByStatusAndDateRange(
-            @RequestParam(required = false,name = "status") RideStatus status,
-            @RequestParam(name = "startDate") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-            @RequestParam(name = "endDate") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+            @RequestParam(required = false, name = "status") RideStatus status,
+            @RequestParam(required = false, name = "startDate") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false, name = "endDate") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false, name = "userId") Long userId) {
 
-        LocalDateTime start = startDate.atStartOfDay();
-        LocalDateTime end   = endDate.atTime(23, 59, 59);
-        return rideService.getRidesByStatusAndDateRange(status, start, end);
+        LocalDateTime start = startDate != null ? startDate.atStartOfDay() : null;
+        LocalDateTime end   = endDate != null ? endDate.atTime(23, 59, 59) : null;
+        return rideService.getRidesByStatusAndDateRange(status, start, end, userId);
     }
 
     @PutMapping("/{rideId}/assign")
@@ -112,5 +121,45 @@ public class RideController {
     @GetMapping("{rideId}/details")
     public RideDetailsDTO GetRideDetailsWithStops(@PathVariable Long rideId){
         return rideService.GetRideDetailsWithStops(rideId);
+    }
+    @GetMapping("/analytics/dashboard")
+    public RideAnalyticsDashboardDTO getRideAnalyticsDashboard(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            HttpServletRequest request
+    ) {
+        rideService.validateDashboardDateRange(startDate, endDate);
+
+        RideAnalyticsDashboardDTO dto = rideService.getRideAnalyticsDashboard(startDate, endDate);
+
+        Object userIdAttr = request.getAttribute("userId");
+        Long userId = (userIdAttr instanceof Long l) ? l
+                : (userIdAttr instanceof Number n) ? n.longValue()
+                : null;
+        rideService.logAnalyticsViewed(startDate, endDate, userId);
+
+        return dto;
+    }
+
+    @GetMapping("/recommendations")
+    public ResponseEntity<List<DriverRecommendationDTO>> getDriverRecommendations(
+            @RequestParam Long userId,
+            @RequestParam(defaultValue = "5") int limit,
+            HttpServletRequest request) {
+
+        Long requesterId = (Long) request.getAttribute("userId");
+        String requesterRole = (String) request.getAttribute("userRole");
+
+        if (!userId.equals(requesterId) && !"ADMIN".equals(requesterRole)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
+        return ResponseEntity.ok(recommendationService.getDriverRecommendations(userId, limit));
+    }
+
+    @PostMapping("/{rideId}/record-interaction")
+    public String recordInteraction(@PathVariable Long rideId) {
+        return rideService.recordInteraction(rideId);
+
     }
 }

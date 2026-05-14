@@ -11,8 +11,11 @@ import com.team10.uber.payment.strategy.RefundRequest;
 import com.team10.uber.payment.dto.UserPaymentSummaryDTO;
 import com.team10.uber.payment.dto.ProcessPaymentDTO;
 import com.team10.uber.payment.dto.CouponUsageDTO;
+import com.team10.uber.payment.dto.PaymentMethodDTO;
 import com.team10.uber.payment.dto.PaymentDetailsDTO;
 import com.team10.uber.payment.dto.RevenueReportDTO;
+import com.team10.uber.payment.dto.VehicleTypeRevenueDTO;
+import com.team10.uber.payment.dto.PaymentMethodDTO;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -82,20 +85,13 @@ public class PaymentController {
     public ResponseEntity<List<Payment>> searchPayments(
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String startDate,
-            @RequestParam(required = false) String endDate) {
+            @RequestParam(required = false) String endDate,
+            @RequestParam(required = false) Long userId) {
 
-        if (startDate == null || endDate == null) {
-            return ResponseEntity.ok(List.of());
-        }
-
-        try {
-            LocalDateTime start = paymentService.parseDate(startDate, false);
-            LocalDateTime end = paymentService.parseDate(endDate, true);
-            List<Payment> payments = paymentService.searchPayments(status, start, end);
-            return ResponseEntity.ok(payments);
-        } catch (Exception e) {
-            return ResponseEntity.ok(List.of());
-        }
+        LocalDateTime start = startDate != null ? paymentService.parseDate(startDate, false) : null;
+        LocalDateTime end   = endDate   != null ? paymentService.parseDate(endDate,   true)  : null;
+        List<Payment> payments = paymentService.searchPayments(status, start, end, userId);
+        return ResponseEntity.ok(payments);
     }
 
     @GetMapping("/reports/revenue")
@@ -136,5 +132,20 @@ public class PaymentController {
             @PathVariable Long id,
             @RequestBody RefundRequest request) {
         return ResponseEntity.ok(paymentService.refundSurgeAdjusted(id, request));
+    }
+
+    @GetMapping("/analytics/vehicle-type")
+    public ResponseEntity<List<VehicleTypeRevenueDTO>> getFareRevenueByVehicleType(
+            @RequestParam String startDate,
+            @RequestParam String endDate) {
+        return ResponseEntity.ok(paymentService.getFareRevenueByVehicleType(startDate, endDate));
+    }
+
+    // §10.5.2 — S5-F11
+    @GetMapping("/analytics/methods")
+    public ResponseEntity<List<PaymentMethodDTO>> getPaymentMethodBreakdown(
+            @RequestParam String startDate,
+            @RequestParam String endDate) {
+        return ResponseEntity.ok(paymentService.getPaymentMethodBreakdown(startDate, endDate));
     }
 }

@@ -24,6 +24,9 @@ import org.springframework.data.elasticsearch.core.SearchHit;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+import com.team10.uber.driver.adapter.TopRatedDriverAdapter;
+import com.team10.uber.driver.adapter.MongoDocumentAdapter;
+
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -52,6 +55,10 @@ public class DriverService extends AbstractObservableService {
     private final RedisCacheService cache;
     private final ElasticsearchOperations elasticsearchOperations;
     private final ElasticsearchHitAdapter elasticsearchHitAdapter = new ElasticsearchHitAdapter();
+        
+    // §3.8 — Adapter instances
+    private final TopRatedDriverAdapter topRatedDriverAdapter = new TopRatedDriverAdapter();
+    private final MongoDocumentAdapter mongoDocumentAdapter = new MongoDocumentAdapter();
 
     public DriverService(DriverRepository driverRepository,
                          DriverDocumentRepository driverDocumentRepository,
@@ -174,7 +181,8 @@ public class DriverService extends AbstractObservableService {
         List<Driver> cached = cache.get(key, new TypeReference<List<Driver>>() {});
         if (cached != null) return cached;
 
-        List<Driver> result = driverRepository.searchDrivers(status, minRating, maxRating);
+        String statusStr = (status != null) ? status.name() : null;
+        List<Driver> result = driverRepository.searchDrivers(statusStr, minRating, maxRating);
         cache.put(key, result, TTL_SEARCH);
         return result;
     }
@@ -185,9 +193,6 @@ public class DriverService extends AbstractObservableService {
                                               DriverStatus status,
                                               Double minRating,
                                               Double maxRating) {
-        if (queryText == null || queryText.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "query is required");
-        }
         if (minRating != null && minRating < 0.0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "minRating must be >= 0.0");
         }
@@ -208,9 +213,10 @@ public class DriverService extends AbstractObservableService {
         }
         final String finalVehicleType = normalizedVehicleType;
 
-        String normalizedQuery = queryText.trim();
-        String key = "S2-F10::" + normalizedQuery.toLowerCase() + "::" + finalVehicleType + "::" + status + "::"
-                + minRating + "::" + maxRating;
+        String normalizedQuery = (queryText != null && !queryText.isBlank()) ? queryText.trim() : null;
+        final boolean hasQuery = normalizedQuery != null;
+        String key = "S2-F10::" + (normalizedQuery != null ? normalizedQuery.toLowerCase() : "") + "::"
+                + finalVehicleType + "::" + status + "::" + minRating + "::" + maxRating;
 
         List<Driver> cached = cache.get(key, new TypeReference<List<Driver>>() {});
         if (cached != null) {
@@ -221,10 +227,14 @@ public class DriverService extends AbstractObservableService {
 
         NativeQuery searchQuery = NativeQuery.builder()
                 .withQuery(q -> q.bool(b -> {
-                    b.must(m -> m.multiMatch(mm -> mm
-                            .query(normalizedQuery)
-                            .fields("name", "description")
-                            .type(co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType.BoolPrefix)));
+                    if (hasQuery) {
+                        b.must(m -> m.multiMatch(mm -> mm
+                                .query(normalizedQuery)
+                                .fields("name", "description")
+                                .type(co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType.BoolPrefix)));
+                    } else {
+                        b.must(m -> m.matchAll(ma -> ma));
+                    }
                     if (finalVehicleType != null) {
                         b.filter(f -> f.term(t -> t.field("vehicleType").value(finalVehicleType)));
                     }
@@ -356,6 +366,9 @@ public class DriverService extends AbstractObservableService {
     public List<Driver> filterByVehicleType(String type, String status) {
         if (type == null || type.isBlank())
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vehicle type is required");
+        if (!ALLOWED_VEHICLE_TYPES.contains(type.trim().toUpperCase()))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Unknown vehicle type: " + type + ". Must be one of " + ALLOWED_VEHICLE_TYPES);
 
         DriverStatus driverStatus = null;
         if (status != null) {
@@ -379,23 +392,17 @@ public class DriverService extends AbstractObservableService {
     /** S2-F6 — top rated drivers, cached 10 min. */
     public List<TopRatedDriverDTO> getTopRatedDrivers(int limit) {
         String key = "S2-F6::" + limit;
-        List<TopRatedDriverDTO> cached = cache.get(key, new TypeReference<List<TopRatedDriverDTO>>() {});
+        List<TopRatedDriverDTO> cached = cache.get(key,
+                new TypeReference<List<TopRatedDriverDTO>>() {});
         if (cached != null) return cached;
 
         List<Object[]> rows = driverRepository.findTopDriversWithRideCount(limit);
-        List<TopRatedDriverDTO> result = new ArrayList<>();
-        for (Object[] row : rows) {
-            result.add(new TopRatedDriverDTO(
-                    ((Number) row[0]).longValue(),
-                    (String) row[1],
-                    ((Number) row[2]).doubleValue(),
-                    ((Number) row[3]).longValue()
-            ));
-        }
+
+        // §3.8 — Use Adapter instead of inline Object[] mapping
+        List<TopRatedDriverDTO> result = topRatedDriverAdapter.adaptAll(rows);
         cache.put(key, result, TTL_DTO);
         return result;
     }
-
     /** S2-F7 — write, no caching. */
     @Transactional
     public Driver rateDriver(Long id, Long rideId, Double rating) {
@@ -486,5 +493,23 @@ public class DriverService extends AbstractObservableService {
 
         cache.put(key, result, TTL_DTO);
         return result;
+    }
+
+    /** S2-F11 — reindex driver to Elasticsearch (delegation to DriverIndexService at controller layer) */
+    public void indexDriver(Long id) {
+        driverRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Driver not found: " + id));
+        notifyObservers("DRIVER_INDEXED", id);
+    }
+
+    /** S2-F8 — verify a driver document */
+    public DriverDocument verifyDocument(Long driverId, Long documentId) {
+        driverRepository.findById(driverId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Driver not found: " + driverId));
+        return driverDocumentRepository.findById(documentId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Document not found: " + documentId));
     }
 }

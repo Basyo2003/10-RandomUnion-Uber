@@ -36,7 +36,11 @@ public class TopRatedDriverDTO {
     }
 
     public Long getDriverId() { return driverId; }
+    public void setDriverId(Long driverId) { this.driverId = driverId; }
     public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
     public Double getRating() { return rating; }
+    public void setRating(Double rating) { this.rating = rating; }
     public Long getTotalRides() { return totalRides; }
+    public void setTotalRides(Long totalRides) { this.totalRides = totalRides; }
 }

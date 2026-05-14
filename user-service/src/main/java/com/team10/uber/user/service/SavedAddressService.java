@@ -73,7 +73,7 @@ public class SavedAddressService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Saved address not found with id: " + addressId));
 
         if (!address.getUser().getId().equals(userId)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Address does not belong to the specified user");
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Address does not belong to the specified user");
         }
 
         List<SavedAddress> userAddresses = savedAddressRepository.findByUserId(userId);

@@ -12,7 +12,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
-import java.util.concurrent.CompletableFuture;
 
 /**
  * JPA entity listener — auto-syncs Driver changes to Elasticsearch.
@@ -53,14 +52,12 @@ public class DriverEntityListener {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                CompletableFuture.runAsync(() -> {
-                    try {
-                        driverIndexService.indexDriver(driverId, "auto_crud_create");
-                    } catch (Exception ex) {
-                        log.warn("[DriverEntityListener] Failed to auto-index driver {} on create: {}",
-                                driverId, ex.getMessage());
-                    }
-                });
+                try {
+                    driverIndexService.indexDriver(driverId, "auto_crud_create");
+                } catch (Exception ex) {
+                    log.warn("[DriverEntityListener] Failed to auto-index driver {} on create: {}",
+                            driverId, ex.getMessage());
+                }
             }
         });
     }
@@ -75,14 +72,12 @@ public class DriverEntityListener {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                CompletableFuture.runAsync(() -> {
-                    try {
-                        driverIndexService.indexDriver(driverId, "auto_crud_update");
-                    } catch (Exception ex) {
-                        log.warn("[DriverEntityListener] Failed to auto-index driver {} on update: {}",
-                                driverId, ex.getMessage());
-                    }
-                });
+                try {
+                    driverIndexService.indexDriver(driverId, "auto_crud_update");
+                } catch (Exception ex) {
+                    log.warn("[DriverEntityListener] Failed to auto-index driver {} on update: {}",
+                            driverId, ex.getMessage());
+                }
             }
         });
     }
@@ -97,14 +92,12 @@ public class DriverEntityListener {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                CompletableFuture.runAsync(() -> {
-                    try {
-                        driverIndexService.removeFromIndex(driverId);
-                    } catch (Exception ex) {
-                        log.warn("[DriverEntityListener] Failed to remove driver {} from ES on delete: {}",
-                                driverId, ex.getMessage());
-                    }
-                });
+                try {
+                    driverIndexService.removeFromIndex(driverId);
+                } catch (Exception ex) {
+                    log.warn("[DriverEntityListener] Failed to remove driver {} from ES on delete: {}",
+                            driverId, ex.getMessage());
+                }
             }
         });
     }

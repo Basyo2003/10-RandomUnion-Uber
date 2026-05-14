@@ -39,6 +39,19 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
             @Param("endDate") LocalDateTime endDate);
 
     @Query(value = "SELECT * FROM payments WHERE " +
+            "(:startDate IS NULL OR created_at >= :startDate) " +
+            "AND (:endDate IS NULL OR created_at <= :endDate) " +
+            "AND (:status IS NULL OR CAST(status AS TEXT) = :status) " +
+            "AND (:userId IS NULL OR user_id = :userId) " +
+            "ORDER BY created_at DESC",
+            nativeQuery = true)
+    List<Payment> searchPayments(
+            @Param("status") String status,
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDate") LocalDateTime endDate,
+            @Param("userId") Long userId);
+
+    @Query(value = "SELECT * FROM payments WHERE " +
             "user_id = :userId AND status = 'COMPLETED'",
             nativeQuery = true)
     List<Payment> findCompletedPaymentsByUserId(@Param("userId") Long userId);
@@ -86,6 +99,23 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     @Query(value = "SELECT COUNT(*) FROM payments WHERE ride_id = :rideId", nativeQuery = true)
     int countPaymentsByRideId(@Param("rideId") Long rideId);
 
+    // §10.5.1 — S5-F10: Cross-service native query for vehicle type revenue
+    @Query(value = "SELECT " +
+            "d.vehicle_details->>'vehicleType' as vehicleType, " +
+            "SUM(COALESCE(CAST(p.transaction_details->>'surgeFee' AS NUMERIC), p.amount * 0.15)) as surgeFeeRevenue, " +
+            "SUM(p.amount) - SUM(COALESCE(CAST(p.transaction_details->>'surgeFee' AS NUMERIC), p.amount * 0.15)) as baseFareRevenue, " +
+            "SUM(p.amount) as totalRevenue, " +
+            "COUNT(DISTINCT p.ride_id) as rideCount " +
+            "FROM payments p " +
+            "JOIN rides r ON p.ride_id = r.id " +
+            "JOIN drivers d ON r.driver_id = d.id " +
+            "WHERE p.status = 'COMPLETED' " +
+            "AND r.requested_at >= :startDate AND r.requested_at <= :endDate " +
+            "GROUP BY d.vehicle_details->>'vehicleType'", 
+            nativeQuery = true)
+    List<Object[]> findVehicleTypeRevenueStats(
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDate") LocalDateTime endDate);
     @Query(value = "SELECT metadata->>'surgeMultiplier' FROM rides WHERE id = :rideId", nativeQuery = true)
     String findSurgeMultiplierByRideId(@Param("rideId") Long rideId);
 }

@@ -1,8 +1,11 @@
 package com.team10.uber.user.service;
 
 import com.team10.uber.user.adapter.ObjectArrayDtoAdapter;
+import com.team10.uber.user.adapter.TopRiderDtoAdapter;
 import com.team10.uber.user.dto.AddressDTO;
+import com.team10.uber.user.dto.AuthEventDTO;
 import com.team10.uber.user.dto.TopRiderDTO;
+import com.team10.uber.user.dto.UserActivityFeedResponseDTO;
 import com.team10.uber.user.dto.UserProfileDTO;
 import com.team10.uber.user.dto.UserRideSummaryDTO;
 import com.team10.uber.user.enums.Role;
@@ -21,6 +24,8 @@ import com.team10.uber.user.repository.UserRepository;
 import com.team10.uber.user.repository.mongo.AuthEventRepository;
 import jakarta.annotation.PostConstruct;
 import jakarta.transaction.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
@@ -46,6 +51,9 @@ public class UserService extends AbstractObservableService {
     private final MongoEventLogger mongoEventLogger;
     private final UserEventPublisher userEventPublisher;
     private final ObjectArrayDtoAdapter objectArrayDtoAdapter = new ObjectArrayDtoAdapter();
+    private final TopRiderDtoAdapter topRiderDtoAdapter = new TopRiderDtoAdapter();
+
+
 
     public UserService(UserRepository userRepository,
                        SavedAddressRepository savedAddressRepository,
@@ -93,6 +101,25 @@ public class UserService extends AbstractObservableService {
     @Cacheable(value = "user-service::user", key = "#id")
     public User getUserById(Long id) {
         return findUserByIdOrThrow(id);
+    }
+
+    @Cacheable(value = "user-service::S1-F12", key = "#id + ':' + #page + ':' + #size")
+    public UserActivityFeedResponseDTO getUserActivityFeed(Long id, int page, int size) {
+        findUserByIdOrThrow(id);
+
+        Page<AuthEvent> eventPage = authEventRepository.findByUserIdOrderByTimestampDesc(
+                id, PageRequest.of(page, size));
+
+        List<AuthEventDTO> content = eventPage.getContent().stream()
+                .map(this::toAuthEventDto)
+                .toList();
+
+        UserActivityFeedResponseDTO response = new UserActivityFeedResponseDTO();
+        response.setContent(content);
+        response.setPage(page);
+        response.setSize(size);
+        response.setTotalElements(eventPage.getTotalElements());
+        return response;
     }
 
     @Caching(evict = {
@@ -189,31 +216,29 @@ public class UserService extends AbstractObservableService {
         return objectArrayDtoAdapter.adapt(user.getId(), user.getName(), result);
     }
 
-    @Cacheable(value = "user-service::S1-F6", key = "#startDate + '_' + #endDate + '_' + #limit")
+    @Cacheable(value = "user-service::S1-F6",
+        key = "#startDate + '_' + #endDate + '_' + #limit")
     public List<TopRiderDTO> getTopRiders(String startDate, String endDate, int limit) {
         try {
             LocalDate start = LocalDate.parse(startDate);
             LocalDate end = LocalDate.parse(endDate);
             if (start.isAfter(end)) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "startDate must be before endDate");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "startDate must be before endDate");
             }
         } catch (DateTimeParseException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid date format. Use yyyy-MM-dd");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Invalid date format. Use yyyy-MM-dd");
         }
 
         String startDateTime = startDate + " 00:00:00";
-        String endDateTime = endDate + " 23:59:59";
+        String endDateTime   = endDate + " 23:59:59";
 
-        List<Object[]> results = userRepository.getTopRidersBySpending(startDateTime, endDateTime, limit);
-        List<TopRiderDTO> topRiders = new ArrayList<>();
-        for (Object[] row : results) {
-            Long userId = ((Number) row[0]).longValue();
-            String name = (String) row[1];
-            Double totalSpent = ((Number) row[2]).doubleValue();
-            Long rideCount = ((Number) row[3]).longValue();
-            topRiders.add(new TopRiderDTO(userId, name, totalSpent, rideCount));
-        }
-        return topRiders;
+        List<Object[]> results = userRepository.getTopRidersBySpending(
+                startDateTime, endDateTime, limit);
+
+        // §3.8 — Use Adapter instead of inline Object[] mapping
+        return topRiderDtoAdapter.adaptAll(results);
     }
 
     @Cacheable(value = "user-service::S1-F5", key = "#key + '_' + #value")
@@ -297,7 +322,8 @@ public class UserService extends AbstractObservableService {
         Role oldRole = user.getRole();
         user.setRole(newRole);
         User saved = userRepository.save(user);
-        logEvent(id, "ROLE_CHANGED", Map.of(
+        notifyObservers("ROLE_CHANGED", Map.of(
+                "userId", id,
                 "oldRole", oldRole.name(),
                 "newRole", newRole.name()));
         return saved;
@@ -305,10 +331,12 @@ public class UserService extends AbstractObservableService {
 
     private void logEvent(Long userId, String action, Map<String, Object> details) {
         try {
-            authEventRepository.save(new AuthEvent(userId, action, details));
+            // §3.3 — Observer handles MongoDB persistence
+            Map<String, Object> payload = new HashMap<>(details);
+            payload.put("userId", userId);
+            notifyObservers(action, payload);
         } catch (Exception e) {
-            System.err.println("MongoDB logging failed: " + e.getMessage());
-            e.printStackTrace();
+            // §3.3 — soft dependency, never rethrow
         }
     }
 
@@ -371,4 +399,13 @@ public class UserService extends AbstractObservableService {
 // public void logAuthEvent(Long userId, String action, Map<String, Object> details) {
 // logEvent(userId, action, details);
 // }
+    private AuthEventDTO toAuthEventDto(AuthEvent event) {
+        AuthEventDTO dto = new AuthEventDTO();
+        dto.setId(event.getId());
+        dto.setUserId(event.getUserId());
+        dto.setAction(event.getAction());
+        dto.setTimestamp(event.getTimestamp());
+        dto.setDetails(event.getDetails());
+        return dto;
+    }
 }
