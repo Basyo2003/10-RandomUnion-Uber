@@ -1,5 +1,6 @@
 package com.team10.uber.driver.controller;
 
+import com.team10.uber.contracts.dto.DriverAvailabilityDTO;
 import com.team10.uber.driver.dto.DriverDashboardDTO;
 import com.team10.uber.driver.dto.TopRatedDriverDTO;
 import com.team10.uber.driver.dto.DriverDocumentAlertDTO;
@@ -87,6 +88,11 @@ public class DriverController {
     @GetMapping("/{id}")
     public Driver getDriverById(@PathVariable Long id) {
         return driverService.getDriverById(id);
+    }
+
+    @GetMapping("/{id}/availability")
+    public DriverAvailabilityDTO getDriverAvailability(@PathVariable Long id) {
+        return driverService.getDriverAvailability(id);
     }
 
     @GetMapping("/{id}/earnings")

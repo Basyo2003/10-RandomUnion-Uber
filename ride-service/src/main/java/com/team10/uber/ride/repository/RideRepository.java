@@ -6,11 +6,28 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import com.team10.uber.ride.model.Ride;
+import com.team10.uber.ride.enums.RideStatus;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 
 public interface RideRepository extends JpaRepository<Ride, Long> {
+
+    long countByDriverIdAndStatusIn(Long driverId, Collection<RideStatus> statuses);
+
+    @Query(value = """
+            SELECT COUNT(*)::bigint, COALESCE(SUM(fare), 0)
+            FROM rides
+            WHERE driver_id = :driverId
+              AND status = 'COMPLETED'
+              AND (:start IS NULL OR requested_at >= :start)
+              AND (:end IS NULL OR requested_at < :end)
+            """, nativeQuery = true)
+    Object[] summarizeDriverCompletedRides(
+            @Param("driverId") Long driverId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end);
 
     @Query(value = "SELECT COUNT(*) FROM drivers WHERE id = :driverId", nativeQuery = true)
     int countDriversById(@Param("driverId") Long driverId);
