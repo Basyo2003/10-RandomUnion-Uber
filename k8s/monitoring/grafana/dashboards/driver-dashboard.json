@@ -10,6 +10,148 @@
   "panels": [
     {
       "datasource": {
+        "type": "loki",
+        "uid": "${ds_loki}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "lineWidth": 1
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "title": "Error Rate (LogQL)",
+      "description": "Count of ERROR-level log lines from driver-service per minute. Spike detection — if driver-service logs many ERRORs in a short window, something is wrong.",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "${ds_loki}"
+          },
+          "expr": "sum(count_over_time({app=\"uber\", service=\"driver-service\", level=\"ERROR\"}[1m]))",
+          "legendFormat": "Errors/min",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "${ds_loki}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "showTime": true,
+        "sortOrder": "Descending"
+      },
+      "title": "RabbitMQ Event Audit (LogQL)",
+      "description": "Log lines emitted by driver-service event publishers and consumers, filtered by routing key. Shows driver.status-changed, driver.rated, ride.placed, ride.completed, ride.cancelled events.",
+      "type": "logs",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "${ds_loki}"
+          },
+          "expr": "{app=\"uber\", service=\"driver-service\"} | json | routingKey != \"\"",
+          "legendFormat": "Events",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "${ds_loki}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "lineWidth": 1
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "title": "Feign Call Outcomes (LogQL)",
+      "description": "Successful Feign calls vs FeignException catches from driver-service. Detects when ride-service or user-service is degraded.",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "${ds_loki}"
+          },
+          "expr": "sum(count_over_time({app=\"uber\", service=\"driver-service\"} |= \"returned successfully\" [1m]))",
+          "legendFormat": "Feign Success/min",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "${ds_loki}"
+          },
+          "expr": "sum(count_over_time({app=\"uber\", service=\"driver-service\"} |= \"Feign call\" |= \"failed\" [1m]))",
+          "legendFormat": "Feign Failures/min",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "datasource": {
         "type": "prometheus",
         "uid": "${ds_prometheus}"
       },
@@ -29,9 +171,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 0
+        "y": 8
       },
-      "id": 1,
+      "id": 4,
       "options": {
         "legend": {
           "calcs": [
@@ -54,7 +196,7 @@
             "type": "prometheus",
             "uid": "${ds_prometheus}"
           },
-          "expr": "sum by (uri, method, status) (rate(http_server_requests_seconds_count{job=\\\"driver-service\\\"}[5m]))",
+          "expr": "sum by (uri, method, status) (rate(http_server_requests_seconds_count{job=\"driver-service\"}[5m]))",
           "legendFormat": "{{method}} {{uri}} {{status}}",
           "refId": "A"
         }
@@ -81,9 +223,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 0
+        "y": 8
       },
-      "id": 2,
+      "id": 5,
       "options": {
         "legend": {
           "calcs": [
@@ -106,7 +248,7 @@
             "type": "prometheus",
             "uid": "${ds_prometheus}"
           },
-          "expr": "histogram_quantile(0.99, sum by (uri, le) (rate(http_server_requests_seconds_bucket{job=\\\"driver-service\\\"}[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (uri, le) (rate(http_server_requests_seconds_bucket{job=\"driver-service\"}[5m])))",
           "legendFormat": "p99 {{uri}}",
           "refId": "A"
         },
@@ -115,7 +257,7 @@
             "type": "prometheus",
             "uid": "${ds_prometheus}"
           },
-          "expr": "histogram_quantile(0.95, sum by (uri, le) (rate(http_server_requests_seconds_bucket{job=\\\"driver-service\\\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (uri, le) (rate(http_server_requests_seconds_bucket{job=\"driver-service\"}[5m])))",
           "legendFormat": "p95 {{uri}}",
           "refId": "B"
         }
@@ -142,9 +284,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 8
+        "y": 16
       },
-      "id": 3,
+      "id": 6,
       "options": {
         "legend": {
           "calcs": [
@@ -166,7 +308,7 @@
             "type": "prometheus",
             "uid": "${ds_prometheus}"
           },
-          "expr": "jvm_memory_used_bytes{job=\\\"driver-service\\\", area=\\\"heap\\\"}",
+          "expr": "jvm_memory_used_bytes{job=\"driver-service\", area=\"heap\"}",
           "legendFormat": "heap used",
           "refId": "A"
         },
@@ -175,7 +317,7 @@
             "type": "prometheus",
             "uid": "${ds_prometheus}"
           },
-          "expr": "jvm_memory_committed_bytes{job=\\\"driver-service\\\", area=\\\"heap\\\"}",
+          "expr": "jvm_memory_committed_bytes{job=\"driver-service\", area=\"heap\"}",
           "legendFormat": "heap committed",
           "refId": "B"
         }
@@ -202,9 +344,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 8
+        "y": 16
       },
-      "id": 4,
+      "id": 7,
       "options": {
         "legend": {
           "calcs": [
@@ -227,7 +369,7 @@
             "type": "prometheus",
             "uid": "${ds_prometheus}"
           },
-          "expr": "hikaricp_connections_active{job=\\\"driver-service\\\"}",
+          "expr": "hikaricp_connections_active{job=\"driver-service\"}",
           "legendFormat": "active",
           "refId": "A"
         },
@@ -236,7 +378,7 @@
             "type": "prometheus",
             "uid": "${ds_prometheus}"
           },
-          "expr": "hikaricp_connections_max{job=\\\"driver-service\\\"}",
+          "expr": "hikaricp_connections_max{job=\"driver-service\"}",
           "legendFormat": "max",
           "refId": "B"
         },
@@ -245,9 +387,70 @@
             "type": "prometheus",
             "uid": "${ds_prometheus}"
           },
-          "expr": "hikaricp_connections_pending{job=\\\"driver-service\\\"}",
+          "expr": "hikaricp_connections_pending{job=\"driver-service\"}",
           "legendFormat": "pending",
           "refId": "C"
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${ds_prometheus}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "lineWidth": 1
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "title": "Cache Hit/Miss Ratio (PromQL)",
+      "description": "Redis cache hits vs misses for driver-service. Verifies that S2-F12 dashboard caching is effective.",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds_prometheus}"
+          },
+          "expr": "sum(rate(cache_gets_total{job=\"driver-service\", result=\"hit\"}[5m]))",
+          "legendFormat": "Cache Hits/sec",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds_prometheus}"
+          },
+          "expr": "sum(rate(cache_gets_total{job=\"driver-service\", result=\"miss\"}[5m]))",
+          "legendFormat": "Cache Misses/sec",
+          "refId": "B"
         }
       ]
     }
@@ -259,7 +462,8 @@
     "uber",
     "driver-service",
     "m3",
-    "s2-events"
+    "s2-events",
+    "s2-infra"
   ],
   "templating": {
     "list": [
@@ -271,6 +475,17 @@
         "name": "ds_prometheus",
         "options": [],
         "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      },
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "label": "Loki",
+        "name": "ds_loki",
+        "options": [],
+        "query": "loki",
         "refresh": 1,
         "type": "datasource"
       }
