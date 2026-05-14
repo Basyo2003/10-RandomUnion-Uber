@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: grafana-dashboards
-  namespace: default
+  namespace: monitoring
   labels:
     grafana_dashboard: "1"
 data:
@@ -11,7 +11,101 @@ data:
   driver-dashboard.json: |-
     # placeholder — S2-INFRA fills this
   ride-dashboard.json: |-
-    # placeholder — S3-INFRA fills this (merge LogQL from S3-READ-DB + PromQL from S3-EVENTS)
+    {
+      "id": null,
+      "uid": "ride-service-dashboard",
+      "title": "Ride Service Dashboard",
+      "tags": ["uber", "ride-service"],
+      "timezone": "browser",
+      "schemaVersion": 39,
+      "version": 1,
+      "panels": [
+        {
+          "id": 1,
+          "title": "Error Rate (logs/min)",
+          "type": "timeseries",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "targets": [
+            {
+              "expr": "sum(rate({service=\"ride-service\", level=\"ERROR\"}[1m]))",
+              "legendFormat": "errors/min",
+              "refId": "A"
+            }
+          ],
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
+        },
+        {
+          "id": 2,
+          "title": "RabbitMQ Event Audit",
+          "type": "logs",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "targets": [
+            {
+              "expr": "{service=\"ride-service\"} |= \"Published\" or {service=\"ride-service\"} |= \"Consuming\" | json",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
+        },
+        {
+          "id": 3,
+          "title": "Saga State Transitions",
+          "type": "logs",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "targets": [
+            {
+              "expr": "{service=\"ride-service\"} |= \"transitioning\" | json",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 }
+        },
+        {
+          "id": 4,
+          "title": "HTTP Request Rate (req/sec)",
+          "type": "timeseries",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum(rate(http_server_requests_seconds_count{job=\"ride-service\"}[5m])) by (uri, method)",
+              "legendFormat": "{{method}} {{uri}}",
+              "refId": "A"
+            }
+          ],
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 }
+        },
+        {
+          "id": 5,
+          "title": "HTTP Latency P99 (seconds)",
+          "type": "timeseries",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{job=\"ride-service\"}[5m])) by (le, uri))",
+              "legendFormat": "P99 {{uri}}",
+              "refId": "A"
+            }
+          ],
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 }
+        },
+        {
+          "id": 6,
+          "title": "JVM Heap Usage (bytes)",
+          "type": "timeseries",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "jvm_memory_used_bytes{job=\"ride-service\", area=\"heap\"}",
+              "legendFormat": "Heap Used",
+              "refId": "A"
+            }
+          ],
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 }
+        }
+      ]
+    }
   location-dashboard.json: |-
     # placeholder — S4-INFRA fills this
   payment-dashboard.json: |-
