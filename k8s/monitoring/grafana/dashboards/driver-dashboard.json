@@ -1,0 +1,101 @@
+{
+  "title": "Driver Service Dashboard",
+  "uid": "driver-service",
+  "schemaVersion": 36,
+  "version": 1,
+  "refresh": "15s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Error Rate (LogQL)",
+      "type": "timeseries",
+      "description": "Count of ERROR-level log lines from driver-service per minute. Spike detection — if driver-service logs many ERRORs in a short window, something is wrong.",
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "sum(count_over_time({app=\"uber\", service=\"driver-service\", level=\"ERROR\"}[1m]))",
+          "legendFormat": "Errors/min"
+        }
+      ],
+      "gridPos": { "x": 0, "y": 0, "w": 8, "h": 8 }
+    },
+    {
+      "id": 2,
+      "title": "RabbitMQ Event Audit (LogQL)",
+      "type": "logs",
+      "description": "Log lines emitted by driver-service event publishers and consumers, filtered by routing key. Shows driver.status-changed, driver.rated, ride.placed, ride.completed, ride.cancelled events.",
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "{app=\"uber\", service=\"driver-service\"} | json | routingKey != \"\"",
+          "legendFormat": "Events"
+        }
+      ],
+      "gridPos": { "x": 8, "y": 0, "w": 8, "h": 8 }
+    },
+    {
+      "id": 3,
+      "title": "Feign Call Outcomes (LogQL)",
+      "type": "timeseries",
+      "description": "Successful Feign calls vs FeignException catches from driver-service. Detects when ride-service or user-service is degraded.",
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "sum(count_over_time({app=\"uber\", service=\"driver-service\"} |= \"returned successfully\" [1m]))",
+          "legendFormat": "Feign Success/min"
+        },
+        {
+          "expr": "sum(count_over_time({app=\"uber\", service=\"driver-service\"} |= \"Feign call\" |= \"failed\" [1m]))",
+          "legendFormat": "Feign Failures/min"
+        }
+      ],
+      "gridPos": { "x": 16, "y": 0, "w": 8, "h": 8 }
+    },
+    {
+      "id": 4,
+      "title": "HTTP Request Rate (PromQL)",
+      "type": "timeseries",
+      "description": "Requests per second per endpoint on driver-service. Shows which endpoints are under the most load.",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum by (uri) (rate(http_server_requests_seconds_count{job=\"driver-service\"}[5m]))",
+          "legendFormat": "{{uri}}"
+        }
+      ],
+      "gridPos": { "x": 0, "y": 8, "w": 8, "h": 8 }
+    },
+    {
+      "id": 5,
+      "title": "P99 Latency (PromQL)",
+      "type": "timeseries",
+      "description": "99th percentile latency per endpoint on driver-service. High P99 on /api/drivers/{id}/earnings or /api/drivers/{id}/dashboard signals slow Feign calls to ride-service.",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum by (uri, le) (rate(http_server_requests_seconds_bucket{job=\"driver-service\"}[5m])))",
+          "legendFormat": "P99 {{uri}}"
+        }
+      ],
+      "gridPos": { "x": 8, "y": 8, "w": 8, "h": 8 }
+    },
+    {
+      "id": 6,
+      "title": "Cache Hit/Miss Ratio (PromQL)",
+      "type": "timeseries",
+      "description": "Redis cache hits vs misses for driver-service. Verifies that S2-F12 dashboard caching is effective.",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(rate(cache_gets_total{job=\"driver-service\", result=\"hit\"}[5m]))",
+          "legendFormat": "Cache Hits/sec"
+        },
+        {
+          "expr": "sum(rate(cache_gets_total{job=\"driver-service\", result=\"miss\"}[5m]))",
+          "legendFormat": "Cache Misses/sec"
+        }
+      ],
+      "gridPos": { "x": 16, "y": 8, "w": 8, "h": 8 }
+    }
+  ]
+}
