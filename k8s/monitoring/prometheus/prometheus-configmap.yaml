@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: prometheus-config
-  namespace: default
+  namespace: monitoring
 data:
   prometheus.yml: |
     global:
@@ -17,7 +17,7 @@ data:
 
       - job_name: driver-service
         static_configs:
-          - targets: ['driver-service:8080']
+          - targets: ['driver-service.uber.svc.cluster.local:8080']
         metrics_path: /actuator/prometheus
 
       - job_name: ride-service
