@@ -11,7 +11,80 @@ data:
   driver-dashboard.json: |-
     # placeholder — S2-INFRA fills this
   ride-dashboard.json: |-
-    # placeholder — S3-INFRA fills this (merge LogQL from S3-READ-DB + PromQL from S3-EVENTS)
+    {
+      "title": "Ride Service",
+      "uid": "ride-service-dashboard",
+      "schemaVersion": 38,
+      "version": 1,
+      "tags": ["ride-service"],
+      "time": {"from": "now-1h", "to": "now"},
+      "timepicker": {},
+      "timezone": "browser",
+      "refresh": "30s",
+      "annotations": {"list": []},
+      "templating": {"list": []},
+      "links": [],
+      "panels": [
+        {
+          "id": 1,
+          "type": "timeseries",
+          "title": "Error Rate",
+          "description": "Rate of ERROR-level log events from ride-service over 5m windows",
+          "datasource": {"type": "loki", "uid": "loki"},
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {"type": "loki", "uid": "loki"},
+              "expr": "rate({app=\"ride-service\", level=\"ERROR\"}[5m])",
+              "legendFormat": "errors/s"
+            }
+          ],
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0}
+        },
+        {
+          "id": 2,
+          "type": "logs",
+          "title": "Correlation ID Trace",
+          "description": "Log lines that carry a non-empty correlationId — use for distributed tracing",
+          "datasource": {"type": "loki", "uid": "loki"},
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {"type": "loki", "uid": "loki"},
+              "expr": "{app=\"ride-service\"} | json | correlationId != \"\" and correlationId != \"-\"",
+              "legendFormat": ""
+            }
+          ],
+          "options": {
+            "showTime": true,
+            "showLabels": true,
+            "wrapLogMessage": true
+          },
+          "gridPos": {"h": 10, "w": 24, "x": 0, "y": 8}
+        },
+        {
+          "id": 3,
+          "type": "logs",
+          "title": "Saga State Transitions",
+          "description": "Ride status transitions through saga states: PAYMENT_PENDING, PAID, PAYMENT_FAILED, REFUNDED",
+          "datasource": {"type": "loki", "uid": "loki"},
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {"type": "loki", "uid": "loki"},
+              "expr": "{app=\"ride-service\"} | json | message =~ \"PAYMENT_PENDING|PAID|PAYMENT_FAILED|REFUNDED\"",
+              "legendFormat": ""
+            }
+          ],
+          "options": {
+            "showTime": true,
+            "showLabels": true,
+            "wrapLogMessage": true
+          },
+          "gridPos": {"h": 10, "w": 24, "x": 0, "y": 18}
+        }
+      ]
+    }
   location-dashboard.json: |-
     # placeholder — S4-INFRA fills this
   payment-dashboard.json: |-

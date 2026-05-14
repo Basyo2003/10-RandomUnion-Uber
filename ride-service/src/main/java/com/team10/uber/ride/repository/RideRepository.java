@@ -106,4 +106,40 @@ public interface RideRepository extends JpaRepository<Ride, Long> {
     @Query(value = "SELECT name, vehicle_details->>'vehicleType' AS vehicleType FROM drivers WHERE id = :driverId", nativeQuery = true)
     Object[] findDriverDetailsById(@Param("driverId") Long driverId);
 
+    // --- §5 summary/count queries ---
+
+    @Query(value = "SELECT COUNT(*) FROM rides WHERE user_id = :userId", nativeQuery = true)
+    long countTotalRidesByUserId(@Param("userId") Long userId);
+
+    @Query(value = "SELECT COUNT(*) FROM rides WHERE user_id = :userId AND status = 'COMPLETED'", nativeQuery = true)
+    long countCompletedRidesByUserId(@Param("userId") Long userId);
+
+    @Query(value = "SELECT COUNT(*) FROM rides WHERE user_id = :userId AND status = 'CANCELLED'", nativeQuery = true)
+    long countCancelledRidesByUserId(@Param("userId") Long userId);
+
+    @Query(value = "SELECT COALESCE(SUM(fare), 0) FROM rides WHERE user_id = :userId AND status = 'COMPLETED'", nativeQuery = true)
+    Double sumFareByUserId(@Param("userId") Long userId);
+
+    @Query(value = "SELECT COUNT(*) FROM rides WHERE user_id = :userId AND status IN ('REQUESTED', 'ACCEPTED', 'IN_PROGRESS')", nativeQuery = true)
+    int countActiveRidesByUserId(@Param("userId") Long userId);
+
+    @Query(value = "SELECT COUNT(*) FROM rides WHERE driver_id = :driverId" +
+            " AND (:startDate IS NULL OR requested_at >= :startDate)" +
+            " AND (:endDate IS NULL OR requested_at <= :endDate)", nativeQuery = true)
+    long countTotalRidesByDriverIdInRange(@Param("driverId") Long driverId,
+                                          @Param("startDate") LocalDateTime startDate,
+                                          @Param("endDate") LocalDateTime endDate);
+
+    @Query(value = "SELECT COALESCE(SUM(fare), 0) FROM rides WHERE driver_id = :driverId AND status = 'COMPLETED'" +
+            " AND (:startDate IS NULL OR requested_at >= :startDate)" +
+            " AND (:endDate IS NULL OR requested_at <= :endDate)", nativeQuery = true)
+    Double sumFareByDriverIdInRange(@Param("driverId") Long driverId,
+                                    @Param("startDate") LocalDateTime startDate,
+                                    @Param("endDate") LocalDateTime endDate);
+
+    @Query(value = "SELECT COUNT(*) FROM rides WHERE driver_id = :driverId AND status IN ('REQUESTED', 'ACCEPTED', 'IN_PROGRESS')", nativeQuery = true)
+    int countActiveRidesByDriverId(@Param("driverId") Long driverId);
+
+    @Query(value = "SELECT COUNT(*) FROM rides WHERE driver_id = :driverId AND status = 'COMPLETED'", nativeQuery = true)
+    long countCompletedRidesByDriverId(@Param("driverId") Long driverId);
 }

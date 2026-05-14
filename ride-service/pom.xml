@@ -121,6 +121,13 @@
 			<optional>true</optional>
 		</dependency>
 
+		<!-- Loki4J — structured log shipping to Grafana Loki -->
+		<dependency>
+			<groupId>com.github.loki4j</groupId>
+			<artifactId>loki-logback-appender</artifactId>
+			<version>1.5.2</version>
+		</dependency>
+
 		<!-- Test -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
