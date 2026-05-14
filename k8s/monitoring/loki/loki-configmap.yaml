@@ -11,6 +11,8 @@ data:
       http_listen_port: 3100
 
     ingester:
+      wal:
+        dir: /loki/wal
       lifecycler:
         ring:
           kvstore:
@@ -35,6 +37,10 @@ data:
         cache_location: /loki/cache
       filesystem:
         directory: /loki/chunks
+
+    compactor:
+      working_directory: /loki/compactor
+      shared_store: filesystem
 
     limits_config:
       enforce_metric_name: false
