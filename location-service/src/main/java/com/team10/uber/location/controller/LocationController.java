@@ -274,5 +274,25 @@ public class LocationController {
             return ResponseEntity.status(ex.getStatusCode()).body(error);
         }
     }
+
+    @GetMapping("/driver/{driverId}/recent")
+    public ResponseEntity<?> getRecentLocation(@PathVariable Long driverId) {
+        try {
+            Location location = locationService.getRecentLocation(driverId);
+
+            return ResponseEntity.ok(location);
+
+        } catch (ResponseStatusException ex) {
+
+            Map<String, Object> error = new HashMap<>();
+            error.put("timestamp", LocalDateTime.now());
+            error.put("status", ex.getStatusCode().value());
+            error.put("error", ex.getStatusCode().toString());
+            error.put("message", ex.getReason());
+            error.put("path", "/api/locations/driver/" + driverId + "/recent");
+
+            return ResponseEntity.status(ex.getStatusCode()).body(error);
+        }
+    }
 }
 

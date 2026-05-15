@@ -12,10 +12,34 @@ import com.team10.uber.contracts.dto.UserDTO;
 import com.team10.uber.contracts.events.RideCancelledEvent;
 import com.team10.uber.contracts.events.RideCompletedEvent;
 import com.team10.uber.contracts.events.RidePlacedEvent;
+import com.team10.uber.contracts.dto.DriverRideSummaryDTO;
+import com.team10.uber.contracts.dto.RideSummaryDTO;
+
 import com.team10.uber.contracts.feign.DriverServiceClient;
 import com.team10.uber.contracts.feign.LocationServiceClient;
 import com.team10.uber.contracts.feign.UserServiceClient;
 import com.team10.uber.ride.dto.*;
+import com.team10.uber.ride.exception.ServiceUnavailableException;
+import feign.FeignException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import com.team10.uber.ride.dto.FareEstimateDTO;
+import com.team10.uber.ride.dto.FareEstimateRequestDTO;
+import com.team10.uber.ride.dto.RideAnalyticsDTO;
+import com.team10.uber.ride.dto.RideDetailsDTO;
+import com.team10.uber.ride.dto.RideStopRequestDTO;
+import com.team10.uber.ride.dto.RideWithStopsDTO;
 import com.team10.uber.ride.enums.RideStatus;
 import com.team10.uber.ride.enums.StopStatus;
 import com.team10.uber.ride.exception.DriverNotFoundException;
@@ -44,11 +68,14 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class RideService extends AbstractObservableService {
 
+    private static final Logger log = LoggerFactory.getLogger(RideService.class);
+
     private final RideRepository rideRepository;
     private final RideStopRepository rideStopRepository;
     private final MongoEventLogger mongoEventLogger;
     private final CacheInvalidationService cacheInvalidation;
     private final Driver neo4jDriver;
+    
     private final DriverServiceClient driverServiceClient;
     private final UserServiceClient userServiceClient;
     private final LocationServiceClient locationServiceClient;
@@ -91,7 +118,13 @@ public class RideService extends AbstractObservableService {
         if (ride.getStatus() == null) {
             ride.setStatus(RideStatus.REQUESTED);
         }
+        log.info("DB_WRITE ride.create userId={}", ride.getUserId());
         Ride saved = rideRepository.save(ride);
+        MDC.put("rideId", String.valueOf(saved.getId()));
+        MDC.put("userId", String.valueOf(saved.getUserId()));
+        log.info("DB_WRITE ride.created rideId={} userId={} status={}", saved.getId(), saved.getUserId(), saved.getStatus());
+        MDC.remove("rideId");
+        MDC.remove("userId");
         notifyObservers("RIDE_CREATED", saved);
         evictRideFeatureCaches();
         return saved;
@@ -564,5 +597,68 @@ public class RideService extends AbstractObservableService {
         cacheInvalidation.evictByPattern("ride-service::S3-F12::*");
 
         return "Interaction recorded successfully for ride " + rideId;
+    }
+
+    // --- §5 Feign-target summary/count endpoints ---
+
+    public RideSummaryDTO getUserRideSummary(Long userId) {
+        log.info("FEIGN_CALL user-service.getUser userId={} start", userId);
+        try {
+            userServiceClient.getUser(userId);
+            log.info("FEIGN_CALL user-service.getUser userId={} success", userId);
+        } catch (FeignException.NotFound e) {
+            log.warn("FEIGN_CALL user-service.getUser userId={} not-found", userId);
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found with id: " + userId);
+        } catch (FeignException e) {
+            log.error("FEIGN_CALL user-service.getUser userId={} error: {}", userId, e.getMessage());
+            throw new ServiceUnavailableException("User service unavailable", e);
+        }
+
+        long totalRides = rideRepository.countTotalRidesByUserId(userId);
+        long completedRides = rideRepository.countCompletedRidesByUserId(userId);
+        long cancelledRides = rideRepository.countCancelledRidesByUserId(userId);
+        Double totalSpent = rideRepository.sumFareByUserId(userId);
+        double spent = totalSpent != null ? totalSpent : 0.0;
+        double avgFare = completedRides > 0 ? spent / completedRides : 0.0;
+        return new RideSummaryDTO(totalRides, completedRides, cancelledRides, spent, avgFare);
+    }
+
+    public int getUserActiveRideCount(Long userId) {
+        return rideRepository.countActiveRidesByUserId(userId);
+    }
+
+    public long getUserCompletedRideCount(Long userId) {
+        return rideRepository.countCompletedRidesByUserId(userId);
+    }
+
+    public DriverRideSummaryDTO getDriverRideSummary(Long driverId, String startDate, String endDate) {
+        log.info("FEIGN_CALL driver-service.getDriver driverId={} start", driverId);
+        try {
+            driverServiceClient.getDriver(driverId);
+            log.info("FEIGN_CALL driver-service.getDriver driverId={} success", driverId);
+        } catch (FeignException.NotFound e) {
+            log.warn("FEIGN_CALL driver-service.getDriver driverId={} not-found", driverId);
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Driver not found with id: " + driverId);
+        } catch (FeignException e) {
+            log.error("FEIGN_CALL driver-service.getDriver driverId={} error: {}", driverId, e.getMessage());
+            throw new ServiceUnavailableException("Driver service unavailable", e);
+        }
+
+        LocalDateTime start = startDate != null ? LocalDate.parse(startDate).atStartOfDay() : null;
+        LocalDateTime end = endDate != null ? LocalDate.parse(endDate).atTime(LocalTime.MAX) : null;
+
+        long totalRides = rideRepository.countCompletedRidesByDriverIdInRange(driverId, start, end);
+        Double totalEarnings = rideRepository.sumFareByDriverIdInRange(driverId, start, end);
+        double earnings = totalEarnings != null ? totalEarnings : 0.0;
+        double avgFare = totalRides > 0 ? earnings / totalRides : 0.0;
+        return new DriverRideSummaryDTO(totalRides, earnings, avgFare);
+    }
+
+    public int getDriverActiveRideCount(Long driverId) {
+        return rideRepository.countActiveRidesByDriverId(driverId);
+    }
+
+    public long getDriverCompletedRideCount(Long driverId) {
+        return rideRepository.countCompletedRidesByDriverId(driverId);
     }
 }
