@@ -1,6 +1,9 @@
 package com.team10.uber.driver.service;
 
+import com.team10.uber.contracts.dto.UserDTO;
+import com.team10.uber.contracts.feign.UserServiceClient;
 import com.team10.uber.driver.cache.RedisCacheService;
+import com.team10.uber.driver.messaging.DriverEventPublisher;
 import com.team10.uber.driver.model.Driver;
 import com.team10.uber.driver.model.DriverDocument;
 import com.team10.uber.driver.dto.DriverWithDocumentsDTO;
@@ -8,8 +11,11 @@ import com.team10.uber.driver.observer.AbstractObservableService;
 import com.team10.uber.driver.observer.MongoEventLogger;
 import com.team10.uber.driver.repository.DriverDocumentRepository;
 import com.team10.uber.driver.repository.DriverRepository;
+import feign.FeignException;
 import jakarta.annotation.PostConstruct;
 import jakarta.transaction.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -23,19 +29,26 @@ import java.util.Map;
 @Service
 public class DriverDocumentService extends AbstractObservableService {
 
+    private static final Logger log = LoggerFactory.getLogger(DriverDocumentService.class);
     private static final long TTL_DETAIL = 15 * 60; // §4.4.2 — 15 min
 
     private final DriverDocumentRepository driverDocumentRepository;
     private final DriverRepository driverRepository;
     private final MongoEventLogger mongoEventLogger;
     private final RedisCacheService cache;
+    private final DriverEventPublisher eventPublisher;
+    private final UserServiceClient userServiceClient;
 
     public DriverDocumentService(DriverDocumentRepository driverDocumentRepository, DriverRepository driverRepository,
-                                 MongoEventLogger mongoEventLogger, RedisCacheService cache) {
+                                 MongoEventLogger mongoEventLogger, RedisCacheService cache,
+                                 DriverEventPublisher eventPublisher,
+                                 UserServiceClient userServiceClient) {
         this.driverDocumentRepository = driverDocumentRepository;
         this.driverRepository = driverRepository;
         this.mongoEventLogger = mongoEventLogger;
         this.cache = cache;
+        this.eventPublisher = eventPublisher;
+        this.userServiceClient = userServiceClient;
     }
 
     @PostConstruct
@@ -118,21 +131,10 @@ public class DriverDocumentService extends AbstractObservableService {
         evictDocumentCaches(driverDocument.getId());
     }
 
+    /** S2-F8 — write, no caching. */
     @Transactional
-    public DriverWithDocumentsDTO verifyDriverDocument(Long driverId, Long documentId, Long verifiedBy) {
-        // Role check first — ensures 403 is returned before any 400 validation
-        if (verifiedBy == null)
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Verifier user ID must be provided");
-
-        String userRole = driverDocumentRepository.findUserRoleById(verifiedBy)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN,
-                        "Verifier user not found"));
-
-        if (!"ADMIN".equals(userRole))
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Only ADMIN users can verify documents");
-
+    public DriverWithDocumentsDTO verifyDriverDocument(Long driverId, Long documentId, Long callerId) {
+        // 1–2. Local entity existence checks (fast fail before any network call)
         Driver driver = driverRepository.findById(driverId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Driver not found with id: " + driverId));
@@ -141,28 +143,53 @@ public class DriverDocumentService extends AbstractObservableService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Driver document not found with id: " + documentId));
 
+        // 3. Ownership check
         if (!document.getDriver().getId().equals(driverId))
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Document does not belong to this driver");
 
+        // 4. Expiry check
         if (document.getExpiryDate().isBefore(LocalDate.now()))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Document has expired");
 
+        // 5. Already-verified check
         if (Boolean.TRUE.equals(document.getVerified()))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Document is already verified");
 
+        // 6. Feign → user-service (replaces cross-service SQL findUserRoleById)
+        UserDTO caller;
+        try {
+            caller = userServiceClient.getUser(callerId);
+        } catch (FeignException.NotFound e) {
+            // Feign 404 → 403 (spec is explicit: verifier user not found → permission failure)
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Verifier user not found");
+        } catch (FeignException e) {
+            log.warn("Feign call to user-service failed for callerId={}: {}", callerId, e.getMessage());
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "user-service unavailable, please retry");
+        }
+
+        // 7. Role check
+        if (!"ADMIN".equals(caller.role()))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Verifier is not an admin");
+
+        // 8. Mutate and save
         document.setVerified(true);
         Map<String, Object> metadata = document.getMetadata();
-        if (metadata == null)
-            metadata = new HashMap<>();
+        if (metadata == null) metadata = new HashMap<>();
         metadata.put("verifiedAt", LocalDateTime.now().toString());
-        metadata.put("verifiedBy", verifiedBy);
+        metadata.put("verifiedBy", callerId);
         document.setMetadata(metadata);
 
         driverDocumentRepository.save(document);
         notifyObservers("DOCUMENT_VERIFIED", driver);
         evictDocumentCaches(documentId);
         cache.evict("driver::" + driverId);
+
+        // 9. §2.11 publish-after-commit: PG committed above, now publish
+        eventPublisher.publishDocumentVerified(driverId, documentId, callerId);
 
         return new DriverWithDocumentsDTO(driver, driver.getDriverDocuments());
     }

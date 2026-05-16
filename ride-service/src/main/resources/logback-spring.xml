@@ -32,7 +32,6 @@
                     }
                 </pattern>
             </message>
-            <sortByTime>true</sortByTime>
         </format>
     </appender>
 

@@ -14,10 +14,11 @@ import com.team10.uber.contracts.events.RideCompletedEvent;
 import com.team10.uber.contracts.events.RidePlacedEvent;
 import com.team10.uber.contracts.dto.DriverRideSummaryDTO;
 import com.team10.uber.contracts.dto.RideSummaryDTO;
-
 import com.team10.uber.contracts.feign.DriverServiceClient;
 import com.team10.uber.contracts.feign.LocationServiceClient;
 import com.team10.uber.contracts.feign.UserServiceClient;
+import com.team10.uber.contracts.dto.RideDTO;
+
 import com.team10.uber.ride.dto.*;
 import com.team10.uber.ride.exception.ServiceUnavailableException;
 import feign.FeignException;

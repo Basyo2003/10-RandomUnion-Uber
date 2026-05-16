@@ -1,0 +1,46 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:ride-test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  neo4j:
+    uri: bolt://127.0.0.1:7687
+    authentication:
+      username: neo4j
+      password: neo4jpass
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      password: redispass
+    mongodb:
+      uri: mongodb://127.0.0.1:27017/ridetest?serverSelectionTimeoutMS=2000&connectTimeoutMS=2000
+  rabbitmq:
+    host: 127.0.0.1
+    port: 5672
+    username: guest
+    password: guest
+
+feign:
+  driver-service:
+    url: http://127.0.0.1:18080
+  user-service:
+    url: http://127.0.0.1:18082
+  location-service:
+    url: http://127.0.0.1:18083
+  payment-service:
+    url: http://127.0.0.1:18084
+
+jwt:
+  secret: dVJlckp3dFNoYXJlZFNlY3JldEtleUZvckFsbEZpdmVTZXJ2aWNlczEyMzQ1Ng==
+  expiration: 86400000
+
+logging:
+  config: classpath:logback-test.xml

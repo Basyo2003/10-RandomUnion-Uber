@@ -41,6 +41,12 @@ spec:
           resources:
             limits:
               memory: 256Mi
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 60
+            periodSeconds: 30
       volumes:
         - name: datasources
           configMap:

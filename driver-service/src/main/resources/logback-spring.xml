@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+
+    <springProperty scope="context" name="lokiUrl" source="logging.loki.url"
+                    defaultValue="http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"/>
+    <springProperty scope="context" name="appName" source="spring.application.name"
+                    defaultValue="driver-service"/>
+
+    <appender name="LOKI" class="com.github.loki4j.logback.Loki4jAppender">
+        <http>
+            <url>${lokiUrl}</url>
+        </http>
+        <labels>app=uber
+service=${appName}
+level=%level
+env=k8s</labels>
+        <structuredMetadata>off</structuredMetadata>
+        <message>
+            <pattern>{"timestamp":"%d{ISO8601}","level":"%level","service":"${appName}","thread":"%thread","logger":"%logger{36}","correlationId":"%X{correlationId:-}","driverId":"%X{driverId:-}","rideId":"%X{rideId:-}","routingKey":"%X{routingKey:-}","message":"%replace(%msg){'\"','\\\"'}"}</pattern>
+        </message>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="LOKI"/>
+    </root>
+</configuration>
