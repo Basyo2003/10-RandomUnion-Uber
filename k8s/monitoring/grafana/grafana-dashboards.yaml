@@ -528,7 +528,7 @@ data:
           "datasource": { "type": "loki", "uid": "loki" },
           "targets": [
             {
-              "expr": "{app=\"uber\", service=\"ride-service\"} | json | message =~ \"Published|Consuming\"",
+              "expr": "{app=\"uber\", service=\"ride-service\"} |~ \"Published|Consuming\"",
               "legendFormat": "",
               "refId": "A"
             }
@@ -542,7 +542,7 @@ data:
           "datasource": { "type": "loki", "uid": "loki" },
           "targets": [
             {
-              "expr": "{app=\"uber\", service=\"ride-service\"} | json | message =~ \"transitioning\"",
+              "expr": "{app=\"uber\", service=\"ride-service\"} |= \"transitioning\"",
               "legendFormat": "",
               "refId": "A"
             }

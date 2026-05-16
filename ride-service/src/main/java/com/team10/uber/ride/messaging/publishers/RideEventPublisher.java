@@ -52,9 +52,9 @@ public class RideEventPublisher {
     private void send(String routingKey, Object payload) {
         try {
             rabbitTemplate.convertAndSend(RideEventConfig.RIDE_EXCHANGE, routingKey, payload);
-            log.info("event published exchange={} routingKey={}", RideEventConfig.RIDE_EXCHANGE, routingKey);
+            log.info("Published {} for payload={}", routingKey, payload);
         } catch (Exception e) {
-            log.error("failed to publish routingKey={}: {}", routingKey, e.getMessage());
+            log.error("Failed to process {}: {}", routingKey, e.getMessage());
         }
     }
 }

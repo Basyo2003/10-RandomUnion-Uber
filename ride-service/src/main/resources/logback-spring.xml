@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
-    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder>
-            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
-        </encoder>
-    </appender>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+
+    <springProperty scope="context" name="appName" source="spring.application.name"
+                    defaultValue="ride-service"/>
 
     <appender name="LOKI" class="com.github.loki4j.logback.Loki4jAppender">
         <http>
@@ -12,25 +12,10 @@
         </http>
         <format>
             <label>
-                <pattern>app=uber,service=${spring.application.name},level=%level,env=k8s</pattern>
+                <pattern>app=uber,service=${appName},level=%level,env=k8s</pattern>
             </label>
             <message>
-                <pattern>
-                    {
-                      "timestamp": "%d{ISO8601}",
-                      "level": "%level",
-                      "service": "${spring.application.name}",
-                      "thread": "%thread",
-                      "logger": "%logger{36}",
-                      "correlationId": "%X{correlationId:-}",
-                      "userId": "%X{userId:-}",
-                      "driverId": "%X{driverId:-}",
-                      "rideId": "%X{rideId:-}",
-                      "paymentId": "%X{paymentId:-}",
-                      "routingKey": "%X{routingKey:-}",
-                      "message": "%msg"
-                    }
-                </pattern>
+                <pattern>{"timestamp":"%d{ISO8601}","level":"%level","service":"${appName}","thread":"%thread","logger":"%logger{36}","correlationId":"%X{correlationId:-}","userId":"%X{userId:-}","driverId":"%X{driverId:-}","rideId":"%X{rideId:-}","paymentId":"%X{paymentId:-}","routingKey":"%X{routingKey:-}","message":"%replace(%msg){'\"','\\\"'}"}</pattern>
             </message>
         </format>
     </appender>

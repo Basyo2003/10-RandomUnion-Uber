@@ -141,6 +141,20 @@ public class RideService extends AbstractObservableService {
                 .orElseThrow(() -> new RideNotFoundException("Ride not found with id: " + id));
     }
 
+    public RideDTO getRideDto(Long id) {
+        Ride ride = getRideById(id);
+        return new RideDTO(
+                ride.getId(),
+                ride.getUserId(),
+                ride.getDriverId(),
+                ride.getStatus() != null ? ride.getStatus().name() : null,
+                ride.getFare(),
+                ride.getRequestedAt(),
+                ride.getCompletedAt(),
+                ride.getMetadata()
+        );
+    }
+
     @CacheEvict(value = "ride-service::ride", key = "#id")
     public Ride updateRide(Long id, Ride updatedRide) {
         Ride existing = getRideById(id);
@@ -183,6 +197,7 @@ public class RideService extends AbstractObservableService {
                             + currentStatus);
         }
 
+        log.info("Ride {} transitioning {} → {}", rideId, currentStatus, RideStatus.CANCELLED);
         ride.setStatus(RideStatus.CANCELLED);
         Ride saved = rideRepository.save(ride);
 
@@ -258,6 +273,7 @@ public class RideService extends AbstractObservableService {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "location-service temporarily unavailable");
         }
 
+        log.info("Ride {} transitioning {} → {}", rideId, RideStatus.IN_PROGRESS, RideStatus.COMPLETED);
         ride.setStatus(RideStatus.COMPLETED);
         ride.setCompletedAt(LocalDateTime.now());
         Ride saved = rideRepository.save(ride);
@@ -308,6 +324,7 @@ public class RideService extends AbstractObservableService {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "driver-service temporarily unavailable");
         }
 
+        log.info("Ride {} transitioning {} → {}", rideId, RideStatus.REQUESTED, RideStatus.ACCEPTED);
         ride.setDriverId(driverId);
         ride.setStatus(RideStatus.ACCEPTED);
         Ride saved = rideRepository.save(ride);
