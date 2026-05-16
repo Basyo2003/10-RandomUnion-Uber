@@ -35,16 +35,38 @@ spec:
               memory: "512Mi"
               cpu: "250m"
           readinessProbe:
-            tcpSocket:
-              port: 27017
-            initialDelaySeconds: 15
-            periodSeconds: 5
+            exec:
+              command:
+                - mongosh
+                - --quiet
+                - --eval
+                - "db.adminCommand('ping').ok"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 10
             failureThreshold: 6
           livenessProbe:
-            tcpSocket:
-              port: 27017
-            initialDelaySeconds: 30
+            exec:
+              command:
+                - mongosh
+                - --quiet
+                - --eval
+                - "db.adminCommand('ping').ok"
+            initialDelaySeconds: 20
             periodSeconds: 30
+            timeoutSeconds: 10
+
+#          readinessProbe:
+#            tcpSocket:
+#              port: 27017
+#            initialDelaySeconds: 15
+#            periodSeconds: 5
+#            failureThreshold: 6
+#          livenessProbe:
+#            tcpSocket:
+#              port: 27017
+#            initialDelaySeconds: 30
+#            periodSeconds: 30
           volumeMounts:
             - name: data
               mountPath: /data/db
