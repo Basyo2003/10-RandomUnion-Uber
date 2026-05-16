@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <configuration>
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
@@ -11,23 +12,26 @@
         </http>
         <format>
             <label>
-                <pattern>service=ride-service,level=%level,host=${HOSTNAME}</pattern>
+                <pattern>app=uber,service=${spring.application.name},level=%level,env=k8s</pattern>
             </label>
             <message>
                 <pattern>
-                    level=%level service=ride-service
-                    rideId=%mdc{rideId}
-                    userId=%mdc{userId}
-                    driverId=%mdc{driverId}
-                    paymentId=%mdc{paymentId}
-                    routingKey=%mdc{routingKey}
-                    correlationId=%mdc{correlationId}
-                    message="%msg"
-                    logger=%logger
-                    thread=%thread
+                    {
+                      "timestamp": "%d{ISO8601}",
+                      "level": "%level",
+                      "service": "${spring.application.name}",
+                      "thread": "%thread",
+                      "logger": "%logger{36}",
+                      "correlationId": "%X{correlationId:-}",
+                      "userId": "%X{userId:-}",
+                      "driverId": "%X{driverId:-}",
+                      "rideId": "%X{rideId:-}",
+                      "paymentId": "%X{paymentId:-}",
+                      "routingKey": "%X{routingKey:-}",
+                      "message": "%msg"
+                    }
                 </pattern>
             </message>
-            <sortByTime>true</sortByTime>
         </format>
     </appender>
 

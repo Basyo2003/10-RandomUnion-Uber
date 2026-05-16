@@ -121,6 +121,7 @@
 			<optional>true</optional>
 		</dependency>
 
+		<!-- Loki4J — structured log shipping to Grafana Loki -->
 		<!-- Observability -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
