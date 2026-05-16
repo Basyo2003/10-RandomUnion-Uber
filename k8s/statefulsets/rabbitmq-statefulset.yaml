@@ -41,10 +41,12 @@ spec:
             periodSeconds: 10
             failureThreshold: 6
           livenessProbe:
-            tcpSocket:
-              port: 5672
+            exec:
+              command: ["rabbitmq-diagnostics", "-q", "ping"]
             initialDelaySeconds: 60
             periodSeconds: 30
+            timeoutSeconds: 30
+            failureThreshold: 3
           volumeMounts:
             - name: data
               mountPath: /var/lib/rabbitmq

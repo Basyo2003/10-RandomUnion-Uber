@@ -504,6 +504,8 @@ data:
       "timezone": "browser",
       "schemaVersion": 39,
       "version": 1,
+      "refresh": "30s",
+      "time": {"from": "now-1h", "to": "now"},
       "panels": [
         {
           "id": 1,
@@ -512,7 +514,7 @@ data:
           "datasource": { "type": "loki", "uid": "loki" },
           "targets": [
             {
-              "expr": "sum(rate({service=\"ride-service\", level=\"ERROR\"}[1m]))",
+              "expr": "sum(rate({app=\"uber\", service=\"ride-service\", level=\"ERROR\"}[1m]))",
               "legendFormat": "errors/min",
               "refId": "A"
             }
@@ -526,7 +528,7 @@ data:
           "datasource": { "type": "loki", "uid": "loki" },
           "targets": [
             {
-              "expr": "{service=\"ride-service\"} |= \"Published\" or {service=\"ride-service\"} |= \"Consuming\" | json",
+              "expr": "{app=\"uber\", service=\"ride-service\"} | json | message =~ \"Published|Consuming\"",
               "legendFormat": "",
               "refId": "A"
             }
@@ -540,7 +542,7 @@ data:
           "datasource": { "type": "loki", "uid": "loki" },
           "targets": [
             {
-              "expr": "{service=\"ride-service\"} |= \"transitioning\" | json",
+              "expr": "{app=\"uber\", service=\"ride-service\"} | json | message =~ \"transitioning\"",
               "legendFormat": "",
               "refId": "A"
             }
