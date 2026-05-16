@@ -17,6 +17,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -47,7 +48,7 @@ class JwtAuthChainTest {
         jdbcTemplate = mock(JdbcTemplate.class);
         JwtAuthenticationFilter filter = new JwtAuthenticationFilter(jdbcTemplate);
 
-        mockMvc = MockMvcBuilders.standaloneSetup(new AdminEndpointController())
+        mockMvc = MockMvcBuilders.standaloneSetup(new AdminEndpointController(), new HealthController())
                 .addFilter(filter, "/*")
                 .build();
     }
@@ -189,6 +190,13 @@ class JwtAuthChainTest {
         assertEquals(5L, result.getUserId());
     }
 
+    // ── Test i) /api/drivers/health requires no token (shouldNotFilter) ──────
+    @Test
+    void healthEndpoint_withNoToken_returns200() throws Exception {
+        mockMvc.perform(get("/api/drivers/health"))
+                .andExpect(status().isOk());
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
     private String generateToken(String email, Long userId, String role) {
         SecretKey key = Keys.hmacShaKeyFor(Base64.getDecoder().decode(TEST_SECRET));
@@ -206,6 +214,14 @@ class JwtAuthChainTest {
         @PutMapping("/api/users/{id}/role")
         ResponseEntity<Void> changeRole(@PathVariable Long id) {
             return ResponseEntity.ok().build();
+        }
+    }
+
+    @RestController
+    static class HealthController {
+        @GetMapping("/api/drivers/health")
+        ResponseEntity<String> health() {
+            return ResponseEntity.ok("OK");
         }
     }
 }
