@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -118,4 +119,23 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
             @Param("endDate") LocalDateTime endDate);
     @Query(value = "SELECT metadata->>'surgeMultiplier' FROM rides WHERE id = :rideId", nativeQuery = true)
     String findSurgeMultiplierByRideId(@Param("rideId") Long rideId);
+
+    @Query(value = "SELECT COALESCE(SUM(amount), 0) FROM payments " +
+            "WHERE user_id = :userId AND CAST(status AS TEXT) = 'COMPLETED' " +
+            "AND created_at >= :startDate AND created_at <= :endDate",
+            nativeQuery = true)
+    BigDecimal sumCompletedAmountByUserIdAndDateRange(
+            @Param("userId") Long userId,
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDate") LocalDateTime endDate);
+
+    // S5-F10: local COMPLETED payments capped at 100 distinct rideIds (§2.12)
+    @Query(value = "SELECT DISTINCT ON (ride_id) * FROM payments " +
+            "WHERE CAST(status AS TEXT) = 'COMPLETED' " +
+            "AND created_at >= :startDate AND created_at <= :endDate " +
+            "ORDER BY ride_id LIMIT 100",
+            nativeQuery = true)
+    List<Payment> findCompletedPaymentsInDateRangeCapped(
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDate") LocalDateTime endDate);
 }
