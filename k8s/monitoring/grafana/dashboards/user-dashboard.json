@@ -45,6 +45,45 @@
         }
       ],
       "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 }
+    },
+    {
+      "id": 4,
+      "type": "logs",
+      "title": "Error Logs (LogQL)",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "{app=\"uber\", service=\"user-service\", level=\"ERROR\"}",
+          "legendFormat": "Errors"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 }
+    },
+    {
+      "id": 5,
+      "type": "logs",
+      "title": "Feign Call Outcomes (LogQL)",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "{app=\"uber\", service=\"user-service\"} |= \"RideServiceClient\" or \"PaymentServiceClient\"",
+          "legendFormat": "Feign Calls"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 }
+    },
+    {
+      "id": 6,
+      "type": "logs",
+      "title": "Correlation ID Trace (LogQL)",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "{app=\"uber\", service=\"user-service\"} | json | correlationId != \"\"",
+          "legendFormat": "Traces"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 }
     }
   ]
 }

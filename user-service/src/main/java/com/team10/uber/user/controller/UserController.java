@@ -8,6 +8,8 @@ import com.team10.uber.user.dto.UserRideSummaryDTO;
 import com.team10.uber.user.model.User;
 import com.team10.uber.user.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
@@ -18,6 +20,8 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/users")
 public class UserController {
+
+    private static final Logger log = LoggerFactory.getLogger(UserController.class);
 
     private final UserService userService;
 
@@ -84,16 +88,24 @@ public class UserController {
     }
 
     @GetMapping("/{id}/ride-summary")
-    public ResponseEntity<UserRideSummaryDTO> getUserRideSummary(@PathVariable Long id) {
-        return ResponseEntity.ok(userService.getUserRideSummary(id));
+    public ResponseEntity<UserRideSummaryDTO> getUserRideSummary(@PathVariable Long id, HttpServletRequest request) {
+        log.info("Received {} {}", request.getMethod(), request.getRequestURI());
+        checkSelfOrAdmin(id, request);
+        ResponseEntity<UserRideSummaryDTO> response = ResponseEntity.ok(userService.getUserRideSummary(id));
+        log.info("Returning {} for {} {}", response.getStatusCode(), request.getMethod(), request.getRequestURI());
+        return response;
     }
 
     @GetMapping("/reports/top-riders")
     public ResponseEntity<List<TopRiderDTO>> getTopRiders(
             @RequestParam String startDate,
             @RequestParam String endDate,
-            @RequestParam int limit) {
-        return ResponseEntity.ok(userService.getTopRiders(startDate, endDate, limit));
+            @RequestParam int limit,
+            HttpServletRequest request) {
+        log.info("Received {} {}", request.getMethod(), request.getRequestURI());
+        ResponseEntity<List<TopRiderDTO>> response = ResponseEntity.ok(userService.getTopRiders(startDate, endDate, limit));
+        log.info("Returning {} for {} {}", response.getStatusCode(), request.getMethod(), request.getRequestURI());
+        return response;
     }
 
     @GetMapping("/preferences/search")
@@ -106,13 +118,21 @@ public class UserController {
     @GetMapping("/preferences/language")
     public ResponseEntity<List<User>> getUsersByLanguageAndRides(
             @RequestParam String lang,
-            @RequestParam(defaultValue = "0") int minRides) {
-        return ResponseEntity.ok(userService.searchByLanguageAndRides(lang, minRides));
+            @RequestParam(defaultValue = "0") int minRides,
+            HttpServletRequest request) {
+        log.info("Received {} {}", request.getMethod(), request.getRequestURI());
+        ResponseEntity<List<User>> response = ResponseEntity.ok(userService.searchByLanguageAndRides(lang, minRides));
+        log.info("Returning {} for {} {}", response.getStatusCode(), request.getMethod(), request.getRequestURI());
+        return response;
     }
 
     @PutMapping("/{id}/deactivate")
-    public User deactivateUser(@PathVariable Long id) {
-        return userService.deactivateUser(id);
+    public ResponseEntity<User> deactivateUser(@PathVariable Long id, HttpServletRequest request) {
+        log.info("Received {} {}", request.getMethod(), request.getRequestURI());
+        checkSelfOrAdmin(id, request);
+        ResponseEntity<User> response = ResponseEntity.ok(userService.deactivateUser(id));
+        log.info("Returning {} for {} {}", response.getStatusCode(), request.getMethod(), request.getRequestURI());
+        return response;
     }
 
     @GetMapping("/{id}/activity")
