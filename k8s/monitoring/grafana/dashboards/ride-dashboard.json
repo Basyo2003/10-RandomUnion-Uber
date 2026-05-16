@@ -1,0 +1,109 @@
+{
+  "title": "Ride Service",
+  "uid": "ride-service",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "HTTP Request Rate by Endpoint",
+      "description": "Which ride-service endpoints are under the most load (requests/sec, 5-min window)",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (uri, method) (rate(http_server_requests_seconds_count{job=\"ride-service\"}[5m]))",
+          "legendFormat": "{{method}} {{uri}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "HTTP Latency Percentiles (P50 / P95 / P99)",
+      "description": "P50/P95/P99 latency per endpoint — identify slow Feign-enriched paths",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le, uri) (rate(http_server_requests_seconds_bucket{job=\"ride-service\"}[5m])))",
+          "legendFormat": "P50 {{uri}}",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, uri) (rate(http_server_requests_seconds_bucket{job=\"ride-service\"}[5m])))",
+          "legendFormat": "P95 {{uri}}",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le, uri) (rate(http_server_requests_seconds_bucket{job=\"ride-service\"}[5m])))",
+          "legendFormat": "P99 {{uri}}",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Cache Hit / Miss Ratio (Redis)",
+      "description": "Redis cache hit rate for ride-service — verifies S3-F12 recommendation caching is effective",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (name) (rate(cache_gets_total{job=\"ride-service\", result=\"hit\"}[5m]))",
+          "legendFormat": "hits {{name}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (name) (rate(cache_gets_total{job=\"ride-service\", result=\"miss\"}[5m]))",
+          "legendFormat": "misses {{name}}",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "RabbitMQ Throughput (ride.saga-feedback)",
+      "description": "Messages published vs consumed — consumer lag signals payment event backlog",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "increase(rabbitmq_channel_messages_published_total{job=\"ride-service\"}[5m])",
+          "legendFormat": "published",
+          "refId": "A"
+        },
+        {
+          "expr": "increase(rabbitmq_channel_messages_consumed_total{job=\"ride-service\"}[5m])",
+          "legendFormat": "consumed",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "JVM Memory Usage",
+      "description": "JVM heap used vs committed — detect memory pressure before OOM",
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "jvm_memory_used_bytes{job=\"ride-service\", area=\"heap\"}",
+          "legendFormat": "heap used",
+          "refId": "A"
+        },
+        {
+          "expr": "jvm_memory_committed_bytes{job=\"ride-service\", area=\"heap\"}",
+          "legendFormat": "heap committed",
+          "refId": "B"
+        }
+      ]
+    }
+  ]
+}
