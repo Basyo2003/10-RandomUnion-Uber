@@ -300,6 +300,7 @@ class S5ReadDbTest {
             when(rideServiceClient.getRide(10L)).thenReturn(rideInPaymentPending());
             when(paymentRepository.findByRideIdAndStatus(10L, PaymentStatus.PENDING))
                     .thenReturn(Optional.of(pendingPayment));
+            when(paymentRepository.save(any(Payment.class))).thenReturn(pendingPayment);
 
             ProcessPaymentDTO dto = new ProcessPaymentDTO();
             dto.setMethod("BITCOIN");
@@ -720,7 +721,7 @@ class S5ReadDbTest {
             PaymentRabbitConfig cfg = new PaymentRabbitConfig();
             var exchange = cfg.paymentExchange();
 
-            assertThat(exchange.getName()).isEqualTo("payment.exchange");
+            assertThat(exchange.getName()).isEqualTo("payment.events");
             assertThat(exchange.isDurable()).isTrue();
             assertThat(exchange.isAutoDelete()).isFalse();
         }

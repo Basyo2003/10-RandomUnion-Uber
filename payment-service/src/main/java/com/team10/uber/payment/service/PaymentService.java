@@ -56,6 +56,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.team10.uber.contracts.dto.DriverDTO;
 import com.team10.uber.contracts.dto.RideDTO;
+import com.team10.uber.contracts.events.PaymentFailedEvent;
 import com.team10.uber.contracts.feign.DriverServiceClient;
 import com.team10.uber.contracts.feign.RideServiceClient;
 import com.team10.uber.contracts.feign.UserServiceClient;
@@ -337,19 +338,64 @@ public class PaymentService extends AbstractObservableService {
         try {
             payment.setMethod(PaymentMethod.valueOf(dto.getMethod()));
         } catch (IllegalArgumentException e) {
-            MDC.remove("rideId"); MDC.remove("paymentId"); MDC.remove("userId");
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Invalid payment method: " + dto.getMethod());
+
+            payment.setStatus(PaymentStatus.FAILED);
+
+            Map<String, Object> failDetails = new HashMap<>();
+            failDetails.put("gatewayResponse", "declined");
+            failDetails.put(
+                    "failureReason",
+                    "unsupported payment method: " + dto.getMethod()
+            );
+
+            payment.setTransactionDetails(failDetails);
+
+            Payment failSaved = paymentRepository.save(payment);
+
+            rabbitTemplate.convertAndSend(
+                    PaymentRabbitConfig.PAYMENT_EXCHANGE,
+                    PaymentRabbitConfig.ROUTING_KEY_FAILED,
+                    new PaymentFailedEvent(
+                            failSaved.getId(),
+                            rideId,
+                            "unsupported payment method: " + dto.getMethod()
+                    )
+            );
+
+            log.info(
+                    "payment.failed published (unsupported method): paymentId={}, rideId={}",
+                    failSaved.getId(),
+                    rideId
+            );
+
+            MDC.remove("rideId");
+            MDC.remove("paymentId");
+            MDC.remove("userId");
+
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Unsupported payment method: " + dto.getMethod()
+            );
         }
 
         // e) Compute surgeFee from ride metadata (15% fallback)
-        double amount = payment.getAmount() != null ? payment.getAmount()
-                : (ride.fare() != null ? ride.fare() : 0.0);
-        Object surgeMult = ride.metadata() != null ? ride.metadata().get("surgeMultiplier") : null;
-        double surgeFee = surgeMult != null
-                ? amount * (Double.parseDouble(surgeMult.toString()) - 1.0)
-                : amount * 0.15;
+        Double fare = paymentRepository.findRideFareById(rideId);
+        Long userId = paymentRepository.findRideUserIdById(rideId);
 
+        double amount = fare != null ? fare : 0.0;
+
+        String surgeMultStr =
+                paymentRepository.findSurgeMultiplierByRideId(rideId);
+
+        double surgeFee;
+
+        if (surgeMultStr != null) {
+            double multiplier = Double.parseDouble(surgeMultStr);
+            surgeFee = amount * (multiplier - 1.0);
+        } else {
+            surgeFee = amount * 0.15;
+        }
+        
         Map<String, Object> transactionDetails = new HashMap<>();
         transactionDetails.put("gatewayResponse", "success");
         transactionDetails.put("cardLastFour", dto.getCardLastFour());
