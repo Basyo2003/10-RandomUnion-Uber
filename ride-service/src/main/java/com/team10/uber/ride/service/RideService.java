@@ -5,9 +5,26 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.*;
 
+import com.team10.uber.contracts.dto.DriverAvailabilityDTO;
+import com.team10.uber.contracts.dto.DriverDTO;
+import com.team10.uber.contracts.dto.LocationDTO;
+import com.team10.uber.contracts.dto.UserDTO;
+import com.team10.uber.contracts.events.RideCancelledEvent;
+import com.team10.uber.contracts.events.RideCompletedEvent;
+import com.team10.uber.contracts.events.RidePlacedEvent;
 import com.team10.uber.contracts.dto.DriverRideSummaryDTO;
+import com.team10.uber.contracts.dto.RideSummaryDTO;
+import com.team10.uber.contracts.feign.DriverServiceClient;
+import com.team10.uber.contracts.feign.LocationServiceClient;
+import com.team10.uber.contracts.feign.UserServiceClient;
 import com.team10.uber.contracts.dto.RideDTO;
+
 import com.team10.uber.ride.dto.*;
+import com.team10.uber.ride.exception.ServiceUnavailableException;
+import feign.FeignException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -29,42 +46,60 @@ import com.team10.uber.ride.enums.StopStatus;
 import com.team10.uber.ride.exception.DriverNotFoundException;
 import com.team10.uber.ride.exception.InvalidRideStatusException;
 import com.team10.uber.ride.exception.RideNotFoundException;
+import com.team10.uber.ride.messaging.publishers.RideEventPublisher;
 import com.team10.uber.ride.model.Ride;
 import com.team10.uber.ride.model.RideStop;
 import com.team10.uber.ride.observer.AbstractObservableService;
 import com.team10.uber.ride.observer.MongoEventLogger;
 import com.team10.uber.ride.repository.RideRepository;
 import com.team10.uber.ride.repository.RideStopRepository;
+import feign.FeignException;
+import jakarta.annotation.PostConstruct;
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.Session;
 import org.neo4j.driver.Values;
-import jakarta.annotation.PostConstruct;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
-import jakarta.annotation.PostConstruct;
 
 @Service
 public class RideService extends AbstractObservableService {
+
+    private static final Logger log = LoggerFactory.getLogger(RideService.class);
 
     private final RideRepository rideRepository;
     private final RideStopRepository rideStopRepository;
     private final MongoEventLogger mongoEventLogger;
     private final CacheInvalidationService cacheInvalidation;
     private final Driver neo4jDriver;
+    
+    private final DriverServiceClient driverServiceClient;
+    private final UserServiceClient userServiceClient;
+    private final LocationServiceClient locationServiceClient;
+    private final RideEventPublisher rideEventPublisher;
+
     public RideService(RideRepository rideRepository,
                        RideStopRepository rideStopRepository,
                        MongoEventLogger mongoEventLogger,
                        CacheInvalidationService cacheInvalidation,
-                       Driver neo4jDriver) {
+                       Driver neo4jDriver,
+                       DriverServiceClient driverServiceClient,
+                       UserServiceClient userServiceClient,
+                       LocationServiceClient locationServiceClient,
+                       RideEventPublisher rideEventPublisher) {
         this.rideRepository = rideRepository;
         this.rideStopRepository = rideStopRepository;
         this.mongoEventLogger = mongoEventLogger;
         this.cacheInvalidation = cacheInvalidation;
         this.neo4jDriver = neo4jDriver;
+        this.driverServiceClient = driverServiceClient;
+        this.userServiceClient = userServiceClient;
+        this.locationServiceClient = locationServiceClient;
+        this.rideEventPublisher = rideEventPublisher;
     }
 
     private void evictRideFeatureCaches() {
@@ -80,12 +115,17 @@ public class RideService extends AbstractObservableService {
         register(mongoEventLogger);
     }
 
-    
     public Ride createRide(Ride ride) {
         if (ride.getStatus() == null) {
             ride.setStatus(RideStatus.REQUESTED);
         }
+        log.info("DB_WRITE ride.create userId={}", ride.getUserId());
         Ride saved = rideRepository.save(ride);
+        MDC.put("rideId", String.valueOf(saved.getId()));
+        MDC.put("userId", String.valueOf(saved.getUserId()));
+        log.info("DB_WRITE ride.created rideId={} userId={} status={}", saved.getId(), saved.getUserId(), saved.getStatus());
+        MDC.remove("rideId");
+        MDC.remove("userId");
         notifyObservers("RIDE_CREATED", saved);
         evictRideFeatureCaches();
         return saved;
@@ -99,54 +139,6 @@ public class RideService extends AbstractObservableService {
     public Ride getRideById(Long id) {
         return rideRepository.findById(id)
                 .orElseThrow(() -> new RideNotFoundException("Ride not found with id: " + id));
-    }
-
-    @Transactional(readOnly = true)
-    public RideDTO getRideDto(Long id) {
-        Ride ride = getRideById(id);
-        return toRideDto(ride);
-    }
-
-    private static RideDTO toRideDto(Ride ride) {
-        return new RideDTO(
-                ride.getId(),
-                ride.getUserId(),
-                ride.getDriverId(),
-                ride.getStatus() != null ? ride.getStatus().name() : null,
-                ride.getFare(),
-                ride.getRequestedAt(),
-                ride.getCompletedAt(),
-                ride.getMetadata()
-        );
-    }
-
-    @Transactional(readOnly = true)
-    public DriverRideSummaryDTO getDriverRideSummary(Long driverId, LocalDate startDate, LocalDate endDate) {
-        LocalDateTime start = startDate != null ? startDate.atStartOfDay() : null;
-        LocalDateTime end = endDate != null ? endDate.plusDays(1).atStartOfDay() : null;
-        Object[] row = rideRepository.summarizeDriverCompletedRides(driverId, start, end);
-        long totalRides = ((Number) row[0]).longValue();
-        double totalEarnings = ((Number) row[1]).doubleValue();
-        double averageFare = totalRides == 0L ? 0.0 : totalEarnings / totalRides;
-        return new DriverRideSummaryDTO(totalRides, totalEarnings, averageFare);
-    }
-
-    @Transactional(readOnly = true)
-    public int getDriverActiveRideCount(Long driverId) {
-        return (int) rideRepository.countByDriverIdAndStatusIn(driverId, List.of(
-                RideStatus.ACCEPTED,
-                RideStatus.IN_PROGRESS,
-                RideStatus.COMPLETED,
-                RideStatus.PAYMENT_PENDING
-        ));
-    }
-
-    @Transactional(readOnly = true)
-    public long getDriverCompletedRideCount(Long driverId) {
-        return rideRepository.countByDriverIdAndStatusIn(driverId, List.of(
-                RideStatus.COMPLETED,
-                RideStatus.PAID
-        ));
     }
 
     @CacheEvict(value = "ride-service::ride", key = "#id")
@@ -167,6 +159,7 @@ public class RideService extends AbstractObservableService {
         evictRideFeatureCaches();
         return saved;
     }
+
     @CacheEvict(value = "ride-service::ride", key = "#id")
     public void deleteRide(Long id) {
         Ride ride = getRideById(id);
@@ -176,6 +169,7 @@ public class RideService extends AbstractObservableService {
         evictRideFeatureCaches();
     }
 
+    // §8.4 S3-F7 — remove direct driver write; publish ride.cancelled instead
     @Transactional
     public Ride cancelRide(Long rideId) {
         Ride ride = rideRepository.findById(rideId)
@@ -190,12 +184,13 @@ public class RideService extends AbstractObservableService {
         }
 
         ride.setStatus(RideStatus.CANCELLED);
-
-        if (ride.getDriverId() != null) {
-            rideRepository.updateDriverStatusToAvailable(ride.getDriverId());
-        }
-
         Ride saved = rideRepository.save(ride);
+
+        // driver-service and payment-service each consume ride.cancelled and update their own DBs
+        rideEventPublisher.publishRideCancelled(
+                new RideCancelledEvent(saved.getId(), saved.getUserId(), saved.getDriverId(), "user_requested")
+        );
+
         notifyObservers("RIDE_CANCELLED", saved);
         cacheInvalidation.evictByPattern("ride-service::ride::" + rideId);
         cacheInvalidation.evictByPattern("ride-service::S3-F9::" + rideId);
@@ -203,6 +198,7 @@ public class RideService extends AbstractObservableService {
         return saved;
     }
 
+    // §8.3 S3-F4 — 3 Feign pre-checks; no direct driver/payment writes; publish ride.completed
     @Transactional
     public Ride completeRide(Long rideId) {
         Ride ride = getRideById(rideId);
@@ -213,26 +209,62 @@ public class RideService extends AbstractObservableService {
             );
         }
 
+        if (ride.getFare() == null) {
+            ride.setFare(calculateFare(
+                    ride.getPickupLatitude(), ride.getPickupLongitude(),
+                    ride.getDropoffLatitude(), ride.getDropoffLongitude()
+            ));
+        }
+
+        // Pre-check 1: user must be ACTIVE
+        try {
+            UserDTO user = userServiceClient.getUser(ride.getUserId());
+            if (!"ACTIVE".equals(user.status())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User is not active");
+            }
+        } catch (FeignException.NotFound e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User not found");
+        } catch (ResponseStatusException e) {
+            throw e;
+        } catch (FeignException e) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "user-service temporarily unavailable");
+        }
+
+        // Pre-check 2: driver must be BUSY
+        try {
+            DriverDTO driver = driverServiceClient.getDriver(ride.getDriverId());
+            if (!"BUSY".equals(driver.status())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Driver is not BUSY");
+            }
+        } catch (FeignException.NotFound e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Driver not found");
+        } catch (ResponseStatusException e) {
+            throw e;
+        } catch (FeignException e) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "driver-service temporarily unavailable");
+        }
+
+        // Pre-check 3: location ping must be within the last 5 minutes
+        try {
+            LocationDTO location = locationServiceClient.getRecentLocationForDriver(ride.getDriverId());
+            if (location.timestamp().isBefore(LocalDateTime.now().minusMinutes(5))) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "driver not actively tracked");
+            }
+        } catch (FeignException.NotFound e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "driver not actively tracked");
+        } catch (ResponseStatusException e) {
+            throw e;
+        } catch (FeignException e) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "location-service temporarily unavailable");
+        }
+
         ride.setStatus(RideStatus.COMPLETED);
         ride.setCompletedAt(LocalDateTime.now());
-
-        if (ride.getFare() == null) {
-            double calculatedFare = calculateFare(
-                    ride.getPickupLatitude(),
-                    ride.getPickupLongitude(),
-                    ride.getDropoffLatitude(),
-                    ride.getDropoffLongitude()
-            );
-            ride.setFare(calculatedFare);
-        }
-
-        rideRepository.updateDriverStatusToAvailable(ride.getDriverId());
         Ride saved = rideRepository.save(ride);
 
-        try {
-            rideRepository.createPayment(saved.getId(), saved.getUserId(), saved.getFare());
-        } catch (Exception ignored) {
-        }
+        rideEventPublisher.publishRideCompleted(
+                new RideCompletedEvent(saved.getId(), saved.getUserId(), saved.getDriverId(), saved.getFare())
+        );
 
         notifyObservers("RIDE_COMPLETED", saved);
         cacheInvalidation.evictByPattern("ride-service::ride::" + rideId);
@@ -246,9 +278,51 @@ public class RideService extends AbstractObservableService {
                 Math.pow(dropoffLat - pickupLat, 2) +
                         Math.pow(dropoffLon - pickupLon, 2)
         ) * 111;
-
         return distance * 15.0;
     }
+
+    // §5 S3-F2 — replace cross-service SQL with Feign; publish ride.placed instead of direct driver write
+    @Transactional
+    public Ride assignDriver(Long rideId, Long driverId) {
+        Ride ride = rideRepository.findById(rideId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Ride not found with id: " + rideId));
+
+        if (ride.getStatus() != RideStatus.REQUESTED) {
+            throw new InvalidRideStatusException(
+                    "Ride " + rideId + " cannot be assigned. Expected REQUESTED but was: " + ride.getStatus()
+            );
+        }
+
+        // §2.4 — Feign: driver must exist and be AVAILABLE
+        try {
+            DriverAvailabilityDTO availability = driverServiceClient.getDriverAvailability(driverId);
+            if (!"AVAILABLE".equals(availability.status())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Driver is not available");
+            }
+        } catch (FeignException.NotFound e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Driver not found with id: " + driverId);
+        } catch (ResponseStatusException e) {
+            throw e;
+        } catch (FeignException e) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "driver-service temporarily unavailable");
+        }
+
+        ride.setDriverId(driverId);
+        ride.setStatus(RideStatus.ACCEPTED);
+        Ride saved = rideRepository.save(ride);
+
+        // driver-service consumer of ride.placed flips driver status to BUSY in its own DB
+        rideEventPublisher.publishRidePlaced(new RidePlacedEvent(saved.getId(), saved.getUserId(), driverId));
+
+        notifyObservers("DRIVER_ASSIGNED", saved);
+        cacheInvalidation.evictByPattern("ride-service::ride::" + rideId);
+        cacheInvalidation.evictByPattern("ride-service::S3-F9::" + rideId);
+        cacheInvalidation.evictByPattern("driver-service::S2-F12::" + driverId);
+        evictRideFeatureCaches();
+        return saved;
+    }
+
     public RideWithStopsDTO addStops(Long rideId, List<RideStopRequestDTO> stopRequests) {
         Ride ride = rideRepository.findById(rideId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Ride not found"));
@@ -362,14 +436,7 @@ public class RideService extends AbstractObservableService {
         double averageFare = completedRides > 0 ? totalRevenue / completedRides : 0.0;
         double completionRate = totalRides > 0 ? (double) completedRides / totalRides : 0.0;
 
-        return new RideAnalyticsDTO(
-                totalRides,
-                completedRides,
-                cancelledRides,
-                totalRevenue,
-                averageFare,
-                completionRate
-        );
+        return new RideAnalyticsDTO(totalRides, completedRides, cancelledRides, totalRevenue, averageFare, completionRate);
     }
 
     @Cacheable(value = "ride-service::S3-F1", key = "(#status != null ? #status.name() : 'ALL') + '_' + #startDate + '_' + #endDate")
@@ -381,46 +448,6 @@ public class RideService extends AbstractObservableService {
     public List<Ride> getRidesByStatusAndDateRange(RideStatus status, LocalDateTime startDate, LocalDateTime endDate, Long userId) {
         String statusName = status != null ? status.name() : null;
         return rideRepository.searchRides(startDate, endDate, statusName, userId);
-    }
-
-    @Transactional
-    public Ride assignDriver(Long rideId, Long driverId) {
-        Ride ride = rideRepository.findById(rideId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "Ride not found with id: " + rideId));
-
-        if (ride.getStatus() != RideStatus.REQUESTED) {
-            throw new InvalidRideStatusException(
-                    "Ride " + rideId + " cannot be assigned. Expected REQUESTED but was: " + ride.getStatus()
-            );
-        }
-
-        String status = rideRepository.findStatusByDriverId(driverId);
-        boolean driverExists = rideRepository.driverexists(driverId);
-        if (!driverExists) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
-                    "Driver not found with id: " + driverId);
-        }
-
-        if (status.equals("OFFLINE")) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Driver is not available");
-        }
-        if (status.equals("BUSY")) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Driver with id: " + driverId + " is OFFLINE");
-        }
-
-        ride.setDriverId(driverId);
-        ride.setStatus(RideStatus.ACCEPTED);
-        rideRepository.updateDriverStatusToBusy(driverId);
-        Ride saved = rideRepository.save(ride);
-        notifyObservers("DRIVER_ASSIGNED", saved);
-        cacheInvalidation.evictByPattern("ride-service::ride::" + rideId);
-        cacheInvalidation.evictByPattern("ride-service::S3-F9::" + rideId);
-        cacheInvalidation.evictByPattern("driver-service::S2-F12::" + driverId);
-        evictRideFeatureCaches();
-        return saved;
     }
 
     @Cacheable(value = "ride-service::S3-F9", key = "#rideId")
@@ -435,25 +462,21 @@ public class RideService extends AbstractObservableService {
 
     public void validateDashboardDateRange(LocalDate startDate, LocalDate endDate) {
         if (startDate == null || endDate == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "startDate and endDate are required");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "startDate and endDate are required");
         }
         if (startDate.isAfter(endDate)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "startDate must be on or before endDate");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "startDate must be on or before endDate");
         }
     }
-    @Cacheable(value ="ride-service::S3-F10", key = "#startDate + '_' + #endDate")
-    public RideAnalyticsDashboardDTO getRideAnalyticsDashboard(LocalDate startDate, LocalDate endDate) {
 
+    @Cacheable(value = "ride-service::S3-F10", key = "#startDate + '_' + #endDate")
+    public RideAnalyticsDashboardDTO getRideAnalyticsDashboard(LocalDate startDate, LocalDate endDate) {
         validateDashboardDateRange(startDate, endDate);
 
-
         LocalDateTime startDateTime = startDate.atStartOfDay();
-        LocalDateTime endDateTime   = endDate.atTime(LocalTime.MAX);
+        LocalDateTime endDateTime = endDate.atTime(LocalTime.MAX);
 
         Map<String, Long> ridesByStatus = new LinkedHashMap<>();
-
         long totalRides = 0L;
         long completedRides = 0L;
         List<Object[]> rows = rideRepository.countRidesByStatusBetween(startDateTime, endDateTime);
@@ -467,12 +490,10 @@ public class RideService extends AbstractObservableService {
             }
         }
 
-        // Revenue — sum of payments.amount for COMPLETED rides in range.
         Double revenueSum = rideRepository.sumCompletedRideRevenueBetween(startDateTime, endDateTime);
         double totalRevenue = revenueSum != null ? revenueSum : 0.0;
-
         double averageRideFare = completedRides > 0 ? totalRevenue / completedRides : 0.0;
-        double completionRate  = totalRides > 0 ? (double) completedRides / totalRides : 0.0;
+        double completionRate = totalRides > 0 ? (double) completedRides / totalRides : 0.0;
 
         return RideAnalyticsDashboardDTO.builder()
                 .totalRides(totalRides)
@@ -482,28 +503,23 @@ public class RideService extends AbstractObservableService {
                 .ridesByStatus(ridesByStatus)
                 .build();
     }
-    @org.springframework.scheduling.annotation.Async
+
+    @Async
     public void logAnalyticsViewed(LocalDate startDate, LocalDate endDate, Long userId) {
         try {
             Map<String, Object> details = new HashMap<>();
             details.put("action", "ANALYTICS_VIEWED");
             details.put("endpoint", "/api/rides/analytics/dashboard");
             details.put("startDate", startDate != null ? startDate.toString() : null);
-            details.put("endDate",   endDate   != null ? endDate.toString()   : null);
-            if (userId != null) {
-                details.put("userId", userId);
-            }
-
+            details.put("endDate", endDate != null ? endDate.toString() : null);
+            if (userId != null) details.put("userId", userId);
             notifyObservers("ANALYTICS_VIEWED", details);
         } catch (Exception ignored) {
-            // Mongo failure must not break the analytics request.
         }
     }
 
-
-
+    // §5 S3-F11 — replace cross-service SQL with Feign; use returned names for Neo4j node properties
     public String recordInteraction(Long rideId) {
-        // Step 1-2: Find ride and verify COMPLETED status
         Ride ride = rideRepository.findById(rideId)
                 .orElseThrow(() -> new RideNotFoundException("Ride not found with id: " + rideId));
 
@@ -515,22 +531,35 @@ public class RideService extends AbstractObservableService {
         Long userId = ride.getUserId();
         Long driverId = ride.getDriverId();
 
-        // Step 3: Validate user and driver exist via shared PG (cross-service native SQL)
-        if (!rideRepository.userExistsById(userId)) {
+        UserDTO user;
+        try {
+            user = userServiceClient.getUser(userId);
+        } catch (FeignException.NotFound e) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found with id: " + userId);
-        }
-        if (!rideRepository.driverexists(driverId)) {
-            throw new DriverNotFoundException("Driver not found with id: " + driverId);
+        } catch (FeignException e) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "user-service temporarily unavailable");
         }
 
-        // Step 4-6: Use raw Neo4j driver to avoid Spring Data Neo4j multi-module wiring issues
+        DriverDTO driver;
+        try {
+            driver = driverServiceClient.getDriver(driverId);
+        } catch (FeignException.NotFound e) {
+            throw new DriverNotFoundException("Driver not found with id: " + driverId);
+        } catch (FeignException e) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "driver-service temporarily unavailable");
+        }
+
+        String userName = user.name() != null ? user.name() : "";
+        String driverName = driver.name() != null ? driver.name() : "";
+        String vehicleType = driver.vehicleDetails() != null
+                ? (String) driver.vehicleDetails().getOrDefault("vehicleType", "") : "";
+
         try (Session session = neo4jDriver.session()) {
-            // Step 4 (idempotency): check if rideId already recorded on the RODE_WITH edge
             boolean alreadyRecorded = session.executeRead(tx -> {
                 var result = tx.run(
-                    "MATCH (u:User {userId: $userId})-[r:RODE_WITH]->(d:Driver {driverId: $driverId}) " +
-                    "WHERE $rideId IN r.recordedRideIds RETURN count(r) > 0 AS exists",
-                    Values.parameters("userId", userId, "driverId", driverId, "rideId", rideId)
+                        "MATCH (u:User {userId: $userId})-[r:RODE_WITH]->(d:Driver {driverId: $driverId}) " +
+                        "WHERE $rideId IN r.recordedRideIds RETURN count(r) > 0 AS exists",
+                        Values.parameters("userId", userId, "driverId", driverId, "rideId", rideId)
                 );
                 return result.hasNext() && result.next().get("exists").asBoolean(false);
             });
@@ -539,36 +568,98 @@ public class RideService extends AbstractObservableService {
                 return "Interaction already recorded for ride " + rideId;
             }
 
-            // Step 5-6: MERGE User + Driver nodes, then MERGE RODE_WITH edge, increment rideCount
+            String uName = userName;
+            String dName = driverName;
+            String vType = vehicleType;
+
             session.executeWrite(tx -> {
                 tx.run(
-                    "MERGE (u:User {userId: $userId}) " +
-                    "MERGE (d:Driver {driverId: $driverId}) " +
-                    "MERGE (u)-[r:RODE_WITH]->(d) " +
-                    "ON CREATE SET r.rideCount = 1, r.lastRideDate = $now, r.recordedRideIds = [$rideId] " +
-                    "ON MATCH SET r.rideCount = r.rideCount + 1, r.lastRideDate = $now, " +
-                    "            r.recordedRideIds = r.recordedRideIds + [$rideId]",
-                    Values.parameters(
-                        "userId", userId,
-                        "driverId", driverId,
-                        "rideId", rideId,
-                        "now", LocalDateTime.now().toString()
-                    )
+                        "MERGE (u:User {userId: $userId}) ON CREATE SET u.name = $userName " +
+                        "MERGE (d:Driver {driverId: $driverId}) ON CREATE SET d.name = $driverName, d.vehicleType = $vehicleType " +
+                        "MERGE (u)-[r:RODE_WITH]->(d) " +
+                        "ON CREATE SET r.rideCount = 1, r.lastRideDate = $now, r.recordedRideIds = [$rideId] " +
+                        "ON MATCH SET r.rideCount = r.rideCount + 1, r.lastRideDate = $now, " +
+                        "            r.recordedRideIds = r.recordedRideIds + [$rideId]",
+                        Values.parameters(
+                                "userId", userId, "userName", uName,
+                                "driverId", driverId, "driverName", dName, "vehicleType", vType,
+                                "rideId", rideId, "now", LocalDateTime.now().toString()
+                        )
                 );
                 return null;
             });
         }
 
-        // Step 7: Log INTERACTION_RECORDED to MongoDB via Observer
         Map<String, Object> eventDetails = new HashMap<>();
         eventDetails.put("rideId", rideId);
         eventDetails.put("userId", userId);
         eventDetails.put("driverId", driverId);
         notifyObservers("INTERACTION_RECORDED", eventDetails);
-
-        // Step 8: Evict S3-F12 recommendation cache
         cacheInvalidation.evictByPattern("ride-service::S3-F12::*");
 
         return "Interaction recorded successfully for ride " + rideId;
+    }
+
+    // --- §5 Feign-target summary/count endpoints ---
+
+    public RideSummaryDTO getUserRideSummary(Long userId) {
+        log.info("FEIGN_CALL user-service.getUser userId={} start", userId);
+        try {
+            userServiceClient.getUser(userId);
+            log.info("FEIGN_CALL user-service.getUser userId={} success", userId);
+        } catch (FeignException.NotFound e) {
+            log.warn("FEIGN_CALL user-service.getUser userId={} not-found", userId);
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found with id: " + userId);
+        } catch (FeignException e) {
+            log.error("FEIGN_CALL user-service.getUser userId={} error: {}", userId, e.getMessage());
+            throw new ServiceUnavailableException("User service unavailable", e);
+        }
+
+        long totalRides = rideRepository.countTotalRidesByUserId(userId);
+        long completedRides = rideRepository.countCompletedRidesByUserId(userId);
+        long cancelledRides = rideRepository.countCancelledRidesByUserId(userId);
+        Double totalSpent = rideRepository.sumFareByUserId(userId);
+        double spent = totalSpent != null ? totalSpent : 0.0;
+        double avgFare = completedRides > 0 ? spent / completedRides : 0.0;
+        return new RideSummaryDTO(totalRides, completedRides, cancelledRides, spent, avgFare);
+    }
+
+    public int getUserActiveRideCount(Long userId) {
+        return rideRepository.countActiveRidesByUserId(userId);
+    }
+
+    public long getUserCompletedRideCount(Long userId) {
+        return rideRepository.countCompletedRidesByUserId(userId);
+    }
+
+    public DriverRideSummaryDTO getDriverRideSummary(Long driverId, String startDate, String endDate) {
+        log.info("FEIGN_CALL driver-service.getDriver driverId={} start", driverId);
+        try {
+            driverServiceClient.getDriver(driverId);
+            log.info("FEIGN_CALL driver-service.getDriver driverId={} success", driverId);
+        } catch (FeignException.NotFound e) {
+            log.warn("FEIGN_CALL driver-service.getDriver driverId={} not-found", driverId);
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Driver not found with id: " + driverId);
+        } catch (FeignException e) {
+            log.error("FEIGN_CALL driver-service.getDriver driverId={} error: {}", driverId, e.getMessage());
+            throw new ServiceUnavailableException("Driver service unavailable", e);
+        }
+
+        LocalDateTime start = startDate != null ? LocalDate.parse(startDate).atStartOfDay() : null;
+        LocalDateTime end = endDate != null ? LocalDate.parse(endDate).atTime(LocalTime.MAX) : null;
+
+        long totalRides = rideRepository.countCompletedRidesByDriverIdInRange(driverId, start, end);
+        Double totalEarnings = rideRepository.sumFareByDriverIdInRange(driverId, start, end);
+        double earnings = totalEarnings != null ? totalEarnings : 0.0;
+        double avgFare = totalRides > 0 ? earnings / totalRides : 0.0;
+        return new DriverRideSummaryDTO(totalRides, earnings, avgFare);
+    }
+
+    public int getDriverActiveRideCount(Long driverId) {
+        return rideRepository.countActiveRidesByDriverId(driverId);
+    }
+
+    public long getDriverCompletedRideCount(Long driverId) {
+        return rideRepository.countCompletedRidesByDriverId(driverId);
     }
 }

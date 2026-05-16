@@ -4,7 +4,8 @@ metadata:
   name: prometheus-pvc
   namespace: monitoring
 spec:
-  accessModes: [ReadWriteOnce]
+  accessModes:
+    - ReadWriteOnce
   resources:
     requests:
       storage: 5Gi
