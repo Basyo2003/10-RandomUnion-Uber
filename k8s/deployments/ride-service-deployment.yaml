@@ -15,7 +15,8 @@ spec:
     spec:
       containers:
         - name: ride-service
-          image: <your-registry>/ride-service:latest
+          image: ride-service:latest
+          imagePullPolicy: Never
           ports:
             - containerPort: 8080
           envFrom:
@@ -34,13 +35,15 @@ spec:
               memory: 768Mi
           readinessProbe:
             httpGet:
-              path: /actuator/health
+              path: /actuator/health/readiness
               port: 8080
-            initialDelaySeconds: 30
+            initialDelaySeconds: 130
             periodSeconds: 10
+            failureThreshold: 5
           livenessProbe:
             httpGet:
-              path: /actuator/health
+              path: /actuator/health/liveness
               port: 8080
-            initialDelaySeconds: 60
+            initialDelaySeconds: 160
             periodSeconds: 30
+            failureThreshold: 3

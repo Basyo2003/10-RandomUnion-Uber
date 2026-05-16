@@ -35,16 +35,6 @@ spring:
           initial-interval: 1000
           max-attempts: 3
 
-management:
-  endpoints:
-    web:
-      exposure:
-        include: prometheus,health,info
-  metrics:
-    distribution:
-      percentiles-histogram:
-        http.server.requests: true
-
 server:
   port: 8080
 
@@ -67,6 +57,10 @@ management:
     web:
       exposure:
         include: "prometheus,health,info"
+  endpoint:
+    health:
+      probes:
+        enabled: true
   metrics:
     distribution:
       percentiles-histogram:

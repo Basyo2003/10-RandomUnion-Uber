@@ -5,7 +5,8 @@ metadata:
   namespace: uber
 data:
   SPRING_DATASOURCE_URL: jdbc:postgresql://ride-postgres:5432/uberdb-rides
-  SPRING_DATASOURCE_USERNAME: user
+  SPRING_DATASOURCE_USERNAME: postgres
+  SPRING_DATASOURCE_PASSWORD: postgres
   SPRING_RABBITMQ_HOST: rabbitmq
   FEIGN_USER_SERVICE_URL: http://user-service:8080
   FEIGN_DRIVER_SERVICE_URL: http://driver-service:8080
