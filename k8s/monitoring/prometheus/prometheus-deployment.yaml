@@ -21,6 +21,11 @@ spec:
             - --storage.tsdb.path=/prometheus
           ports:
             - containerPort: 9090
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+            - name: storage
+              mountPath: /prometheus
           readinessProbe:
             httpGet:
               path: /-/ready
@@ -33,11 +38,6 @@ spec:
               port: 9090
             initialDelaySeconds: 60
             periodSeconds: 30
-          volumeMounts:
-            - name: config
-              mountPath: /etc/prometheus
-            - name: storage
-              mountPath: /prometheus
       volumes:
         - name: config
           configMap:
