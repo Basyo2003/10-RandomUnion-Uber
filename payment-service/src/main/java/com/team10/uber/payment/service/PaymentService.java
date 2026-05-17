@@ -54,6 +54,17 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.team10.uber.contracts.dto.DriverDTO;
+import com.team10.uber.contracts.dto.RideDTO;
+import com.team10.uber.contracts.feign.DriverServiceClient;
+import com.team10.uber.contracts.feign.RideServiceClient;
+import com.team10.uber.contracts.feign.UserServiceClient;
+import com.team10.uber.payment.config.PaymentRabbitConfig;
+import feign.FeignException;
+import org.slf4j.MDC;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -72,9 +83,12 @@ public class PaymentService extends AbstractObservableService {
     private final CouponRepository couponRepository;
     private final PaymentCouponRepository paymentCouponRepository;
     private final MongoEventLogger mongoEventLogger;
-    //private final PaymentAuditEventRepository auditEventRepository;
     private final RedisCacheService cache;
     private final MongoTemplate mongoTemplate;
+    private final UserServiceClient userServiceClient;
+    private final RideServiceClient rideServiceClient;
+    private final DriverServiceClient driverServiceClient;
+    private final RabbitTemplate rabbitTemplate;
     // §3.8 — Adapter instances
     private final com.team10.uber.payment.adapter.PaymentSummaryAdapter paymentSummaryAdapter
             = new com.team10.uber.payment.adapter.PaymentSummaryAdapter();
@@ -87,16 +101,22 @@ public class PaymentService extends AbstractObservableService {
             CouponRepository couponRepository,
             PaymentCouponRepository paymentCouponRepository,
             MongoEventLogger mongoEventLogger,
-            //PaymentAuditEventRepository auditEventRepository,
             RedisCacheService cache,
-            MongoTemplate mongoTemplate) {
+            MongoTemplate mongoTemplate,
+            UserServiceClient userServiceClient,
+            RideServiceClient rideServiceClient,
+            DriverServiceClient driverServiceClient,
+            RabbitTemplate rabbitTemplate) {
         this.paymentRepository = paymentRepository;
         this.couponRepository = couponRepository;
         this.paymentCouponRepository = paymentCouponRepository;
         this.mongoEventLogger = mongoEventLogger;
-        //this.auditEventRepository = auditEventRepository;
         this.cache = cache;
         this.mongoTemplate = mongoTemplate;
+        this.userServiceClient = userServiceClient;
+        this.rideServiceClient = rideServiceClient;
+        this.driverServiceClient = driverServiceClient;
+        this.rabbitTemplate = rabbitTemplate;
     }
 
     @PostConstruct
@@ -239,123 +259,136 @@ public class PaymentService extends AbstractObservableService {
         return saved;
     }
 
+    // §7 S5-F3: Feign replaces cross-service SQL (countUserById removed)
     public UserPaymentSummaryDTO getUserPaymentSummary(Long userId) {
-    String key = "S5-F3::" + userId;
-    UserPaymentSummaryDTO cached = cache.get(key, UserPaymentSummaryDTO.class);
-    if (cached != null) return cached;
+        log.info("getUserPaymentSummary: userId={}", userId);
+        MDC.put("userId", String.valueOf(userId));
+        String key = "S5-F3::" + userId;
+        UserPaymentSummaryDTO cached = cache.get(key, UserPaymentSummaryDTO.class);
+        if (cached != null) {
+            MDC.remove("userId");
+            return cached;
+        }
 
-    int userCount = paymentRepository.countUserById(userId);
-    if (userCount == 0)
-        throw new ResponseStatusException(HttpStatus.NOT_FOUND,
-                "User not found with id: " + userId);
+        try {
+            userServiceClient.getUser(userId);
+        } catch (FeignException.NotFound e) {
+            MDC.remove("userId");
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found with id: " + userId);
+        } catch (FeignException e) {
+            log.warn("user-service unreachable for userId={}: {}", userId, e.getMessage());
+            MDC.remove("userId");
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "user-service unavailable");
+        }
 
-    List<Object[]> results = paymentRepository.findPaymentSummaryByUserId(userId);
-
-    // §3.8 — Use Adapter instead of inline Object[] mapping
-    UserPaymentSummaryDTO result = paymentSummaryAdapter.adapt(userId, results);
-    cache.put(key, result, TTL_SEARCH);
-    return result;
-}
-    // §4.4.1 — S5-F4: process payment — write, invalidates caches
+        List<Object[]> results = paymentRepository.findPaymentSummaryByUserId(userId);
+        UserPaymentSummaryDTO result = paymentSummaryAdapter.adapt(userId, results);
+        cache.put(key, result, TTL_SEARCH);
+        MDC.remove("userId");
+        return result;
+    }
+    // §7 S5-F4: Feign replaces cross-service SQL; validates PAYMENT_PENDING; publishes events
     @Transactional
     public Payment processPaymentForRide(Long rideId, ProcessPaymentDTO dto, boolean simulateFailure) {
+        log.info("processPaymentForRide: rideId={}", rideId);
+        MDC.put("rideId", String.valueOf(rideId));
 
-        // a) Verify ride exists
-        String rideStatus = paymentRepository.findRideStatusById(rideId);
-        if (rideStatus == null)
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
-                    "Ride not found with id: " + rideId);
-        if (!rideStatus.equals("COMPLETED"))
+        // a) Fetch ride via Feign — 404 if not found
+        RideDTO ride;
+        try {
+            ride = rideServiceClient.getRide(rideId);
+        } catch (FeignException.NotFound e) {
+            MDC.remove("rideId");
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Ride not found with id: " + rideId);
+        } catch (FeignException e) {
+            log.warn("ride-service unreachable for rideId={}: {}", rideId, e.getMessage());
+            MDC.remove("rideId");
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "ride-service unavailable");
+        }
+
+        // b) Validate ride status == PAYMENT_PENDING
+        if (!"PAYMENT_PENDING".equals(ride.status())) {
+            MDC.remove("rideId");
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Ride is not completed. Current status: " + rideStatus);
+                    "Ride is not in PAYMENT_PENDING status. Current status: " + ride.status());
+        }
 
-        Optional<Payment> existingPayment = paymentRepository
-                .findByRideIdAndStatus(rideId, PaymentStatus.COMPLETED);
-        if (existingPayment.isPresent())
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "already paid");
+        // c) Require pre-existing PENDING payment (created by ride.completed event consumer in S5-EVENTS)
+        Payment payment = paymentRepository.findByRideIdAndStatus(rideId, PaymentStatus.PENDING)
+                .orElseThrow(() -> {
+                    MDC.remove("rideId");
+                    return new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "No PENDING payment found for ride id: " + rideId);
+                });
 
+        MDC.put("paymentId", String.valueOf(payment.getId()));
+        MDC.put("userId", String.valueOf(payment.getUserId()));
+
+        // d) Method validation
         if (dto.getMethod().equals("CREDIT_CARD") && dto.getCardLastFour() != null) {
             String card = dto.getCardLastFour();
-            if (card.length() != 4 || !card.matches("\\d{4}"))
+            if (card.length() != 4 || !card.matches("\\d{4}")) {
+                MDC.remove("rideId"); MDC.remove("paymentId"); MDC.remove("userId");
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "cardLastFour must be exactly 4 digits");
+            }
         }
 
-        Double fare = paymentRepository.findRideFareById(rideId);
-        Long userId = paymentRepository.findRideUserIdById(rideId);
-        double amount = fare != null ? fare : 0.0;
-
-        // f) Compute surgeFee from ride metadata.surgeMultiplier (15% fallback)
-        String surgeMultStr = paymentRepository.findSurgeMultiplierByRideId(rideId);
-        double surgeFee;
-        if (surgeMultStr != null) {
-            double multiplier = Double.parseDouble(surgeMultStr);
-            surgeFee = amount * (multiplier - 1.0);
-        } else {
-            surgeFee = amount * 0.15;
+        try {
+            payment.setMethod(PaymentMethod.valueOf(dto.getMethod()));
+        } catch (IllegalArgumentException e) {
+            MDC.remove("rideId"); MDC.remove("paymentId"); MDC.remove("userId");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Invalid payment method: " + dto.getMethod());
         }
 
-        // g) Build JSONB transactionDetails
+        // e) Compute surgeFee from ride metadata (15% fallback)
+        double amount = payment.getAmount() != null ? payment.getAmount()
+                : (ride.fare() != null ? ride.fare() : 0.0);
+        Object surgeMult = ride.metadata() != null ? ride.metadata().get("surgeMultiplier") : null;
+        double surgeFee = surgeMult != null
+                ? amount * (Double.parseDouble(surgeMult.toString()) - 1.0)
+                : amount * 0.15;
+
         Map<String, Object> transactionDetails = new HashMap<>();
         transactionDetails.put("gatewayResponse", "success");
         transactionDetails.put("cardLastFour", dto.getCardLastFour());
         transactionDetails.put("receiptUrl", "https://receipts.com/" + rideId);
         transactionDetails.put("failureReason", null);
         transactionDetails.put("surgeFee", surgeFee);
-
-        // h) Save with PENDING, fire CREATED
-        Payment payment = new Payment();
-        payment.setRideId(rideId);
-        payment.setUserId(userId);
-        payment.setAmount(amount);
-        try {
-            payment.setMethod(PaymentMethod.valueOf(dto.getMethod()));
-        } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Invalid payment method: " + dto.getMethod());
-        }
-        payment.setStatus(PaymentStatus.PENDING);
         payment.setTransactionDetails(transactionDetails);
 
-        Payment saved = paymentRepository.save(payment);
-        notifyObservers("CREATED", saved);
-
-        // saveAuditEvent(saved, "CREATED", Map.of(
-        //         "rideId", rideId,
-        //         "userId", userId,
-        //         "surgeFee", surgeFee));
-
-        // i) simulateFailure path
+        // f) simulateFailure → FAILED + publish payment.failed
         if (simulateFailure) {
-            saved.setStatus(PaymentStatus.FAILED);
-            Map<String, Object> failDetails = new HashMap<>(saved.getTransactionDetails());
-            failDetails.put("gatewayResponse", "declined");
-            failDetails.put("failureReason", "simulated failure");
-            saved.setTransactionDetails(failDetails);
-            paymentRepository.save(saved);
+            payment.setStatus(PaymentStatus.FAILED);
+            transactionDetails.put("gatewayResponse", "declined");
+            transactionDetails.put("failureReason", "simulated failure");
+            payment.setTransactionDetails(transactionDetails);
+            Payment saved = paymentRepository.save(payment);
             notifyObservers("FAILED", saved);
-
-            // saveAuditEvent(saved, "FAILED", Map.of(
-            //         "failureReason", "simulated failure",
-            //         "gatewayResponse", "declined"));
-
+            rabbitTemplate.convertAndSend(PaymentRabbitConfig.PAYMENT_EXCHANGE,
+                    PaymentRabbitConfig.ROUTING_KEY_FAILED,
+                    Map.of("paymentId", saved.getId(), "rideId", rideId, "userId", saved.getUserId()));
+            log.info("payment.failed published: paymentId={}, rideId={}", saved.getId(), rideId);
+            evictPaymentCaches(saved.getId());
+            evictAnalyticsCaches();
+            MDC.remove("rideId"); MDC.remove("paymentId"); MDC.remove("userId");
             return saved;
         }
 
-        // j) Normal path — transition to COMPLETED
-        saved.setStatus(PaymentStatus.COMPLETED);
-        paymentRepository.save(saved);
+        // g) Normal path — COMPLETED + publish payment.completed
+        payment.setStatus(PaymentStatus.COMPLETED);
+        Payment saved = paymentRepository.save(payment);
         notifyObservers("COMPLETED", saved);
+        rabbitTemplate.convertAndSend(PaymentRabbitConfig.PAYMENT_EXCHANGE,
+                PaymentRabbitConfig.ROUTING_KEY_COMPLETED,
+                Map.of("paymentId", saved.getId(), "rideId", rideId, "userId", saved.getUserId()));
+        log.info("payment.completed published: paymentId={}, rideId={}", saved.getId(), rideId);
 
-        // saveAuditEvent(saved, "COMPLETED", Map.of(
-        //         "rideId", rideId,
-        //         "surgeFee", surgeFee,
-        //         "gatewayResponse", "success"));
-
-        // §4.4.4 — invalidate affected caches
         cache.evictByPattern("S5-F1::*");
-        cache.evictByPattern("S5-F3::" + userId);
+        cache.evictByPattern("S5-F3::" + saved.getUserId());
         evictAnalyticsCaches();
+        MDC.remove("rideId"); MDC.remove("paymentId"); MDC.remove("userId");
         return saved;
     }
 
@@ -511,46 +544,82 @@ public class PaymentService extends AbstractObservableService {
 
     // ── M2 Features ──────────────────────────────────────────────────────────
 
-    // §10.5.1
+    // §10.5.1 S5-F10: local query (cap 100) + per-ride Feign + driverId→vehicleType cache (§2.12)
     public List<VehicleTypeRevenueDTO> getFareRevenueByVehicleType(String startDateStr, String endDateStr) {
+        long startTime = System.currentTimeMillis();
         LocalDateTime startDate = parseDate(startDateStr, false);
         LocalDateTime endDate = parseDate(endDateStr, true);
 
-        if (startDate.isAfter(endDate)) {
+        if (startDate.isAfter(endDate))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "startDate must be before endDate");
-        }
 
-        // §10.5.1(f)
         notifyObservers("ANALYTICS_VIEWED", Map.of(
                 "dashboard", "vehicle-type-revenue",
                 "startDate", startDate.toString(),
                 "endDate", endDate.toString()));
 
-        // (10 min TTL)
         String key = "S5-F10::" + startDate + "::" + endDate;
         List<VehicleTypeRevenueDTO> cached = cache.get(key, new TypeReference<List<VehicleTypeRevenueDTO>>() {});
         if (cached != null) return cached;
 
-        List<Object[]> rows = paymentRepository.findVehicleTypeRevenueStats(startDate, endDate);
-        List<VehicleTypeRevenueDTO> result = new ArrayList<>();
+        // §2.12: local COMPLETED payments, capped at 100 distinct rideIds
+        List<Payment> payments = paymentRepository.findCompletedPaymentsInDateRangeCapped(startDate, endDate);
 
-        for (Object[] row : rows) {
-            String vehicleType = (String) row[0];
-            Double surgeFeeRevenue = row[1] != null ? ((Number) row[1]).doubleValue() : 0.0;
-            Double baseFareRevenue = row[2] != null ? ((Number) row[2]).doubleValue() : 0.0;
-            Double totalRevenue = row[3] != null ? ((Number) row[3]).doubleValue() : 0.0;
-            Long rideCount = row[4] != null ? ((Number) row[4]).longValue() : 0L;
+        // §2.12: per-request driverId → vehicleType cache to avoid duplicate Feign calls
+        Map<Long, String> vehicleTypeByDriver = new HashMap<>();
+        Map<String, List<Payment>> byVehicleType = new HashMap<>();
 
-            result.add(VehicleTypeRevenueDTO.builder()
-                    .vehicleType(vehicleType)
-                    .surgeFeeRevenue(surgeFeeRevenue)
-                    .baseFareRevenue(baseFareRevenue)
-                    .totalRevenue(totalRevenue)
-                    .rideCount(rideCount)
-                    .build());
+        for (Payment payment : payments) {
+            RideDTO ride;
+            try {
+                ride = rideServiceClient.getRide(payment.getRideId());
+            } catch (FeignException e) {
+                log.warn("ride-service call skipped for rideId={}: {}", payment.getRideId(), e.getMessage());
+                continue;
+            }
+
+            Long driverId = ride.driverId();
+            if (driverId == null) continue;
+
+            String vehicleType = vehicleTypeByDriver.computeIfAbsent(driverId, id -> {
+                try {
+                    DriverDTO driver = driverServiceClient.getDriver(id);
+                    Object vt = driver.vehicleDetails() != null
+                            ? driver.vehicleDetails().get("vehicleType") : null;
+                    return vt != null ? vt.toString() : "UNKNOWN";
+                } catch (FeignException e) {
+                    log.warn("driver-service call failed for driverId={}: {}", id, e.getMessage());
+                    return "UNKNOWN";
+                }
+            });
+
+            byVehicleType.computeIfAbsent(vehicleType, k -> new ArrayList<>()).add(payment);
         }
 
+        List<VehicleTypeRevenueDTO> result = byVehicleType.entrySet().stream().map(entry -> {
+            List<Payment> group = entry.getValue();
+            double total = group.stream().mapToDouble(p -> p.getAmount() != null ? p.getAmount() : 0.0).sum();
+            double surgeFee = group.stream().mapToDouble(p -> {
+                Object sf = p.getTransactionDetails() != null
+                        ? p.getTransactionDetails().get("surgeFee") : null;
+                return sf != null ? ((Number) sf).doubleValue() : p.getAmount() * 0.15;
+            }).sum();
+            return VehicleTypeRevenueDTO.builder()
+                    .vehicleType(entry.getKey())
+                    .surgeFeeRevenue(surgeFee)
+                    .baseFareRevenue(total - surgeFee)
+                    .totalRevenue(total)
+                    .rideCount((long) group.size())
+                    .build();
+        }).collect(Collectors.toList());
+
         cache.put(key, result, TTL_ANALYTICS);
+
+        // §11.1: slow operation WARN
+        long elapsed = System.currentTimeMillis() - startTime;
+        if (elapsed > 1000)
+            log.warn("Slow getFareRevenueByVehicleType took {}ms", elapsed);
+
         return result;
     }
 
@@ -667,6 +736,19 @@ public class PaymentService extends AbstractObservableService {
         evictPaymentCaches(id);
         evictAnalyticsCaches();
         return saved;
+    }
+
+    // S5-READ-DB: total completed payments for a user in a date range (called by user-service via Feign)
+    public BigDecimal getUserPaymentTotal(Long userId, String startDate, String endDate) {
+        log.info("getUserPaymentTotal: userId={}, startDate={}, endDate={}", userId, startDate, endDate);
+        MDC.put("userId", String.valueOf(userId));
+        LocalDateTime start = parseDate(startDate, false);
+        LocalDateTime end   = parseDate(endDate, true);
+        BigDecimal total = paymentRepository.sumCompletedAmountByUserIdAndDateRange(userId, start, end);
+        BigDecimal result = total != null ? total : BigDecimal.ZERO;
+        log.info("getUserPaymentTotal: userId={} → {}", userId, result);
+        MDC.remove("userId");
+        return result;
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
