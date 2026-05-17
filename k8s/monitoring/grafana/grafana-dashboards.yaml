@@ -528,7 +528,7 @@ data:
           "datasource": { "type": "loki", "uid": "loki" },
           "targets": [
             {
-              "expr": "{app=\"uber\", service=\"ride-service\"} | json | message =~ \"Published|Consuming\"",
+              "expr": "{app=\"uber\", service=\"ride-service\"} |~ \"Published|Consuming\"",
               "legendFormat": "",
               "refId": "A"
             }
@@ -542,7 +542,7 @@ data:
           "datasource": { "type": "loki", "uid": "loki" },
           "targets": [
             {
-              "expr": "{app=\"uber\", service=\"ride-service\"} | json | message =~ \"transitioning\"",
+              "expr": "{app=\"uber\", service=\"ride-service\"} |= \"transitioning\"",
               "legendFormat": "",
               "refId": "A"
             }
@@ -594,7 +594,167 @@ data:
       ]
     }
   location-dashboard.json: |-
-    # placeholder — S4-INFRA fills this
+    {
+      "id": null,
+      "uid": "uber-location-service",
+      "title": "Location Service Dashboard",
+      "description": "S4-INFRA dashboard for Location Service.",
+      "tags": ["uber", "location-service", "s4-infra"],
+      "timezone": "browser",
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "30s",
+      "time": { "from": "now-1h", "to": "now" },
+      "panels": [
+        {
+          "id": 1,
+          "type": "timeseries",
+          "title": "HTTP Request Rate",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum by (uri, method, status) (rate(http_server_requests_seconds_count{job=\"location-service\"}[5m]))",
+              "legendFormat": "{{method}} {{uri}} {{status}}",
+              "refId": "A"
+            }
+          ],
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
+        },
+        {
+          "id": 2,
+          "type": "timeseries",
+          "title": "HTTP Average Request Duration",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "rate(http_server_requests_seconds_sum{job=\"location-service\"}[5m]) / rate(http_server_requests_seconds_count{job=\"location-service\"}[5m])",
+              "legendFormat": "avg duration",
+              "refId": "A"
+            }
+          ],
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
+        },
+        {
+          "id": 3,
+          "type": "timeseries",
+          "title": "JVM Heap Usage",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "jvm_memory_used_bytes{job=\"location-service\", area=\"heap\"}",
+              "legendFormat": "heap used",
+              "refId": "A"
+            },
+            {
+              "expr": "jvm_memory_committed_bytes{job=\"location-service\", area=\"heap\"}",
+              "legendFormat": "heap committed",
+              "refId": "B"
+            }
+          ],
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }
+        },
+        {
+          "id": 4,
+          "type": "timeseries",
+          "title": "HikariCP Postgres Connection Pool",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "hikaricp_connections_active{job=\"location-service\"}",
+              "legendFormat": "active",
+              "refId": "A"
+            },
+            {
+              "expr": "hikaricp_connections_idle{job=\"location-service\"}",
+              "legendFormat": "idle",
+              "refId": "B"
+            },
+            {
+              "expr": "hikaricp_connections_max{job=\"location-service\"}",
+              "legendFormat": "max",
+              "refId": "C"
+            },
+            {
+              "expr": "hikaricp_connections_pending{job=\"location-service\"}",
+              "legendFormat": "pending",
+              "refId": "D"
+            }
+          ],
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }
+        },
+        {
+          "id": 5,
+          "type": "timeseries",
+          "title": "Redis Operations",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "rate(lettuce_seconds_count{job=\"location-service\"}[5m])",
+              "legendFormat": "{{db_operation}}",
+              "refId": "A"
+            }
+          ],
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 }
+        },
+        {
+          "id": 6,
+          "type": "timeseries",
+          "title": "RabbitMQ Activity",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "rabbitmq_connections{name=\"rabbit\"}",
+              "legendFormat": "connections",
+              "refId": "A"
+            },
+            {
+              "expr": "rabbitmq_channels{name=\"rabbit\"}",
+              "legendFormat": "channels",
+              "refId": "B"
+            },
+            {
+              "expr": "rate(rabbitmq_published_total{name=\"rabbit\"}[5m])",
+              "legendFormat": "published/sec",
+              "refId": "C"
+            },
+            {
+              "expr": "rate(rabbitmq_consumed_total{name=\"rabbit\"}[5m])",
+              "legendFormat": "consumed/sec",
+              "refId": "D"
+            }
+          ],
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 }
+        },
+        {
+          "id": 7,
+          "type": "timeseries",
+          "title": "Cassandra Repository Activity",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "spring_data_repository_invocations_seconds_count{repository=\"LocationTrackingEventRepository\"}",
+              "legendFormat": "{{method}}",
+              "refId": "A"
+            }
+          ],
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 }
+        },
+        {
+          "id": 8,
+          "type": "timeseries",
+          "title": "Mongo Repository Activity",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "spring_data_repository_invocations_seconds_count{repository=\"LocationEventRepository\"}",
+              "legendFormat": "{{method}}",
+              "refId": "A"
+            }
+          ],
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 }
+        }
+      ]
+    }
   payment-dashboard.json: |-
     {
       "annotations": {"list": []},

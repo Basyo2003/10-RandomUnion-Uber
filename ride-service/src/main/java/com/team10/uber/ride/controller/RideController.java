@@ -61,24 +61,6 @@ public class RideController {
         return rideService.getAllRides();
     }
 
-    @GetMapping("/driver/{driverId}/summary")
-    public DriverRideSummaryDTO getDriverRideSummaryForFeign(
-            @PathVariable Long driverId,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
-        return rideService.getDriverRideSummary(driverId, startDate, endDate);
-    }
-
-    @GetMapping("/driver/{driverId}/active-count")
-    public int getDriverActiveRideCount(@PathVariable Long driverId) {
-        return rideService.getDriverActiveRideCount(driverId);
-    }
-
-    @GetMapping("/driver/{driverId}/completed-count")
-    public long getDriverCompletedRideCount(@PathVariable Long driverId) {
-        return rideService.getDriverCompletedRideCount(driverId);
-    }
-
     @GetMapping("/{id}")
     public RideDTO getRideById(@PathVariable Long id) {
         return rideService.getRideDto(id);
