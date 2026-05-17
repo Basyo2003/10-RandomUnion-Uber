@@ -95,6 +95,7 @@ class SagaIntegrationTest {
     @Mock MongoEventLogger mongoEventLogger;
     @Mock RedisCacheService cache;
     @Mock MongoTemplate mongoTemplate;
+    @Mock org.springframework.context.ApplicationEventPublisher eventPublisher;
     @Mock UserServiceClient userServiceClient;
     @Mock RideServiceClient rideServiceClient;
     @Mock DriverServiceClient driverServiceClient;
@@ -108,7 +109,7 @@ class SagaIntegrationTest {
     void setUp() {
         paymentService = new PaymentService(
                 paymentRepository, couponRepository, paymentCouponRepository,
-                mongoEventLogger, cache, mongoTemplate,
+                mongoEventLogger, cache, mongoTemplate, eventPublisher,
                 userServiceClient, rideServiceClient, driverServiceClient,
                 rabbitTemplate);
 
