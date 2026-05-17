@@ -53,53 +53,72 @@ import static org.mockito.Mockito.*;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 /**
- * Saga integration tests for the payment-service's role in the Ride Lifecycle Saga.
+ * Saga integration tests for the payment-service's role in the Ride Lifecycle
+ * Saga.
  *
- * ──── SCOPE ────────────────────────────────────────────────────────────────────
+ * ──── SCOPE
+ * ────────────────────────────────────────────────────────────────────
  * These tests verify payment-service's COMPONENT-LEVEL saga behaviour using
  * Mockito mocks for all external dependencies (other services, DB, RabbitMQ).
  * They do NOT spin up a real RabbitMQ broker or a real Postgres database.
  *
- * ──── WHAT CANNOT BE TESTED HERE (MANUAL / E2E) ───────────────────────────────
+ * ──── WHAT CANNOT BE TESTED HERE (MANUAL / E2E)
+ * ───────────────────────────────
  * True end-to-end saga verification (§8.6 scenarios) requires all 5 services
- * running inside MiniKube. Manual steps are documented in each test class below.
+ * running inside MiniKube. Manual steps are documented in each test class
+ * below.
  *
- *   Scenario A — full happy-path E2E manual steps:
- *     1. kubectl apply -f k8s/ (all services running)
- *     2. POST /api/auth/register (create user + driver)
- *     3. POST /api/rides → PUT /api/rides/{id}/assign → PUT /api/rides/{id}/start
- *     4. PUT /api/rides/{id}/complete → expect 200, ride=COMPLETED
- *        → poll GET /api/rides/{id} until status=PAYMENT_PENDING (RabbitMQ async)
- *     5. POST /api/payments/ride/{id} {"method":"CREDIT_CARD","cardLastFour":"4242"}
- *        → expect 201, payment=COMPLETED
- *        → poll GET /api/rides/{id} until status=PAID
+ * Scenario A — full happy-path E2E manual steps:
+ * 1. kubectl apply -f k8s/ (all services running)
+ * 2. POST /api/auth/register (create user + driver)
+ * 3. POST /api/rides → PUT /api/rides/{id}/assign → PUT /api/rides/{id}/start
+ * 4. PUT /api/rides/{id}/complete → expect 200, ride=COMPLETED
+ * → poll GET /api/rides/{id} until status=PAYMENT_PENDING (RabbitMQ async)
+ * 5. POST /api/payments/ride/{id}
+ * {"method":"CREDIT_CARD","cardLastFour":"4242"}
+ * → expect 201, payment=COMPLETED
+ * → poll GET /api/rides/{id} until status=PAID
  *
- *   Scenario B — payment failure cascade E2E manual steps:
- *     1-4. Same as Scenario A to reach ride=PAYMENT_PENDING
- *     5. POST /api/payments/ride/{id} {"method":"BITCOIN"} → 400, payment.failed published
- *        → poll GET /api/rides/{id} until status=REFUNDED (multi-hop cascade takes ~3s)
+ * Scenario B — payment failure cascade E2E manual steps:
+ * 1-4. Same as Scenario A to reach ride=PAYMENT_PENDING
+ * 5. POST /api/payments/ride/{id} {"method":"BITCOIN"} → 400, payment.failed
+ * published
+ * → poll GET /api/rides/{id} until status=REFUNDED (multi-hop cascade takes
+ * ~3s)
  *
- *   Scenario C — pre-check failure (no recent location ping):
- *     This scenario is entirely within ride-service (location-service Feign pre-check).
- *     No payment-service participation — tested manually:
- *     1. Ensure driver's last location ping is > 5 minutes old
- *     2. PUT /api/rides/{id}/complete → expect 400 "driver not actively tracked"
- *     3. GET /api/rides/{id} → status still IN_PROGRESS
+ * Scenario C — pre-check failure (no recent location ping):
+ * This scenario is entirely within ride-service (location-service Feign
+ * pre-check).
+ * No payment-service participation — tested manually:
+ * 1. Ensure driver's last location ping is > 5 minutes old
+ * 2. PUT /api/rides/{id}/complete → expect 400 "driver not actively tracked"
+ * 3. GET /api/rides/{id} → status still IN_PROGRESS
  */
 @ExtendWith(MockitoExtension.class)
 class SagaIntegrationTest {
 
-    @Mock PaymentRepository paymentRepository;
-    @Mock CouponRepository couponRepository;
-    @Mock PaymentCouponRepository paymentCouponRepository;
-    @Mock MongoEventLogger mongoEventLogger;
-    @Mock RedisCacheService cache;
-    @Mock MongoTemplate mongoTemplate;
-    @Mock org.springframework.context.ApplicationEventPublisher eventPublisher;
-    @Mock UserServiceClient userServiceClient;
-    @Mock RideServiceClient rideServiceClient;
-    @Mock DriverServiceClient driverServiceClient;
-    @Mock RabbitTemplate rabbitTemplate;
+    @Mock
+    PaymentRepository paymentRepository;
+    @Mock
+    CouponRepository couponRepository;
+    @Mock
+    PaymentCouponRepository paymentCouponRepository;
+    @Mock
+    MongoEventLogger mongoEventLogger;
+    @Mock
+    RedisCacheService cache;
+    @Mock
+    MongoTemplate mongoTemplate;
+    @Mock
+    org.springframework.context.ApplicationEventPublisher eventPublisher;
+    @Mock
+    UserServiceClient userServiceClient;
+    @Mock
+    RideServiceClient rideServiceClient;
+    @Mock
+    DriverServiceClient driverServiceClient;
+    @Mock
+    RabbitTemplate rabbitTemplate;
 
     PaymentService paymentService;
     RideEventConsumer rideEventConsumer;
@@ -372,16 +391,18 @@ class SagaIntegrationTest {
         /**
          * Scenario C is fully owned by ride-service: if location-service returns 404
          * for GET /api/locations/driver/{id}/recent, ride-service returns 400 and
-         * publishes NO events. Payment-service never receives ride.completed in this case.
+         * publishes NO events. Payment-service never receives ride.completed in this
+         * case.
          *
          * From payment-service's perspective, the invariant is:
-         *   if no ride.completed was ever published → no PENDING payment is created.
+         * if no ride.completed was ever published → no PENDING payment is created.
          *
          * Manual E2E steps for Scenario C:
-         *   1. Set driver's last location ping to > 5 minutes ago in location-postgres.
-         *   2. PUT /api/rides/{id}/complete → expect HTTP 400 ("driver not actively tracked").
-         *   3. GET /api/rides/{id} → status still = IN_PROGRESS.
-         *   4. GET /api/payments?rideId={id} → no payment record for this ride.
+         * 1. Set driver's last location ping to > 5 minutes ago in location-postgres.
+         * 2. PUT /api/rides/{id}/complete → expect HTTP 400 ("driver not actively
+         * tracked").
+         * 3. GET /api/rides/{id} → status still = IN_PROGRESS.
+         * 4. GET /api/payments?rideId={id} → no payment record for this ride.
          */
         @Test
         @DisplayName("C1: if ride.completed is never published, no payment is created for that rideId")

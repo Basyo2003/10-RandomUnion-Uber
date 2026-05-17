@@ -354,6 +354,26 @@ services:
         condition: service_healthy
     restart: on-failure
 
+  api-gateway:
+    build: ./api-gateway
+    container_name: uber-api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      JWT_SECRET: dVJlckp3dFNoYXJlZFNlY3JldEtleUZvckFsbEZpdmVTZXJ2aWNlczEyMzQ1Ng==
+    depends_on:
+      user-service:
+        condition: service_started
+      driver-service:
+        condition: service_started
+      ride-service:
+        condition: service_started
+      location-service:
+        condition: service_started
+      payment-service:
+        condition: service_started
+    restart: on-failure
+
 volumes:
   user-pgdata:
   driver-pgdata:

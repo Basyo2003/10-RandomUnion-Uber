@@ -1,5 +1,8 @@
 package com.team10.uber.user.service;
 
+import com.team10.uber.contracts.feign.PaymentServiceClient;
+import com.team10.uber.contracts.feign.RideServiceClient;
+import com.team10.uber.contracts.dto.RideSummaryDTO;
 import com.team10.uber.user.adapter.ObjectArrayDtoAdapter;
 import com.team10.uber.user.adapter.TopRiderDtoAdapter;
 import com.team10.uber.user.dto.AddressDTO;
@@ -22,8 +25,12 @@ import com.team10.uber.user.observer.MongoEventLogger;
 import com.team10.uber.user.repository.SavedAddressRepository;
 import com.team10.uber.user.repository.UserRepository;
 import com.team10.uber.user.repository.mongo.AuthEventRepository;
+import feign.FeignException;
 import jakarta.annotation.PostConstruct;
 import jakarta.transaction.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.cache.annotation.CacheEvict;
@@ -36,12 +43,15 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.*;
 
 @Service
 public class UserService extends AbstractObservableService {
+
+    private static final Logger log = LoggerFactory.getLogger(UserService.class);
 
     private final UserRepository userRepository;
     private final SavedAddressRepository savedAddressRepository;
@@ -50,16 +60,20 @@ public class UserService extends AbstractObservableService {
     private final PasswordEncoder passwordEncoder;
     private final MongoEventLogger mongoEventLogger;
     private final UserEventPublisher userEventPublisher;
+    private final RideServiceClient rideServiceClient;
+    private final PaymentServiceClient paymentServiceClient;
     private final ObjectArrayDtoAdapter objectArrayDtoAdapter = new ObjectArrayDtoAdapter();
     private final TopRiderDtoAdapter topRiderDtoAdapter = new TopRiderDtoAdapter();
 
-
-
     public UserService(UserRepository userRepository,
                        SavedAddressRepository savedAddressRepository,
-                       AuthEventRepository authEventRepository, EntityObserver observer,
-                       PasswordEncoder passwordEncoder, MongoEventLogger mongoEventLogger,
-                       UserEventPublisher userEventPublisher) {
+                       AuthEventRepository authEventRepository,
+                       EntityObserver observer,
+                       PasswordEncoder passwordEncoder,
+                       MongoEventLogger mongoEventLogger,
+                       UserEventPublisher userEventPublisher,
+                       RideServiceClient rideServiceClient,
+                       PaymentServiceClient paymentServiceClient) {
         this.userRepository = userRepository;
         this.savedAddressRepository = savedAddressRepository;
         this.authEventRepository = authEventRepository;
@@ -67,6 +81,8 @@ public class UserService extends AbstractObservableService {
         this.passwordEncoder = passwordEncoder;
         this.mongoEventLogger = mongoEventLogger;
         this.userEventPublisher = userEventPublisher;
+        this.rideServiceClient = rideServiceClient;
+        this.paymentServiceClient = paymentServiceClient;
     }
 
     @PostConstruct
@@ -208,16 +224,38 @@ public class UserService extends AbstractObservableService {
         return userProfileDTO;
     }
 
+    // S1-F3: Refactored to use Feign → ride-service
     @Cacheable(value = "user-service::S1-F3", key = "#id")
     public UserRideSummaryDTO getUserRideSummary(Long id) {
         User user = findUserByIdOrThrow(id);
-        List<Object[]> resultRows = userRepository.getRideSummaryByUserId(id);
-        Object[] result = resultRows.isEmpty() ? new Object[]{0L, 0L, 0L, 0.0, 0.0} : resultRows.get(0);
-        return objectArrayDtoAdapter.adapt(user.getId(), user.getName(), result);
+        MDC.put("userId", id.toString());
+        try {
+            log.info("Calling RideServiceClient.getUserRideSummary with args={}", id);
+            RideSummaryDTO summary = rideServiceClient.getUserRideSummary(id);
+            log.info("RideServiceClient.getUserRideSummary returned successfully");
+            return new UserRideSummaryDTO(
+                    user.getId(),
+                    user.getName(),
+                    summary.totalRides(),
+                    summary.completedRides(),
+                    summary.cancelledRides(),
+                    summary.totalSpent(),
+                    summary.averageFare()
+            );
+        } catch (FeignException.NotFound e) {
+            log.warn("Feign call to ride-service failed: {}", e.getMessage());
+            return new UserRideSummaryDTO(user.getId(), user.getName(), 0L, 0L, 0L, 0.0, 0.0);
+        } catch (FeignException e) {
+            log.warn("Feign call to ride-service failed: {}", e.getMessage());
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Ride service temporarily unavailable");
+        } finally {
+            MDC.remove("userId");
+        }
     }
 
-    @Cacheable(value = "user-service::S1-F6",
-        key = "#startDate + '_' + #endDate + '_' + #limit")
+    // S1-F6: Refactored to use Feign → payment-service per user
+    @Cacheable(value = "user-service::S1-F6", key = "#startDate + '_' + #endDate + '_' + #limit")
     public List<TopRiderDTO> getTopRiders(String startDate, String endDate, int limit) {
         try {
             LocalDate start = LocalDate.parse(startDate);
@@ -231,33 +269,72 @@ public class UserService extends AbstractObservableService {
                     "Invalid date format. Use yyyy-MM-dd");
         }
 
-        String startDateTime = startDate + " 00:00:00";
-        String endDateTime   = endDate + " 23:59:59";
+        // Cap at 100 users per §2.12 N+1 hazard guidance
+        List<User> users = userRepository.findAll(PageRequest.of(0, 100)).getContent();
 
-        List<Object[]> results = userRepository.getTopRidersBySpending(
-                startDateTime, endDateTime, limit);
+        List<TopRiderDTO> topRiders = new ArrayList<>();
+        for (User user : users) {
+            log.info("Calling PaymentServiceClient.getUserPaymentTotal with args={}", user.getId());
+            try {
+                BigDecimal total = paymentServiceClient.getUserPaymentTotal(
+                        user.getId(), startDate, endDate);
+                log.info("PaymentServiceClient.getUserPaymentTotal returned successfully");
+                if (total != null && total.compareTo(BigDecimal.ZERO) > 0) {
+                    topRiders.add(new TopRiderDTO(
+                            user.getId(),
+                            user.getName(),
+                            total.doubleValue(),
+                            0L
+                    ));
+                }
+            } catch (FeignException e) {
+                log.warn("Feign call to payment-service failed for userId={}: {}",
+                        user.getId(), e.getMessage());
+            }
+        }
 
-        // §3.8 — Use Adapter instead of inline Object[] mapping
-        return topRiderDtoAdapter.adaptAll(results);
+        topRiders.sort((a, b) -> Double.compare(b.getTotalSpent(), a.getTotalSpent()));
+        return topRiders.stream().limit(limit).toList();
     }
 
     @Cacheable(value = "user-service::S1-F5", key = "#key + '_' + #value")
     public List<User> searchByPreference(String key, String value) {
         if (key == null || key.trim().isEmpty() || value == null || value.trim().isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Key and value must not be blank");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Key and value must not be blank");
         }
         return userRepository.searchByPreference(key, value);
     }
 
+    // S1-F9: Refactored to use Feign → ride-service per matching user
     @Cacheable(value = "user-service::S1-F9", key = "#lang + '_' + #minRides")
     public List<User> searchByLanguageAndRides(String lang, Integer minRides) {
         if (lang == null || lang.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Language is required");
         }
         int rides = (minRides != null) ? minRides : 0;
-        return userRepository.findUsersByLanguageAndCompletedRides(lang, rides);
+
+        // Query local user-postgres for language preference, cap at 100 per §2.12
+        List<User> candidates = userRepository.findByLanguagePreference(lang, 100);
+
+        List<User> result = new ArrayList<>();
+        for (User user : candidates) {
+            log.info("Calling RideServiceClient.getCompletedRideCount with args={}", user.getId());
+            try {
+                long completedCount = rideServiceClient.getCompletedRideCount(user.getId());
+                log.info("RideServiceClient.getCompletedRideCount returned successfully");
+                if (completedCount >= rides) {
+                    result.add(user);
+                }
+            } catch (FeignException e) {
+                log.warn("Feign call to ride-service failed for userId={}: {}",
+                        user.getId(), e.getMessage());
+            }
+        }
+        return result;
     }
 
+    // S1-F4: Refactored to use Feign → ride-service for active-count
     @Transactional
     @Caching(evict = {
             @CacheEvict(value = "user-service::user", key = "#id"),
@@ -269,13 +346,29 @@ public class UserService extends AbstractObservableService {
         if (user.getStatus() == Status.DEACTIVATED) {
             return user;
         }
-        if (userRepository.hasActiveRides(id)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User has active rides");
+
+        MDC.put("userId", id.toString());
+        try {
+            log.info("Calling RideServiceClient.getActiveRideCount with args={}", id);
+            int activeCount = rideServiceClient.getActiveRideCount(id);
+            log.info("RideServiceClient.getActiveRideCount returned successfully");
+            if (activeCount > 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User has active rides");
+            }
+        } catch (FeignException e) {
+            log.warn("Feign call to ride-service failed: {}", e.getMessage());
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Ride service temporarily unavailable");
+        } finally {
+            MDC.remove("userId");
         }
+
         user.setStatus(Status.DEACTIVATED);
         User saved = userRepository.save(user);
+        log.info("User {} saved with status=DEACTIVATED", saved.getId());
         notifyObservers("USER_DEACTIVATED", Map.of("userId", id, "status", "DEACTIVATED"));
-        afterCommit(() -> userEventPublisher.publishUserDeactivated(new UserDeactivatedEvent(saved.getId())));
+        afterCommit(() -> userEventPublisher.publishUserDeactivated(
+                new UserDeactivatedEvent(saved.getId())));
         return saved;
     }
 
@@ -287,9 +380,11 @@ public class UserService extends AbstractObservableService {
     public UserProfileDTO setDefaultSavedAddress(Long userId, Long addressId) {
         User user = findUserByIdOrThrow(userId);
         SavedAddress targetAddress = savedAddressRepository.findById(addressId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Saved address not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Saved address not found"));
         if (!targetAddress.getUser().getId().equals(userId)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Saved address does not belong to this user");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Saved address does not belong to this user");
         }
         for (SavedAddress address : user.getSavedAddresses()) {
             address.setIsDefault(false);
@@ -329,51 +424,28 @@ public class UserService extends AbstractObservableService {
         return saved;
     }
 
-    private void logEvent(Long userId, String action, Map<String, Object> details) {
-        try {
-            // §3.3 — Observer handles MongoDB persistence
-            Map<String, Object> payload = new HashMap<>(details);
-            payload.put("userId", userId);
-            notifyObservers(action, payload);
-        } catch (Exception e) {
-            // §3.3 — soft dependency, never rethrow
-        }
-    }
-
-    private User findUserByIdOrThrow(Long id) {
-        return userRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found with id: " + id));
-    }
-
     @Transactional
     public User registerUser(User user) {
-// a) Validation: Check for null OR empty/blank strings
         if (user.getName() == null || user.getName().isBlank() ||
                 user.getEmail() == null || user.getEmail().isBlank() ||
                 user.getPassword() == null || user.getPassword().isBlank() ||
                 user.getPhone() == null || user.getPhone().isBlank()) {
-
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Field cannot be blank");
         }
-        // b) Uniqueness Check
         if (userRepository.existsByEmail(user.getEmail()) ||
                 userRepository.existsByPhone(user.getPhone())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Email or Phone already exists");
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Email or Phone already exists");
         }
-        // d) Default Role & Status
         user.setPassword(passwordEncoder.encode(user.getPassword()));
         user.setRole(Role.RIDER);
         user.setStatus(Status.ACTIVE);
 
-        // Save to PostgreSQL
         User savedUser = userRepository.save(user);
-
-        // e) Log to MongoDB via Observer Pattern
-        // This uses your MongoEventLogger and EventFactory internally
         observer.onEvent("REGISTERED", savedUser);
         afterCommit(() -> userEventPublisher.publishUserRegistered(
-                new UserRegisteredEvent(savedUser.getId(), savedUser.getEmail(), savedUser.getRole().name())));
-
+                new UserRegisteredEvent(savedUser.getId(), savedUser.getEmail(),
+                        savedUser.getRole().name())));
         return savedUser;
     }
 
@@ -389,16 +461,23 @@ public class UserService extends AbstractObservableService {
             }
         });
     }
-//     public void logAuthEvent(Long userId, String action, Map<String, Object> details) {
-//         try {
-//             authEventRepository.save(new AuthEvent(userId, action, details));
-//         } catch (Exception e) {
 
-//         }
-//     }
-// public void logAuthEvent(Long userId, String action, Map<String, Object> details) {
-// logEvent(userId, action, details);
-// }
+    private void logEvent(Long userId, String action, Map<String, Object> details) {
+        try {
+            Map<String, Object> payload = new HashMap<>(details);
+            payload.put("userId", userId);
+            notifyObservers(action, payload);
+        } catch (Exception e) {
+            // soft dependency, never rethrow
+        }
+    }
+
+    private User findUserByIdOrThrow(Long id) {
+        return userRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "User not found with id: " + id));
+    }
+
     private AuthEventDTO toAuthEventDto(AuthEvent event) {
         AuthEventDTO dto = new AuthEventDTO();
         dto.setId(event.getId());

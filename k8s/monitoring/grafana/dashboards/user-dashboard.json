@@ -45,6 +45,45 @@
         }
       ],
       "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Error Rate",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "sum(count_over_time({app=\"uber\", service=\"user-service\", level=\"ERROR\"} | json [1m]))",
+          "legendFormat": "errors/min"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "RabbitMQ Event Audit",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "sum by (routingKey) (count_over_time({app=\"uber\", service=\"user-service\"} | json | routingKey != \"\" [5m]))",
+          "legendFormat": "{{routingKey}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Feign Call Outcomes",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "sum(count_over_time({app=\"uber\", service=\"user-service\"} | json | message =~ \"Feign call.*\" [5m]))",
+          "legendFormat": "feign calls"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 }
     }
   ]
 }

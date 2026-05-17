@@ -4,6 +4,8 @@ metadata:
   name: gateway-configmap
   namespace: uber
 data:
+  SPRING_APPLICATION_NAME: api-gateway
+  SERVER_PORT: "8080"
   SPRING_CLOUD_GATEWAY_ROUTES_0_ID: user-service
   SPRING_CLOUD_GATEWAY_ROUTES_0_URI: http://user-service:8080
   SPRING_CLOUD_GATEWAY_ROUTES_1_ID: driver-service

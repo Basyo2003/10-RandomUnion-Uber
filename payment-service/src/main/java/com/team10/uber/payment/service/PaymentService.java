@@ -59,20 +59,6 @@ import com.team10.uber.payment.strategy.RefundStrategySelector;
 
 import feign.FeignException;
 import jakarta.annotation.PostConstruct;
-import com.team10.uber.contracts.dto.DriverDTO;
-import com.team10.uber.contracts.dto.RideDTO;
-import com.team10.uber.contracts.feign.DriverServiceClient;
-import com.team10.uber.contracts.feign.RideServiceClient;
-import com.team10.uber.contracts.feign.UserServiceClient;
-import com.team10.uber.payment.config.PaymentRabbitConfig;
-import feign.FeignException;
-import org.slf4j.MDC;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
-
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
-import java.util.*;
-import java.util.stream.Collectors;
 
 @Service
 public class PaymentService extends AbstractObservableService {
@@ -95,12 +81,9 @@ public class PaymentService extends AbstractObservableService {
     private final DriverServiceClient driverServiceClient;
     private final RabbitTemplate rabbitTemplate;
     // §3.8 — Adapter instances
-    private final com.team10.uber.payment.adapter.PaymentSummaryAdapter paymentSummaryAdapter
-            = new com.team10.uber.payment.adapter.PaymentSummaryAdapter();
-    private final com.team10.uber.payment.adapter.RevenueReportAdapter revenueReportAdapter
-            = new com.team10.uber.payment.adapter.RevenueReportAdapter();
-    private final com.team10.uber.payment.adapter.CouponUsageAdapter couponUsageAdapter
-            = new com.team10.uber.payment.adapter.CouponUsageAdapter();
+    private final com.team10.uber.payment.adapter.PaymentSummaryAdapter paymentSummaryAdapter = new com.team10.uber.payment.adapter.PaymentSummaryAdapter();
+    private final com.team10.uber.payment.adapter.RevenueReportAdapter revenueReportAdapter = new com.team10.uber.payment.adapter.RevenueReportAdapter();
+    private final com.team10.uber.payment.adapter.CouponUsageAdapter couponUsageAdapter = new com.team10.uber.payment.adapter.CouponUsageAdapter();
 
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
@@ -168,8 +151,8 @@ public class PaymentService extends AbstractObservableService {
         notifyObservers("CREATED", saved);
 
         // saveAuditEvent(saved, "CREATED", Map.of(
-        //         "rideId", saved.getRideId(),
-        //         "userId", saved.getUserId()));
+        // "rideId", saved.getRideId(),
+        // "userId", saved.getUserId()));
 
         // §4.4.4 — invalidate search/list caches on new payment
         cache.evictByPattern("S5-F1::*");
@@ -217,7 +200,7 @@ public class PaymentService extends AbstractObservableService {
         notifyObservers("PAYMENT_DELETED", payment);
 
         // saveAuditEvent(payment, "PAYMENT_DELETED", Map.of(
-        //         "paymentId", id));
+        // "paymentId", id));
 
         evictPaymentCaches(id);
         evictAnalyticsCaches();
@@ -259,8 +242,8 @@ public class PaymentService extends AbstractObservableService {
         notifyObservers("REFUNDED", saved);
 
         // saveAuditEvent(saved, "REFUNDED", Map.of(
-        //         "refundReason", reason,
-        //         "refundedAt", LocalDateTime.now().toString()));
+        // "refundReason", reason,
+        // "refundedAt", LocalDateTime.now().toString()));
 
         evictPaymentCaches(id);
         evictAnalyticsCaches();
@@ -295,7 +278,9 @@ public class PaymentService extends AbstractObservableService {
         MDC.remove("userId");
         return result;
     }
-    // §7 S5-F4: Feign replaces cross-service SQL; validates PAYMENT_PENDING; publishes events
+
+    // §7 S5-F4: Feign replaces cross-service SQL; validates PAYMENT_PENDING;
+    // publishes events
     @Transactional
     public Payment processPaymentForRide(Long rideId, ProcessPaymentDTO dto, boolean simulateFailure) {
         log.info("processPaymentForRide: rideId={}", rideId);
@@ -342,67 +327,35 @@ public class PaymentService extends AbstractObservableService {
             }
         }
 
+        // d-ii) Unsupported method is a payment failure — publish payment.failed + return 400
         try {
             payment.setMethod(PaymentMethod.valueOf(dto.getMethod()));
         } catch (IllegalArgumentException e) {
-
             payment.setStatus(PaymentStatus.FAILED);
-
             Map<String, Object> failDetails = new HashMap<>();
             failDetails.put("gatewayResponse", "declined");
-            failDetails.put(
-                    "failureReason",
-                    "unsupported payment method: " + dto.getMethod()
-            );
-
+            failDetails.put("failureReason", "unsupported payment method: " + dto.getMethod());
             payment.setTransactionDetails(failDetails);
-
             Payment failSaved = paymentRepository.save(payment);
-
-            rabbitTemplate.convertAndSend(
-                    PaymentRabbitConfig.PAYMENT_EXCHANGE,
+            rabbitTemplate.convertAndSend(PaymentRabbitConfig.PAYMENT_EXCHANGE,
                     PaymentRabbitConfig.ROUTING_KEY_FAILED,
-                    new PaymentFailedEvent(
-                            failSaved.getId(),
-                            rideId,
-                            "unsupported payment method: " + dto.getMethod()
-                    )
-            );
-
-            log.info(
-                    "payment.failed published (unsupported method): paymentId={}, rideId={}",
-                    failSaved.getId(),
-                    rideId
-            );
-
-            MDC.remove("rideId");
-            MDC.remove("paymentId");
-            MDC.remove("userId");
-
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Unsupported payment method: " + dto.getMethod()
-            );
+                    new com.team10.uber.contracts.events.PaymentFailedEvent(
+                            failSaved.getId(), rideId, "unsupported payment method: " + dto.getMethod()));
+            log.info("payment.failed published (unsupported method): paymentId={}, rideId={}", failSaved.getId(), rideId);
+            MDC.remove("rideId"); MDC.remove("paymentId"); MDC.remove("userId");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Unsupported payment method: " + dto.getMethod());
         }
 
         // e) Compute surgeFee from ride metadata (15% fallback)
-        Double fare = paymentRepository.findRideFareById(rideId);
-        Long userId = paymentRepository.findRideUserIdById(rideId);
+        double amount = payment.getAmount() != null ? payment.getAmount()
+                : (ride.fare() != null ? ride.fare() : 0.0);
+        Object surgeMult = ride.metadata() != null ? ride.metadata().get("surgeMultiplier") : null;
+        double surgeFee = surgeMult != null
+                ? amount * (Double.parseDouble(surgeMult.toString()) - 1.0)
+                : amount * 0.15;
 
-        double amount = fare != null ? fare : 0.0;
 
-        String surgeMultStr =
-                paymentRepository.findSurgeMultiplierByRideId(rideId);
-
-        double surgeFee;
-
-        if (surgeMultStr != null) {
-            double multiplier = Double.parseDouble(surgeMultStr);
-            surgeFee = amount * (multiplier - 1.0);
-        } else {
-            surgeFee = amount * 0.15;
-        }
-        
         Map<String, Object> transactionDetails = new HashMap<>();
         transactionDetails.put("gatewayResponse", "success");
         transactionDetails.put("cardLastFour", dto.getCardLastFour());
@@ -438,14 +391,6 @@ public class PaymentService extends AbstractObservableService {
                 Map.of("paymentId", saved.getId(), "rideId", rideId, "userId", saved.getUserId()));
         log.info("payment.completed published: paymentId={}, rideId={}", saved.getId(), rideId);
 
-        // saveAuditEvent(saved, "COMPLETED", Map.of(
-        //         "rideId", rideId,
-        //         "surgeFee", surgeFee,
-        //         "gatewayResponse", "success"));
-
-        // 
-        eventPublisher.publishEvent(new PaymentCompletedEvent(saved.getId(), saved.getRideId(), saved.getAmount()));
-        
         cache.evictByPattern("S5-F1::*");
         cache.evictByPattern("S5-F3::" + saved.getUserId());
         evictAnalyticsCaches();
@@ -521,6 +466,7 @@ public class PaymentService extends AbstractObservableService {
         cache.put(key, result, TTL_ANALYTICS);
         return result;
     }
+
     // §4.4.1 — S5-F7: retry payment — write, invalidates caches
     @Transactional
     public Payment retryPayment(Long id) {
@@ -605,7 +551,8 @@ public class PaymentService extends AbstractObservableService {
 
     // ── M2 Features ──────────────────────────────────────────────────────────
 
-    // §10.5.1 S5-F10: local query (cap 100) + per-ride Feign + driverId→vehicleType cache (§2.12)
+    // §10.5.1 S5-F10: local query (cap 100) + per-ride Feign + driverId→vehicleType
+    // cache (§2.12)
     public List<VehicleTypeRevenueDTO> getFareRevenueByVehicleType(String startDateStr, String endDateStr) {
         long startTime = System.currentTimeMillis();
         LocalDateTime startDate = parseDate(startDateStr, false);
@@ -799,7 +746,8 @@ public class PaymentService extends AbstractObservableService {
         return saved;
     }
 
-    // S5-READ-DB: total completed payments for a user in a date range (called by user-service via Feign)
+    // S5-READ-DB: total completed payments for a user in a date range (called by
+    // user-service via Feign)
     public BigDecimal getUserPaymentTotal(Long userId, String startDate, String endDate) {
         log.info("getUserPaymentTotal: userId={}, startDate={}, endDate={}", userId, startDate, endDate);
         MDC.put("userId", String.valueOf(userId));
@@ -824,7 +772,8 @@ public class PaymentService extends AbstractObservableService {
                 : LocalDateTime.parse(date + "T00:00:00");
     }
 
-    // §7.1.6 — Save PaymentAuditEvent to MongoDB via EventFactory (Factory pattern — no direct new)
+    // §7.1.6 — Save PaymentAuditEvent to MongoDB via EventFactory (Factory pattern
+    // — no direct new)
     private void saveAuditEvent(Payment payment, String action, Map<String, Object> details) {
         try {
             boolean requiresMethodAndAmount = List.of(
@@ -848,7 +797,8 @@ public class PaymentService extends AbstractObservableService {
             log.warn("MongoDB audit event write failed: {}", e.getMessage());
         }
     }
-    // §7.1.6 — Save PaymentAuditEvent to MongoDB via Observer pattern (EventFactory handles creation)
+    // §7.1.6 — Save PaymentAuditEvent to MongoDB via Observer pattern (EventFactory
+    // handles creation)
 
     private void logPaymentEvent(Payment payment, String action, Map<String, Object> details) {
         Map<String, Object> merged = new HashMap<>(details);
