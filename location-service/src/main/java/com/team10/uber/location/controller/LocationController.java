@@ -137,12 +137,12 @@ public class LocationController {
     public List<NearbyDriverDTO> getNearbyDrivers(
             @RequestParam Double lat,
             @RequestParam Double lon,
-            @RequestParam Double radiusKm
+            @RequestParam Double radiusKm,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
     ) {
-        return locationService.findNearbyAvailableDrivers(lat, lon, radiusKm);
+        return locationService.findNearbyAvailableDrivers(lat, lon, radiusKm, page, size);
     }
-
-
 
     //S4-F4
     @PostMapping("/batch")

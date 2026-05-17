@@ -19,4 +19,7 @@ public final class LocationEventActions {
     public static final String LATEST_LOCATION_VIEWED = "LATEST_LOCATION_VIEWED"; // S4-F1
     public static final String NEARBY_DRIVERS_VIEWED = "NEARBY_DRIVERS_VIEWED"; // S4-F3
     public static final String STATIONARY_DRIVERS_VIEWED = "STATIONARY_DRIVERS_VIEWED"; // S4-F9
+    //M3
+    public static final String TRIP_COMPLETED = "TRIP_COMPLETED";
+    public static final String TRIP_CANCELLED = "TRIP_CANCELLED";
 }
