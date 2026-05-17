@@ -44,8 +44,8 @@ public interface LocationRepository extends JpaRepository<Location, Long> {
     
     // S4-F1
     Optional<Location> findTopByDriverIdOrderByTimestampDesc(Long driverId);
-  
-  
+
+
   //S4-F3
   @Query(value = """
     SELECT l.driver_id, l.latitude, l.longitude
@@ -55,6 +55,7 @@ public interface LocationRepository extends JpaRepository<Location, Long> {
         FROM locations l2
         WHERE l2.driver_id = l.driver_id
     )
+    LIMIT 100
     """, nativeQuery = true)
   List<Object[]> findLatestDriverLocations();
 
@@ -153,23 +154,25 @@ public interface LocationRepository extends JpaRepository<Location, Long> {
 
     // S4-F9
     @Query(value = """
-        SELECT
-            l.driver_id AS driverId,
-            l.latitude AS latitude,
-            l.longitude AS longitude,
-            CAST(l.metadata ->> 'speed' AS DOUBLE PRECISION) AS lastSpeed,
-            l.timestamp AS lastUpdated
-        FROM locations l
-        JOIN (
-            SELECT driver_id, MAX(timestamp) AS max_timestamp
-            FROM locations
-            GROUP BY driver_id
-        ) latest
-            ON l.driver_id = latest.driver_id
-           AND l.timestamp = latest.max_timestamp
-        WHERE CAST(l.metadata ->> 'speed' AS DOUBLE PRECISION) <= :maxSpeed
-          AND l.timestamp >= :cutoffTime
-        """, nativeQuery = true)
+    SELECT
+        l.driver_id AS driverId,
+        l.latitude AS latitude,
+        l.longitude AS longitude,
+        CAST(l.metadata ->> 'speed' AS DOUBLE PRECISION) AS lastSpeed,
+        l.timestamp AS lastUpdated
+    FROM locations l
+    JOIN (
+        SELECT driver_id, MAX(timestamp) AS max_timestamp
+        FROM locations
+        GROUP BY driver_id
+    ) latest
+        ON l.driver_id = latest.driver_id
+       AND l.timestamp = latest.max_timestamp
+    WHERE CAST(l.metadata ->> 'speed' AS DOUBLE PRECISION) <= :maxSpeed
+      AND l.timestamp >= :cutoffTime
+    ORDER BY l.timestamp ASC
+    LIMIT 100
+    """, nativeQuery = true)
     List<StationaryDriverProjection> findStationaryDrivers(
             @Param("maxSpeed") Double maxSpeed,
             @Param("cutoffTime") LocalDateTime cutoffTime
