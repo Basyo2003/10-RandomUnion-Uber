@@ -4,9 +4,9 @@ metadata:
   name: payment-service
   namespace: uber
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector:
     app: payment-service
   ports:
-    - port: 8085
+    - port: 8080
       targetPort: 8080

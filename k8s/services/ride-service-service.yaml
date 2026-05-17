@@ -4,9 +4,9 @@ metadata:
   name: ride-service
   namespace: uber
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector:
     app: ride-service
   ports:
-    - port: 8083
+    - port: 8080
       targetPort: 8080

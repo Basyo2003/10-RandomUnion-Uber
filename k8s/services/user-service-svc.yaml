@@ -4,9 +4,9 @@ metadata:
   name: user-service
   namespace: uber
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector:
     app: user-service
   ports:
-    - port: 8081
+    - port: 8080
       targetPort: 8080

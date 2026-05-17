@@ -1,10 +1,37 @@
 #!/usr/bin/env bash
 # Full cluster deployment script for the Uber Ride-Hailing Platform (M3).
-# Run from the repo root: bash k8s/deploy-all.sh
+# Run from the repo root: bash k8s/deploy-all.sh [--build]
+# --build  : build JARs, Docker images, and load into Minikube before deploying (first run)
 # Requires: kubectl configured against the target cluster.
 
 set -euo pipefail
 K8S="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(dirname "$K8S")"
+
+# ── 0. Build (--build flag) ────────────────────────────────────────────────────
+BUILD=false
+for arg in "$@"; do [[ "$arg" == "--build" ]] && BUILD=true; done
+
+if $BUILD; then
+  echo "[0/9] Building JARs, Docker images, and loading into Minikube"
+
+  echo "  Building all Maven modules (skipping tests) ..."
+  (cd "$ROOT" && ./mvnw package -DskipTests -q)
+
+  SERVICES=(user-service driver-service payment-service ride-service location-service api-gateway)
+  for svc in "${SERVICES[@]}"; do
+    echo "  docker build $svc ..."
+    docker build -t "$svc:latest" "$ROOT/$svc"
+  done
+
+  echo "  Loading images into Minikube ..."
+  for svc in "${SERVICES[@]}"; do
+    echo "    minikube image load $svc:latest"
+    minikube image load "$svc:latest"
+  done
+
+  echo "  Build complete."
+fi
 
 wait_ready() {
   local kind="$1" name="$2" ns="${3:-uber}" timeout="${4:-600s}"
@@ -145,24 +172,36 @@ kubectl apply -f "$K8S/monitoring/grafana/grafana-deployment.yaml"
 kubectl apply -f "$K8S/monitoring/grafana/grafana-service.yaml"
 wait_ready deployment grafana monitoring 600s
 
-# ── 9. Minikube Tunnel (exposes LoadBalancer services on localhost) ───────────
-echo "[9/9] Minikube Tunnel"
-SERVICE_DST="/etc/systemd/system/minikube-tunnel.service"
-if systemctl is-active --quiet minikube-tunnel 2>/dev/null; then
-  echo "  minikube-tunnel is already running — skipping install."
+# ── 9. Expose API Gateway via port-forward ────────────────────────────────────
+echo "[9/9] Exposing API Gateway on localhost:8080"
+
+# Kill any existing port-forward for the gateway
+pkill -f "kubectl port-forward svc/api-gateway" 2>/dev/null || true
+sleep 1
+
+kubectl port-forward svc/api-gateway -n uber 8080:8080 \
+  >> /tmp/gateway-port-forward.log 2>&1 &
+PF_PID=$!
+echo "  Port-forward started (PID=${PF_PID}). Logs: /tmp/gateway-port-forward.log"
+sleep 2
+
+if kill -0 "$PF_PID" 2>/dev/null; then
+  echo "  Gateway is reachable at http://localhost:8080"
 else
-  sed "s|__CURRENT_USER__|$(whoami)|g" "$K8S/minikube-tunnel.service" | sudo tee "$SERVICE_DST" > /dev/null
-  sudo systemctl daemon-reload
-  sudo systemctl enable minikube-tunnel
-  sudo systemctl start minikube-tunnel
-  echo "  minikube-tunnel installed and started."
+  echo "  [WARN] Port-forward exited early — check /tmp/gateway-port-forward.log"
 fi
 
 echo ""
-echo "Deployment complete. Services are available at:"
-echo "  User service     : http://localhost:8081/api/users"
-echo "  Driver service   : http://localhost:8082/api/drivers"
-echo "  Ride service     : http://localhost:8083/api/rides"
-echo "  Location service : http://localhost:8084/api/locations"
-echo "  Payment service  : http://localhost:8085/api/payments"
-echo "  API Gateway      : http://localhost:8080/api/..."
+echo "Deployment complete."
+echo "All traffic enters through the API Gateway at http://localhost:8080"
+echo ""
+echo "  Routes:"
+echo "    Users    : http://localhost:8080/api/users/**"
+echo "    Auth     : http://localhost:8080/api/auth/**"
+echo "    Drivers  : http://localhost:8080/api/drivers/**"
+echo "    Rides    : http://localhost:8080/api/rides/**"
+echo "    Locations: http://localhost:8080/api/locations/**"
+echo "    Payments : http://localhost:8080/api/payments/**"
+echo ""
+echo "  Note: port-forward runs in the background (PID=${PF_PID})."
+echo "  To stop it: kill ${PF_PID}  or  pkill -f 'kubectl port-forward svc/api-gateway'"
