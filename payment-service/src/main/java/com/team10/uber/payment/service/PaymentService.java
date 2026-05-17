@@ -334,12 +334,24 @@ public class PaymentService extends AbstractObservableService {
             }
         }
 
+        // d-ii) Unsupported method is a payment failure — publish payment.failed + return 400
         try {
             payment.setMethod(PaymentMethod.valueOf(dto.getMethod()));
         } catch (IllegalArgumentException e) {
+            payment.setStatus(PaymentStatus.FAILED);
+            Map<String, Object> failDetails = new HashMap<>();
+            failDetails.put("gatewayResponse", "declined");
+            failDetails.put("failureReason", "unsupported payment method: " + dto.getMethod());
+            payment.setTransactionDetails(failDetails);
+            Payment failSaved = paymentRepository.save(payment);
+            rabbitTemplate.convertAndSend(PaymentRabbitConfig.PAYMENT_EXCHANGE,
+                    PaymentRabbitConfig.ROUTING_KEY_FAILED,
+                    new com.team10.uber.contracts.events.PaymentFailedEvent(
+                            failSaved.getId(), rideId, "unsupported payment method: " + dto.getMethod()));
+            log.info("payment.failed published (unsupported method): paymentId={}, rideId={}", failSaved.getId(), rideId);
             MDC.remove("rideId"); MDC.remove("paymentId"); MDC.remove("userId");
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Invalid payment method: " + dto.getMethod());
+                    "Unsupported payment method: " + dto.getMethod());
         }
 
         // e) Compute surgeFee from ride metadata (15% fallback)
