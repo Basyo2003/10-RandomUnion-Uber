@@ -45,7 +45,7 @@ kubectl apply -f "$K8S/monitoring/loki/loki-configmap.yaml"
 kubectl apply -f "$K8S/monitoring/prometheus/prometheus-configmap.yaml"
 kubectl apply -f "$K8S/monitoring/grafana/grafana-datasources.yaml"
 kubectl apply -f "$K8S/monitoring/grafana/grafana-dashboard-provider.yaml"
-kubectl apply -f "$K8S/monitoring/grafana/grafana-dashboards.yaml"
+kubectl apply -k "$K8S/monitoring/grafana/"
 
 # ── 4. PersistentVolumeClaims ─────────────────────────────────────────────────
 echo "[4/9] PersistentVolumeClaims"
@@ -145,9 +145,24 @@ kubectl apply -f "$K8S/monitoring/grafana/grafana-deployment.yaml"
 kubectl apply -f "$K8S/monitoring/grafana/grafana-service.yaml"
 wait_ready deployment grafana monitoring 600s
 
-echo "[9/9] Done"
+# ── 9. Minikube Tunnel (exposes LoadBalancer services on localhost) ───────────
+echo "[9/9] Minikube Tunnel"
+SERVICE_DST="/etc/systemd/system/minikube-tunnel.service"
+if systemctl is-active --quiet minikube-tunnel 2>/dev/null; then
+  echo "  minikube-tunnel is already running — skipping install."
+else
+  sed "s|__CURRENT_USER__|$(whoami)|g" "$K8S/minikube-tunnel.service" | sudo tee "$SERVICE_DST" > /dev/null
+  sudo systemctl daemon-reload
+  sudo systemctl enable minikube-tunnel
+  sudo systemctl start minikube-tunnel
+  echo "  minikube-tunnel installed and started."
+fi
 
 echo ""
-echo "Deployment complete."
-echo "  API Gateway NodePort : $(kubectl get svc api-gateway -n uber -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo 'see: kubectl get svc api-gateway -n uber')"
-echo "  Grafana NodePort     : $(kubectl get svc grafana -n monitoring -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo 'see: kubectl get svc grafana -n monitoring')"
+echo "Deployment complete. Services are available at:"
+echo "  User service     : http://localhost:8081/api/users"
+echo "  Driver service   : http://localhost:8082/api/drivers"
+echo "  Ride service     : http://localhost:8083/api/rides"
+echo "  Location service : http://localhost:8084/api/locations"
+echo "  Payment service  : http://localhost:8085/api/payments"
+echo "  API Gateway      : http://localhost:8080/api/..."

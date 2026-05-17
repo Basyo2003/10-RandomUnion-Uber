@@ -1,0 +1,13 @@
+[Unit]
+Description=Minikube Tunnel (exposes LoadBalancer services on localhost)
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/minikube tunnel
+Restart=on-failure
+RestartSec=5
+User=__CURRENT_USER__
+
+[Install]
+WantedBy=multi-user.target

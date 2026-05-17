@@ -4,10 +4,10 @@ metadata:
   name: driver-service
   namespace: uber
 spec:
-  type: ClusterIP
+  type: LoadBalancer
   selector:
     app: driver-service
   ports:
     - name: http
-      port: 8080
+      port: 8082
       targetPort: 8080
