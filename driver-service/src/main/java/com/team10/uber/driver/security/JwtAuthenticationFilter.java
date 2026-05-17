@@ -10,7 +10,6 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -23,12 +22,6 @@ import java.util.List;
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
-    private final JdbcTemplate jdbcTemplate;
-
-    public JwtAuthenticationFilter(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
-    }
-
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
@@ -37,7 +30,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         AuthHandler tokenExtractor = new TokenExtractionHandler();
         AuthHandler sigValidator   = new SignatureValidationHandler();
-        AuthHandler userLoader     = new UserLoaderHandler(jdbcTemplate);
+        AuthHandler userLoader     = new UserLoaderHandler();
         AuthHandler roleAuthorizer = new RoleAuthorizationHandler();
 
         tokenExtractor.setNext(sigValidator);
