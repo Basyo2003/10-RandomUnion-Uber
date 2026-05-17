@@ -12,7 +12,7 @@
     <artifactId>api-gateway</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>api-gateway</name>
-    <description>api-gateway</description>
+    <description>API Gateway for Uber platform</description>
     <properties>
         <java.version>25</java.version>
     </properties>

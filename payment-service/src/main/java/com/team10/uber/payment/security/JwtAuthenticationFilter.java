@@ -1,5 +1,6 @@
 package com.team10.uber.payment.security;
 
+import com.team10.uber.contracts.feign.UserServiceClient;
 import com.team10.uber.payment.security.chain.AuthContext;
 import com.team10.uber.payment.security.chain.AuthHandler;
 import com.team10.uber.payment.security.chain.RoleAuthorizationHandler;
@@ -10,7 +11,6 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -23,10 +23,10 @@ import java.util.List;
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
-    private final JdbcTemplate jdbcTemplate;
+    private final UserServiceClient userServiceClient;
 
-    public JwtAuthenticationFilter(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    public JwtAuthenticationFilter(UserServiceClient userServiceClient) {
+        this.userServiceClient = userServiceClient;
     }
 
     @Override
@@ -37,7 +37,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         AuthHandler tokenExtractor = new TokenExtractionHandler();
         AuthHandler sigValidator   = new SignatureValidationHandler();
-        AuthHandler userLoader     = new UserLoaderHandler(jdbcTemplate);
+        AuthHandler userLoader     = new UserLoaderHandler(userServiceClient);
         AuthHandler roleAuthorizer = new RoleAuthorizationHandler();
 
         tokenExtractor.setNext(sigValidator);

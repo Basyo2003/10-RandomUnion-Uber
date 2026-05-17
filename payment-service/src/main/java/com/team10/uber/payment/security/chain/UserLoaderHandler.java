@@ -1,13 +1,14 @@
 package com.team10.uber.payment.security.chain;
 
-import org.springframework.jdbc.core.JdbcTemplate;
+import com.team10.uber.contracts.feign.UserServiceClient;
+import feign.FeignException;
 
 public class UserLoaderHandler extends AuthHandler {
 
-    private final JdbcTemplate jdbcTemplate;
+    private final UserServiceClient userServiceClient;
 
-    public UserLoaderHandler(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    public UserLoaderHandler(UserServiceClient userServiceClient) {
+        this.userServiceClient = userServiceClient;
     }
 
     @Override
@@ -20,15 +21,13 @@ public class UserLoaderHandler extends AuthHandler {
             return ctx;
         }
 
-        Integer count = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM users WHERE id = ? AND email = ?",
-                Integer.class,
-                userId,
-                email
-        );
-
-        if (count == null || count == 0) {
+        try {
+            userServiceClient.getUser(userId);
+        } catch (FeignException.NotFound e) {
             ctx.fail(401, "User not found");
+            return ctx;
+        } catch (FeignException e) {
+            ctx.fail(503, "User service unavailable");
             return ctx;
         }
 
