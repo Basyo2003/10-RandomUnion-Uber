@@ -4,7 +4,8 @@ metadata:
   name: grafana-pvc
   namespace: monitoring
 spec:
-  accessModes: [ReadWriteOnce]
+  accessModes:
+    - ReadWriteOnce
   resources:
     requests:
       storage: 1Gi
