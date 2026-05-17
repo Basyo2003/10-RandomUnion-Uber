@@ -1,5 +1,6 @@
 package com.team10.uber.payment.security;
 
+import com.team10.uber.contracts.feign.UserServiceClient;
 import com.team10.uber.payment.security.chain.AuthContext;
 import com.team10.uber.payment.security.chain.AuthHandler;
 import com.team10.uber.payment.security.chain.RoleAuthorizationHandler;
@@ -12,7 +13,6 @@ import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ResponseEntity;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.MockMvc;
@@ -38,14 +38,14 @@ class JwtAuthChainTest {
     private static final String TEST_SECRET =
             "dVJlckp3dFNoYXJlZFNlY3JldEtleUZvckFsbEZpdmVTZXJ2aWNlczEyMzQ1Ng==";
 
-    private JdbcTemplate jdbcTemplate;
+    private UserServiceClient userServiceClient;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         JwtConfigurationManager.initConfig(TEST_SECRET, 86_400_000L);
-        jdbcTemplate = mock(JdbcTemplate.class);
-        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(jdbcTemplate);
+        userServiceClient = mock(UserServiceClient.class);
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(userServiceClient);
 
         mockMvc = MockMvcBuilders.standaloneSetup(new AdminEndpointController())
                 .addFilter(filter, "/*")
@@ -95,8 +95,8 @@ class JwtAuthChainTest {
     @Test
     void deletedUser_validToken_returns401() throws Exception {
         String token = generateToken("deleted@test.com", 99L, "RIDER");
-        when(jdbcTemplate.queryForObject(anyString(), eq(Integer.class), eq(99L), eq("deleted@test.com")))
-                .thenReturn(0);
+        when(userServiceClient.getUser(99L))
+                .thenThrow(feign.FeignException.NotFound.class);
 
         mockMvc.perform(get("/api/payments/1")
                         .header("Authorization", "Bearer " + token))
@@ -106,8 +106,8 @@ class JwtAuthChainTest {
     @Test
     void riderToken_onAdminEndpoint_returns403() throws Exception {
         String token = generateToken("rider@test.com", 1L, "RIDER");
-        when(jdbcTemplate.queryForObject(anyString(), eq(Integer.class), eq(1L), eq("rider@test.com")))
-                .thenReturn(1);
+        com.team10.uber.contracts.dto.UserDTO user = new com.team10.uber.contracts.dto.UserDTO(1L, "Rider", "rider@test.com", "0100", "RIDER", "ACTIVE");
+        when(userServiceClient.getUser(1L)).thenReturn(user);
 
         mockMvc.perform(put("/api/users/1/role")
                         .header("Authorization", "Bearer " + token)
@@ -119,8 +119,8 @@ class JwtAuthChainTest {
     @Test
     void adminToken_onAdminEndpoint_returns200() throws Exception {
         String token = generateToken("admin@test.com", 2L, "ADMIN");
-        when(jdbcTemplate.queryForObject(anyString(), eq(Integer.class), eq(2L), eq("admin@test.com")))
-                .thenReturn(1);
+        com.team10.uber.contracts.dto.UserDTO user = new com.team10.uber.contracts.dto.UserDTO(2L, "Admin", "admin@test.com", "0100", "ADMIN", "ACTIVE");
+        when(userServiceClient.getUser(2L)).thenReturn(user);
 
         mockMvc.perform(put("/api/users/1/role")
                         .header("Authorization", "Bearer " + token)
@@ -155,16 +155,16 @@ class JwtAuthChainTest {
 
     @Test
     void fullChain_withValidToken_populatesContextCorrectly() {
-        when(jdbcTemplate.queryForObject(anyString(), eq(Integer.class), eq(5L), eq("rider@test.com")))
-                .thenReturn(1);
+        com.team10.uber.contracts.dto.UserDTO user = new com.team10.uber.contracts.dto.UserDTO(5L, "Rider", "rider@test.com", "0100", "RIDER", "ACTIVE");
+        when(userServiceClient.getUser(5L)).thenReturn(user);
 
         AuthHandler head = new TokenExtractionHandler();
         AuthHandler sig  = new SignatureValidationHandler();
-        AuthHandler user = new UserLoaderHandler(jdbcTemplate);
+        AuthHandler userLoader = new UserLoaderHandler(userServiceClient);
         AuthHandler role = new RoleAuthorizationHandler();
         head.setNext(sig);
-        sig.setNext(user);
-        user.setNext(role);
+        sig.setNext(userLoader);
+        userLoader.setNext(role);
 
         String token = generateToken("rider@test.com", 5L, "RIDER");
         MockHttpServletRequest request = new MockHttpServletRequest();

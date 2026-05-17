@@ -67,6 +67,7 @@ class S5ReadDbTest {
     @Mock MongoEventLogger mongoEventLogger;
     @Mock RedisCacheService cache;
     @Mock MongoTemplate mongoTemplate;
+    @Mock org.springframework.context.ApplicationEventPublisher eventPublisher;
     @Mock UserServiceClient userServiceClient;
     @Mock RideServiceClient rideServiceClient;
     @Mock DriverServiceClient driverServiceClient;
@@ -78,7 +79,7 @@ class S5ReadDbTest {
     void buildService() {
         service = new PaymentService(
                 paymentRepository, couponRepository, paymentCouponRepository,
-                mongoEventLogger, cache, mongoTemplate,
+                mongoEventLogger, cache, mongoTemplate, eventPublisher,
                 userServiceClient, rideServiceClient, driverServiceClient,
                 rabbitTemplate);
         // @PostConstruct doesn't fire outside Spring — call it manually
