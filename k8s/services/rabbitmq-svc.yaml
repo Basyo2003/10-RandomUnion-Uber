@@ -4,7 +4,7 @@ metadata:
   name: rabbitmq
   namespace: uber
 spec:
-  type: ClusterIP
+  clusterIP: None
   selector:
     app: rabbitmq
   ports:

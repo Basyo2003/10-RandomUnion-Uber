@@ -13,6 +13,7 @@ data:
   SPRING_RABBITMQ_PASSWORD: guest
   SPRING_DATA_REDIS_HOST: redis
   SPRING_DATA_REDIS_PORT: "6379"
+  SPRING_DATA_REDIS_PASSWORD: redispass
   SPRING_DATA_MONGODB_URI: mongodb://root:rootpass@mongo:27017/ubermongo?authSource=admin&authMechanism=SCRAM-SHA-256
   MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: prometheus,health,info
   FEIGN_USER_SERVICE_URL: http://user-service:8080

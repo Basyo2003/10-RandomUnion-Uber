@@ -3,21 +3,18 @@ kind: Deployment
 metadata:
   name: location-service
   namespace: uber
-
 spec:
   replicas: 1
-
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: location-service
-
   template:
     metadata:
       labels:
         app: location-service
-
     spec:
-
       initContainers:
         - name: wait-for-cassandra
           image: cassandra:latest
@@ -39,49 +36,44 @@ spec:
         - name: location-service
           image: location-service:latest
           imagePullPolicy: IfNotPresent
-
           ports:
             - containerPort: 8080
-
           envFrom:
             - configMapRef:
                 name: location-service-configmap
-
             - secretRef:
                 name: location-postgres-secret
-
           env:
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:
                   name: jwt-secret
                   key: jwt-secret
-
             - name: SPRING_DATASOURCE_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: location-postgres-secret
                   key: POSTGRES_PASSWORD
-
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:TieredStopAtLevel=1 -Xms128m -Xmx900m"
           resources:
-            limits:
-              memory: 768Mi
-
             requests:
-              memory: 512Mi
-
+              memory: 256Mi
+            limits:
+              memory: 1Gi
           readinessProbe:
             httpGet:
               path: /actuator/health
               port: 8080
-
-            initialDelaySeconds: 30
-            periodSeconds: 10
-
+            initialDelaySeconds: 120
+            periodSeconds: 15
+            timeoutSeconds: 35
+            failureThreshold: 30
           livenessProbe:
             httpGet:
               path: /actuator/health
               port: 8080
-
-            initialDelaySeconds: 60
+            initialDelaySeconds: 300
             periodSeconds: 30
+            timeoutSeconds: 35
+            failureThreshold: 30

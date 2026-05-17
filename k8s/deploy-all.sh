@@ -7,9 +7,16 @@ set -euo pipefail
 K8S="$(cd "$(dirname "$0")" && pwd)"
 
 wait_ready() {
-  local kind="$1" name="$2" ns="${3:-uber}"
-  echo "  Waiting for $kind/$name in ns=$ns ..."
-  kubectl rollout status "$kind/$name" -n "$ns" --timeout=300s
+  local kind="$1" name="$2" ns="${3:-uber}" timeout="${4:-600s}"
+  echo "  Waiting for $kind/$name in ns=$ns (timeout=${timeout}) ..."
+  if ! kubectl rollout status "$kind/$name" -n "$ns" --timeout="$timeout"; then
+    echo ""
+    echo "  [ERROR] $kind/$name in ns=$ns did not become ready. Pod status:"
+    kubectl get pods -n "$ns" -l "app=$name" -o wide 2>/dev/null || true
+    echo "  [EVENTS]"
+    kubectl describe "$kind/$name" -n "$ns" 2>/dev/null | tail -20 || true
+    exit 1
+  fi
 }
 
 # ── 1. Namespaces ──────────────────────────────────────────────────────────────
@@ -19,92 +26,128 @@ kubectl apply -f "$K8S/namespaces/monitoring-namespace.yaml"
 
 # ── 2. Secrets ────────────────────────────────────────────────────────────────
 echo "[2/9] Secrets"
+kubectl apply -f "$K8S/secrets/jwt-secret.yaml"
+kubectl apply -f "$K8S/secrets/user-postgres-secret.yaml"
 kubectl apply -f "$K8S/secrets/driver-postgres-secret.yaml"
 kubectl apply -f "$K8S/secrets/payment-postgres-secret.yaml"
+kubectl apply -f "$K8S/secrets/ride-postgres-secret.yaml"
+kubectl apply -f "$K8S/secrets/location-postgres-secret.yaml"
 
 # ── 3. ConfigMaps ─────────────────────────────────────────────────────────────
 echo "[3/9] ConfigMaps"
 kubectl apply -f "$K8S/configmaps/user-service-configmap.yaml"
 kubectl apply -f "$K8S/configmaps/driver-service-configmap.yaml"
 kubectl apply -f "$K8S/configmaps/payment-service-configmap.yaml"
+kubectl apply -f "$K8S/configmaps/ride-service-configmap.yaml"
+kubectl apply -f "$K8S/configmaps/location-service-configmap.yaml"
 kubectl apply -f "$K8S/configmaps/gateway-configmap.yaml"
 kubectl apply -f "$K8S/monitoring/loki/loki-configmap.yaml"
 kubectl apply -f "$K8S/monitoring/prometheus/prometheus-configmap.yaml"
 kubectl apply -f "$K8S/monitoring/grafana/grafana-datasources.yaml"
+kubectl apply -f "$K8S/monitoring/grafana/grafana-dashboard-provider.yaml"
 kubectl apply -f "$K8S/monitoring/grafana/grafana-dashboards.yaml"
 
 # ── 4. PersistentVolumeClaims ─────────────────────────────────────────────────
 echo "[4/9] PersistentVolumeClaims"
+kubectl apply -f "$K8S/pvcs/mongo-pvc.yaml"
+kubectl apply -f "$K8S/pvcs/neo4j-pvc.yaml"
 kubectl apply -f "$K8S/pvcs/redis-pvc.yaml"
+kubectl apply -f "$K8S/pvcs/user-postgres-pvc.yaml"
 kubectl apply -f "$K8S/pvcs/payment-postgres-pvc.yaml"
+kubectl apply -f "$K8S/pvcs/ride-postgres-pvc.yaml"
 kubectl apply -f "$K8S/monitoring/loki/loki-pvc.yaml"
 kubectl apply -f "$K8S/monitoring/prometheus/prometheus-pvc.yaml"
 kubectl apply -f "$K8S/monitoring/grafana/grafana-pvc.yaml"
 
-# ── 5. Infrastructure StatefulSets (shared infra first) ───────────────────────
-echo "[5/9] Infrastructure StatefulSets"
-kubectl apply -f "$K8S/statefulsets/mongo-statefulset.yaml"
-kubectl apply -f "$K8S/statefulsets/redis-statefulset.yaml"
-kubectl apply -f "$K8S/statefulsets/rabbitmq-statefulset.yaml"
-kubectl apply -f "$K8S/statefulsets/elasticsearch-statefulset.yaml"
-
-# Database StatefulSets (service-owned)
-kubectl apply -f "$K8S/statefulsets/driver-postgres-statefulset.yaml"
-kubectl apply -f "$K8S/statefulsets/payment-postgres-statefulset.yaml"
-
-echo "  Waiting for infra StatefulSets to become ready ..."
-wait_ready statefulset mongo
-wait_ready statefulset redis
-wait_ready statefulset rabbitmq
-wait_ready statefulset elasticsearch
-wait_ready statefulset driver-postgres
-wait_ready statefulset payment-postgres
-
-# ── 6. Services (DB / infra tier) ─────────────────────────────────────────────
-echo "[6/9] Infrastructure Services"
+# ── 5. Governing Services (must exist before StatefulSets) ────────────────────
+echo "[5a/9] Governing Services (headless, for StatefulSet DNS)"
 kubectl apply -f "$K8S/services/mongo-svc.yaml"
 kubectl apply -f "$K8S/services/redis-svc.yaml"
 kubectl apply -f "$K8S/services/rabbitmq-svc.yaml"
 kubectl apply -f "$K8S/services/elasticsearch-svc.yaml"
+kubectl apply -f "$K8S/services/cassandra-svc.yaml"
+kubectl apply -f "$K8S/services/neo4j-service.yaml"
+kubectl apply -f "$K8S/services/user-postgres-svc.yaml"
 kubectl apply -f "$K8S/services/driver-postgres-svc.yaml"
 kubectl apply -f "$K8S/services/payment-postgres-svc.yaml"
+kubectl apply -f "$K8S/services/ride-postgres-svc.yaml"
+kubectl apply -f "$K8S/services/location-postgres-svc.yaml"
 
-# ── 7. Application Deployments ────────────────────────────────────────────────
+# ── 5b. Infrastructure StatefulSets ───────────────────────────────────────────
+echo "[5b/9] Infrastructure StatefulSets"
+
+# Shared infra
+kubectl apply -f "$K8S/statefulsets/mongo-statefulset.yaml"
+kubectl apply -f "$K8S/statefulsets/redis-statefulset.yaml"
+kubectl apply -f "$K8S/statefulsets/rabbitmq-statefulset.yaml"
+kubectl apply -f "$K8S/statefulsets/elasticsearch-statefulset.yaml"
+kubectl apply -f "$K8S/statefulsets/cassandra-statefulset.yaml"
+kubectl apply -f "$K8S/statefulsets/neo4j-statefulset.yaml"
+
+# Service-owned databases
+kubectl apply -f "$K8S/statefulsets/user-postgres-statefulset.yaml"
+kubectl apply -f "$K8S/statefulsets/driver-postgres-statefulset.yaml"
+kubectl apply -f "$K8S/statefulsets/payment-postgres-statefulset.yaml"
+kubectl apply -f "$K8S/statefulsets/ride-postgres-statefulset.yaml"
+kubectl apply -f "$K8S/statefulsets/location-postgres-statefulset.yaml"
+
+echo "  Waiting for infra StatefulSets to become ready ..."
+wait_ready statefulset mongo          uber 600s
+wait_ready statefulset redis          uber 600s
+wait_ready statefulset rabbitmq       uber 900s
+wait_ready statefulset elasticsearch  uber 900s
+wait_ready statefulset cassandra      uber 900s
+wait_ready statefulset neo4j          uber 900s
+wait_ready statefulset user-postgres     uber 600s
+wait_ready statefulset driver-postgres   uber 600s
+wait_ready statefulset payment-postgres  uber 600s
+wait_ready statefulset ride-postgres     uber 600s
+wait_ready statefulset location-postgres uber 600s
+
+# ── 6. Application Services ───────────────────────────────────────────────────
+echo "[6/9] Application Services"
+kubectl apply -f "$K8S/services/user-service-svc.yaml"
+kubectl apply -f "$K8S/services/driver-service-svc.yaml"
+kubectl apply -f "$K8S/services/payment-service-svc.yaml"
+kubectl apply -f "$K8S/services/ride-service-service.yaml"
+kubectl apply -f "$K8S/services/location-service-svc.yaml"
+kubectl apply -f "$K8S/api-gateway/gateway-service.yaml"
+
+# ── 7. Application Deployments (all 5 services + API Gateway) ────────────────
 echo "[7/9] Application Deployments"
 kubectl apply -f "$K8S/deployments/user-service-deployment.yaml"
 kubectl apply -f "$K8S/deployments/driver-service-deployment.yaml"
 kubectl apply -f "$K8S/deployments/payment-service-deployment.yaml"
+kubectl apply -f "$K8S/deployments/ride-service-deployment.yaml"
+kubectl apply -f "$K8S/deployments/location-service-deployment.yaml"
+kubectl apply -f "$K8S/api-gateway/gateway-deployment.yaml"
 
 echo "  Waiting for application Deployments to become ready ..."
-wait_ready deployment user-service
-wait_ready deployment driver-service
-wait_ready deployment payment-service
+# 1200s = 20 min: allows for 300s liveness initial delay + ~15 min startup under CPU pressure
+wait_ready deployment user-service     uber 1200s
+wait_ready deployment driver-service   uber 1200s
+wait_ready deployment payment-service  uber 1200s
+wait_ready deployment ride-service     uber 1200s
+wait_ready deployment location-service uber 1200s
+wait_ready deployment api-gateway      uber 1200s
 
-kubectl apply -f "$K8S/services/user-service-svc.yaml"
-kubectl apply -f "$K8S/services/driver-service-svc.yaml"
-kubectl apply -f "$K8S/services/payment-service-svc.yaml"
-
-# ── 8. API Gateway ────────────────────────────────────────────────────────────
-echo "[8/9] API Gateway"
-kubectl apply -f "$K8S/api-gateway/gateway-deployment.yaml"
-wait_ready deployment api-gateway
-kubectl apply -f "$K8S/api-gateway/gateway-service.yaml"
-
-# ── 9. Monitoring Stack ───────────────────────────────────────────────────────
-echo "[9/9] Monitoring Stack (Loki → Prometheus → Grafana)"
+# ── 8. Monitoring Stack ───────────────────────────────────────────────────────
+echo "[8/9] Monitoring Stack (Loki → Prometheus → Grafana)"
 kubectl apply -f "$K8S/monitoring/loki/loki-statefulset.yaml"
 kubectl apply -f "$K8S/monitoring/loki/loki-service.yaml"
-wait_ready statefulset loki monitoring
+wait_ready statefulset loki monitoring 600s
 
 kubectl apply -f "$K8S/monitoring/prometheus/prometheus-deployment.yaml"
 kubectl apply -f "$K8S/monitoring/prometheus/prometheus-service.yaml"
-wait_ready deployment prometheus monitoring
+wait_ready deployment prometheus monitoring 600s
 
 kubectl apply -f "$K8S/monitoring/grafana/grafana-deployment.yaml"
 kubectl apply -f "$K8S/monitoring/grafana/grafana-service.yaml"
-wait_ready deployment grafana monitoring
+wait_ready deployment grafana monitoring 600s
+
+echo "[9/9] Done"
 
 echo ""
 echo "Deployment complete."
-echo "  API Gateway NodePort : $(kubectl get svc api-gateway -n uber -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo 'see kubectl get svc api-gateway -n uber')"
-echo "  Grafana NodePort     : $(kubectl get svc grafana -n monitoring -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo 'see kubectl get svc grafana -n monitoring')"
+echo "  API Gateway NodePort : $(kubectl get svc api-gateway -n uber -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo 'see: kubectl get svc api-gateway -n uber')"
+echo "  Grafana NodePort     : $(kubectl get svc grafana -n monitoring -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo 'see: kubectl get svc grafana -n monitoring')"

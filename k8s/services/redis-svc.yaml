@@ -4,7 +4,7 @@ metadata:
   name: redis
   namespace: uber
 spec:
-  type: ClusterIP
+  clusterIP: None
   selector:
     app: redis
   ports:

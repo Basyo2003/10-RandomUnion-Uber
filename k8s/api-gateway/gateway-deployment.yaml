@@ -5,6 +5,8 @@ metadata:
   namespace: uber
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: api-gateway
@@ -16,7 +18,7 @@ spec:
       containers:
         - name: api-gateway
           image: api-gateway:latest
-          imagePullPolicy: Never
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
           envFrom:
@@ -24,18 +26,27 @@ spec:
                 name: gateway-configmap
             - secretRef:
                 name: jwt-secret
+          env:
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:TieredStopAtLevel=1 -Xms128m -Xmx450m"
           readinessProbe:
             httpGet:
               path: /actuator/health
               port: 8080
-            initialDelaySeconds: 30
+            initialDelaySeconds: 120
             periodSeconds: 10
+            timeoutSeconds: 35
+            failureThreshold: 6
           livenessProbe:
             httpGet:
               path: /actuator/health
               port: 8080
-            initialDelaySeconds: 60
+            initialDelaySeconds: 300
             periodSeconds: 30
+            timeoutSeconds: 35
+            failureThreshold: 6
           resources:
+            requests:
+              memory: 256Mi
             limits:
               memory: 512Mi
