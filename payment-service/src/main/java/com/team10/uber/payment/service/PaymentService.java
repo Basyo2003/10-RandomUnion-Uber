@@ -59,6 +59,20 @@ import com.team10.uber.payment.strategy.RefundStrategySelector;
 
 import feign.FeignException;
 import jakarta.annotation.PostConstruct;
+import com.team10.uber.contracts.dto.DriverDTO;
+import com.team10.uber.contracts.dto.RideDTO;
+import com.team10.uber.contracts.feign.DriverServiceClient;
+import com.team10.uber.contracts.feign.RideServiceClient;
+import com.team10.uber.contracts.feign.UserServiceClient;
+import com.team10.uber.payment.config.PaymentRabbitConfig;
+import feign.FeignException;
+import org.slf4j.MDC;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class PaymentService extends AbstractObservableService {

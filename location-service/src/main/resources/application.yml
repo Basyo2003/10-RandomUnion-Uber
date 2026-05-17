@@ -53,14 +53,12 @@ feign:
 jwt:
   secret: dVJlckp3dFNoYXJlZFNlY3JldEtleUZvckFsbEZpdmVTZXJ2aWNlczEyMzQ1Ng==
   expiration: 86400000
-
 management:
   server:
     port: 8080
 
   endpoints:
     enabled-by-default: true
-
     web:
       exposure:
         include: "*"
@@ -73,3 +71,13 @@ management:
   health:
     defaults:
       enabled: true
+
+  metrics:
+    enable:
+      spring:
+        data: true
+
+  observations:
+    enable:
+      spring:
+        data: true
