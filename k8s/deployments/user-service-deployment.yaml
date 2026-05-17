@@ -5,6 +5,8 @@ metadata:
   namespace: uber
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: user-service
@@ -30,18 +32,26 @@ spec:
                 secretKeyRef:
                   name: jwt-secret
                   key: jwt-secret
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:TieredStopAtLevel=1 -Xms128m -Xmx700m"
           readinessProbe:
             httpGet:
               path: /actuator/health
               port: 8080
-            initialDelaySeconds: 30
-            periodSeconds: 10
+            initialDelaySeconds: 120
+            periodSeconds: 15
+            timeoutSeconds: 35
+            failureThreshold: 30
           livenessProbe:
             httpGet:
               path: /actuator/health
               port: 8080
-            initialDelaySeconds: 60
+            initialDelaySeconds: 300
             periodSeconds: 30
+            timeoutSeconds: 35
+            failureThreshold: 30
           resources:
+            requests:
+              memory: 256Mi
             limits:
               memory: 768Mi

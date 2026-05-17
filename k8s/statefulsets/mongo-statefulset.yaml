@@ -29,32 +29,25 @@ spec:
               name: mongo
           resources:
             requests:
-              memory: "128Mi"
+              memory: "256Mi"
               cpu: "100m"
             limits:
-              memory: "512Mi"
-              cpu: "250m"
+              memory: "1Gi"
+              cpu: "500m"
           readinessProbe:
-            exec:
-              command:
-                - mongosh
-                - --quiet
-                - --eval
-                - "db.adminCommand('ping').ok"
+            tcpSocket:
+              port: 27017
             initialDelaySeconds: 20
             periodSeconds: 10
-            timeoutSeconds: 10
+            timeoutSeconds: 5
             failureThreshold: 6
           livenessProbe:
-            exec:
-              command:
-                - mongosh
-                - --quiet
-                - --eval
-                - "db.adminCommand('ping').ok"
-            initialDelaySeconds: 20
-            periodSeconds: 30
-            timeoutSeconds: 10
+            tcpSocket:
+              port: 27017
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
 
 #          readinessProbe:
 #            tcpSocket:

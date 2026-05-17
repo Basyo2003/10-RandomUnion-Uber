@@ -1,6 +1,5 @@
 package com.team10.uber.payment.security;
 
-import com.team10.uber.contracts.feign.UserServiceClient;
 import com.team10.uber.payment.security.chain.AuthContext;
 import com.team10.uber.payment.security.chain.AuthHandler;
 import com.team10.uber.payment.security.chain.RoleAuthorizationHandler;
@@ -23,12 +22,6 @@ import java.util.List;
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
-    private final UserServiceClient userServiceClient;
-
-    public JwtAuthenticationFilter(UserServiceClient userServiceClient) {
-        this.userServiceClient = userServiceClient;
-    }
-
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
@@ -37,7 +30,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         AuthHandler tokenExtractor = new TokenExtractionHandler();
         AuthHandler sigValidator   = new SignatureValidationHandler();
-        AuthHandler userLoader     = new UserLoaderHandler(userServiceClient);
+        AuthHandler userLoader     = new UserLoaderHandler();
         AuthHandler roleAuthorizer = new RoleAuthorizationHandler();
 
         tokenExtractor.setNext(sigValidator);

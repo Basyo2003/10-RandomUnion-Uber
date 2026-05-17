@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+configMapGenerator:
+  - name: grafana-dashboards
+    namespace: monitoring
+    options:
+      labels:
+        grafana_dashboard: "1"
+      disableNameSuffixHash: true
+    files:
+      - dashboards/user-dashboard.json
+      - dashboards/driver-dashboard.json
+      - dashboards/ride-dashboard.json
+      - dashboards/location-dashboard.json
+      - dashboards/payment-dashboard.json

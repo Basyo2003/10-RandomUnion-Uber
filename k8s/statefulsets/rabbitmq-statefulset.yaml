@@ -29,24 +29,25 @@ spec:
               name: management
           resources:
             requests:
-              memory: "128Mi"
+              memory: "256Mi"
               cpu: "100m"
             limits:
-              memory: "512Mi"
-              cpu: "250m"
+              memory: "1Gi"
+              cpu: "500m"
           readinessProbe:
             tcpSocket:
               port: 5672
-            initialDelaySeconds: 20
-            periodSeconds: 10
-            failureThreshold: 6
+            initialDelaySeconds: 120
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 24
           livenessProbe:
-            exec:
-              command: ["rabbitmq-diagnostics", "-q", "ping"]
-            initialDelaySeconds: 60
-            periodSeconds: 30
-            timeoutSeconds: 30
-            failureThreshold: 3
+            tcpSocket:
+              port: 5672
+            initialDelaySeconds: 180
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 24
           volumeMounts:
             - name: data
               mountPath: /var/lib/rabbitmq

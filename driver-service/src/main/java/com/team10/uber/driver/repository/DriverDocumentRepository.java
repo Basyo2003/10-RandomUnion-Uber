@@ -4,8 +4,6 @@ import com.team10.uber.driver.model.DriverDocument;
 
 import jakarta.transaction.Transactional;
 
-import java.util.Optional;
-
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
@@ -21,7 +19,4 @@ public interface DriverDocumentRepository extends JpaRepository<DriverDocument, 
     @Query("SELECT dd FROM DriverDocument dd WHERE dd.driver.id = :driverId")
     List<DriverDocument> findByDriverId(@Param("driverId") Long driverId);
 
-    // Check if a user exists and is ADMIN
-    @Query(value = "SELECT role FROM users WHERE id = :userId", nativeQuery = true)
-    Optional<String> findUserRoleById(@Param("userId") Long userId);
 }

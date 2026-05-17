@@ -4,6 +4,7 @@ metadata:
   name: elasticsearch
   namespace: uber
 spec:
+  clusterIP: None
   selector:
     app: elasticsearch
   ports:

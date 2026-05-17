@@ -57,9 +57,10 @@ spec:
             httpGet:
               path: /_cluster/health
               port: 9200
-            initialDelaySeconds: 300
+            initialDelaySeconds: 600
             periodSeconds: 30
             timeoutSeconds: 10
+            failureThreshold: 6
           volumeMounts:
             - name: data
               mountPath: /usr/share/elasticsearch/data

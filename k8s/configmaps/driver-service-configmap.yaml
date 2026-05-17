@@ -5,8 +5,12 @@ metadata:
   namespace: uber
 data:
   SPRING_DATASOURCE_URL: jdbc:postgresql://driver-postgres:5432/uberdb-drivers
-  SPRING_DATASOURCE_USERNAME: user
+  SPRING_DATASOURCE_USERNAME: postgres
 
+  SPRING_DATA_REDIS_HOST: redis
+  SPRING_DATA_REDIS_PORT: "6379"
+  SPRING_DATA_REDIS_PASSWORD: redispass
+  SPRING_DATA_MONGODB_URI: mongodb://root:rootpass@mongo:27017/ubermongo?authSource=admin&authMechanism=SCRAM-SHA-256
   SPRING_RABBITMQ_HOST: rabbitmq
   SPRING_RABBITMQ_PORT: "5672"
   SPRING_RABBITMQ_USERNAME: guest
