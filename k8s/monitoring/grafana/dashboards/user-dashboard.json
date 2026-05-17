@@ -66,7 +66,7 @@
       "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {
-          "expr": "sum by (routingKey) (count_over_time({app=\"uber\", service=\"user-service\"} | json | routingKey != \"\" [5m]))",
+          "expr": "sum by (routingKey) (count_over_time({app=\"uber\",service=\"user-service\"} | json | routingKey=~\".+\" [15m]))",
           "legendFormat": "{{routingKey}}"
         }
       ],
@@ -79,7 +79,7 @@
       "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {
-          "expr": "sum(count_over_time({app=\"uber\", service=\"user-service\"} | json | message =~ \"Feign call.*\" [5m]))",
+          "expr": "sum(count_over_time({app=\"uber\",service=\"user-service\"} | json | message=~\"Feign call.*\" [15m]))",
           "legendFormat": "feign calls"
         }
       ],

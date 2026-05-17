@@ -14,7 +14,146 @@ data:
         options:
           path: /etc/grafana/provisioning/dashboards
   user-dashboard.json: |-
-    # placeholder — S1-INFRA fills this
+    {
+      "title": "Uber User Service",
+      "uid": "uber-user-service",
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "15s",
+      "tags": [
+        "uber",
+        "user-service"
+      ],
+      "timezone": "browser",
+      "panels": [
+        {
+          "id": 1,
+          "type": "timeseries",
+          "title": "HTTP Request Rate",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "expr": "sum by (uri, method) (rate(http_server_requests_seconds_count{job=\"user-service\"}[5m]))",
+              "legendFormat": "{{method}} {{uri}}"
+            }
+          ],
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "id": 2,
+          "type": "timeseries",
+          "title": "HTTP P95 Latency",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.95, sum by (le, uri, method) (rate(http_server_requests_seconds_bucket{job=\"user-service\"}[5m])))",
+              "legendFormat": "p95 {{method}} {{uri}}"
+            }
+          ],
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 8,
+            "y": 0
+          }
+        },
+        {
+          "id": 3,
+          "type": "timeseries",
+          "title": "JVM Memory Used",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "expr": "sum by (area) (jvm_memory_used_bytes{job=\"user-service\"})",
+              "legendFormat": "{{area}}"
+            }
+          ],
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 16,
+            "y": 0
+          }
+        },
+        {
+          "id": 4,
+          "type": "timeseries",
+          "title": "Error Rate",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "targets": [
+            {
+              "expr": "sum(count_over_time({app=\"uber\", service=\"user-service\", level=\"ERROR\"} | json [1m]))",
+              "legendFormat": "errors/min"
+            }
+          ],
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 0,
+            "y": 8
+          }
+        },
+        {
+          "id": 5,
+          "type": "timeseries",
+          "title": "RabbitMQ Event Audit",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "targets": [
+            {
+              "expr": "sum by (routingKey) (count_over_time({app=\"uber\",service=\"user-service\"} | json | routingKey=~\".+\" [15m]))",
+              "legendFormat": "{{routingKey}}"
+            }
+          ],
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 8,
+            "y": 8
+          }
+        },
+        {
+          "id": 6,
+          "type": "timeseries",
+          "title": "Feign Call Outcomes",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "targets": [
+            {
+              "expr": "sum(count_over_time({app=\"uber\",service=\"user-service\"} | json | message=~\"Feign call.*\" [15m]))",
+              "legendFormat": "feign calls"
+            }
+          ],
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 16,
+            "y": 8
+          }
+        }
+      ]
+    }
   driver-dashboard.json: |-
     {
       "annotations": {
