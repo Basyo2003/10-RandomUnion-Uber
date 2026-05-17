@@ -5,9 +5,13 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import com.team10.uber.contracts.dto.DriverRideSummaryDTO;
+import com.team10.uber.contracts.dto.RideSummaryDTO;
 import com.team10.uber.contracts.dto.RideDTO;
 import com.team10.uber.ride.dto.*;
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -37,6 +41,8 @@ import com.team10.uber.ride.service.RideService;
 @RequestMapping("/api/rides")
 public class RideController {
 
+    private static final Logger log = LoggerFactory.getLogger(RideController.class);
+
     private final RideService rideService;
     private final RecommendationService recommendationService;
 
@@ -53,24 +59,6 @@ public class RideController {
     @GetMapping
     public List<Ride> getAllRides() {
         return rideService.getAllRides();
-    }
-
-    @GetMapping("/driver/{driverId}/summary")
-    public DriverRideSummaryDTO getDriverRideSummaryForFeign(
-            @PathVariable Long driverId,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
-        return rideService.getDriverRideSummary(driverId, startDate, endDate);
-    }
-
-    @GetMapping("/driver/{driverId}/active-count")
-    public int getDriverActiveRideCount(@PathVariable Long driverId) {
-        return rideService.getDriverActiveRideCount(driverId);
-    }
-
-    @GetMapping("/driver/{driverId}/completed-count")
-    public long getDriverCompletedRideCount(@PathVariable Long driverId) {
-        return rideService.getDriverCompletedRideCount(driverId);
     }
 
     @GetMapping("/{id}")
@@ -180,6 +168,68 @@ public class RideController {
     @PostMapping("/{rideId}/record-interaction")
     public String recordInteraction(@PathVariable Long rideId) {
         return rideService.recordInteraction(rideId);
+    }
 
+    // --- §5 Feign-target endpoints ---
+
+    @GetMapping("/user/{userId}/summary")
+    public RideSummaryDTO getUserRideSummary(@PathVariable Long userId) {
+        MDC.put("userId", String.valueOf(userId));
+        log.info("CONTROLLER_ENTRY GET /api/rides/user/{}/summary", userId);
+        try {
+            RideSummaryDTO result = rideService.getUserRideSummary(userId);
+            log.info("CONTROLLER_EXIT GET /api/rides/user/{}/summary totalRides={}", userId, result.totalRides());
+            return result;
+        } finally {
+            MDC.remove("userId");
+        }
+    }
+
+    @GetMapping("/user/{userId}/active-count")
+    public int getUserActiveRideCount(@PathVariable Long userId) {
+        log.info("CONTROLLER_ENTRY GET /api/rides/user/{}/active-count", userId);
+        int count = rideService.getUserActiveRideCount(userId);
+        log.info("CONTROLLER_EXIT GET /api/rides/user/{}/active-count count={}", userId, count);
+        return count;
+    }
+
+    @GetMapping("/user/{userId}/completed-count")
+    public long getUserCompletedRideCount(@PathVariable Long userId) {
+        log.info("CONTROLLER_ENTRY GET /api/rides/user/{}/completed-count", userId);
+        long count = rideService.getUserCompletedRideCount(userId);
+        log.info("CONTROLLER_EXIT GET /api/rides/user/{}/completed-count count={}", userId, count);
+        return count;
+    }
+
+    @GetMapping("/driver/{driverId}/summary")
+    public DriverRideSummaryDTO getDriverRideSummary(
+            @PathVariable Long driverId,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
+        MDC.put("driverId", String.valueOf(driverId));
+        log.info("CONTROLLER_ENTRY GET /api/rides/driver/{}/summary startDate={} endDate={}", driverId, startDate, endDate);
+        try {
+            DriverRideSummaryDTO result = rideService.getDriverRideSummary(driverId, startDate, endDate);
+            log.info("CONTROLLER_EXIT GET /api/rides/driver/{}/summary totalRides={}", driverId, result.totalRides());
+            return result;
+        } finally {
+            MDC.remove("driverId");
+        }
+    }
+
+    @GetMapping("/driver/{driverId}/active-count")
+    public int getDriverActiveRideCount(@PathVariable Long driverId) {
+        log.info("CONTROLLER_ENTRY GET /api/rides/driver/{}/active-count", driverId);
+        int count = rideService.getDriverActiveRideCount(driverId);
+        log.info("CONTROLLER_EXIT GET /api/rides/driver/{}/active-count count={}", driverId, count);
+        return count;
+    }
+
+    @GetMapping("/driver/{driverId}/completed-count")
+    public long getDriverCompletedRideCount(@PathVariable Long driverId) {
+        log.info("CONTROLLER_ENTRY GET /api/rides/driver/{}/completed-count", driverId);
+        long count = rideService.getDriverCompletedRideCount(driverId);
+        log.info("CONTROLLER_EXIT GET /api/rides/driver/{}/completed-count count={}", driverId, count);
+        return count;
     }
 }

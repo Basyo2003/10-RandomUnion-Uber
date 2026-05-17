@@ -44,8 +44,7 @@ class JwtAuthChainTest {
     @BeforeEach
     void setUp() {
         JwtConfigurationManager.initConfig(TEST_SECRET, 86_400_000L);
-        jdbcTemplate = mock(JdbcTemplate.class);
-        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(jdbcTemplate);
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter();
 
         mockMvc = MockMvcBuilders.standaloneSetup(new AdminEndpointController())
                 .addFilter(filter, "/*")
