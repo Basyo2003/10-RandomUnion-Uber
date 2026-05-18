@@ -139,7 +139,7 @@ public class LocationService extends AbstractObservableService {
 
     // S4-F1 - 4.4.1 Redis cache, TTL 5 min
     public Location getLatestLocationByDriverId(Long driverId) {
-        //locationRepository.driverExists(jdbcTemplate, driverId);
+        checkDriverExists(driverId);
 
         String cacheKey = featureKey("S4-F1", driverId);
 
@@ -160,7 +160,7 @@ public class LocationService extends AbstractObservableService {
 
     // S4-F2 - 4.4.4 Cache invalidation after location write
     public Location createLocationForDriver(Long driverId, Location location) {
-        //locationRepository.driverExists(jdbcTemplate, driverId);
+        checkDriverExists(driverId);
 
         validateCoordinates(location.getLatitude(), location.getLongitude());
 
@@ -280,7 +280,7 @@ public Map<String, Object> batchCreateLocations(BatchLocationRequest request) {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Locations list cannot be empty");
     }
 
-    //locationRepository.driverExists(jdbcTemplate, request.getDriverId());
+    checkDriverExists(request.getDriverId());
 
     List<Location> locationsToSave = new ArrayList<>();
     LocalDateTime baseTime = LocalDateTime.now();
@@ -497,7 +497,7 @@ public DriverMovementSummaryDTO getDriverMovementSummary(
         );
     }
 
-    //locationRepository.driverExists(jdbcTemplate, driverId);
+    checkDriverExists(driverId);
 
     String cacheKey = featureKey("S4-F8", driverId, startDate, endDate);
 
@@ -768,7 +768,7 @@ public DriverMovementSummaryDTO getDriverMovementSummary(
 
     // S4-F11 - Record Location GPS Event
     public void recordLocationGpsEvent(Long driverId, TrackingEventRequest request) {
-        //locationRepository.driverExists(jdbcTemplate, driverId);
+        checkDriverExists(driverId);
 
         validateCoordinates(request.getLatitude(), request.getLongitude());
 
@@ -818,7 +818,7 @@ public DriverMovementSummaryDTO getDriverMovementSummary(
             LocalDateTime startTime,
             LocalDateTime endTime
     ) {
-        //locationRepository.driverExists(jdbcTemplate, driverId);
+        checkDriverExists(driverId);
 
         Instant startInstant = startTime != null ? startTime.toInstant(ZoneOffset.UTC) : null;
         Instant endInstant   = endTime   != null ? endTime.toInstant(ZoneOffset.UTC)   : null;
@@ -871,6 +871,16 @@ public DriverMovementSummaryDTO getDriverMovementSummary(
         return location;
     }
 
+
+    private void checkDriverExists(Long driverId) {
+        try {
+            driverServiceClient.getDriver(driverId);
+        } catch (FeignException.NotFound e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Driver not found: " + driverId);
+        } catch (FeignException e) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Driver service temporarily unavailable");
+        }
+    }
 
     // 4.4 Redis Caching - cache key helpers
     private String locationKey(Long id) {
