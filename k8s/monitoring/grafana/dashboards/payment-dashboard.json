@@ -1,29 +1,29 @@
 {
-  "annotations": { "list": [] },
-  "description": "Payment Service dashboard — LogQL (S5-READ-DB) + PromQL (S5-EVENTS) panels, finalised by S5-INFRA.",
+  "annotations": {"list": []},
+  "description": "Payment Service dashboard — LogQL + PromQL panels (S5-READ-DB / S5-INFRA).",
   "editable": true,
   "graphTooltip": 0,
   "id": null,
   "links": [],
   "panels": [
     {
-      "datasource": { "type": "loki", "uid": "${ds_loki}" },
+      "datasource": {"type": "loki", "uid": "${ds_loki}"},
       "fieldConfig": {
-        "defaults": { "color": { "mode": "palette-classic" }, "custom": { "lineWidth": 1 } },
+        "defaults": {"color": {"mode": "palette-classic"}, "custom": {"lineWidth": 1}},
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 0},
       "id": 1,
       "options": {
-        "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom" },
-        "tooltip": { "mode": "multi" }
+        "legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom"},
+        "tooltip": {"mode": "multi"}
       },
       "title": "Error Rate (LogQL)",
-      "description": "Count of ERROR-level log lines from payment-service per minute. Spike detection.",
+      "description": "Count of ERROR-level log lines from payment-service per minute.",
       "type": "timeseries",
       "targets": [
         {
-          "datasource": { "type": "loki", "uid": "${ds_loki}" },
+          "datasource": {"type": "loki", "uid": "${ds_loki}"},
           "expr": "sum(count_over_time({app=\"uber\", service=\"payment-service\", level=\"ERROR\"}[1m]))",
           "legendFormat": "Errors/min",
           "refId": "A"
@@ -31,16 +31,21 @@
       ]
     },
     {
-      "datasource": { "type": "loki", "uid": "${ds_loki}" },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
+      "datasource": {"type": "loki", "uid": "${ds_loki}"},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 0},
       "id": 2,
-      "options": { "dedupStrategy": "none", "enableLogDetails": true, "showTime": true, "sortOrder": "Descending" },
-      "title": "RabbitMQ Event Audit (LogQL)",
-      "description": "Log lines from payment-service event publishers and consumers, filtered by routing key (payment.initiated, payment.completed, payment.failed, payment.refunded).",
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "showTime": true,
+        "sortOrder": "Descending"
+      },
+      "title": "Payment Event Audit (LogQL)",
+      "description": "Log lines from payment-service event publishers and consumers, filtered by routing key.",
       "type": "logs",
       "targets": [
         {
-          "datasource": { "type": "loki", "uid": "${ds_loki}" },
+          "datasource": {"type": "loki", "uid": "${ds_loki}"},
           "expr": "{app=\"uber\", service=\"payment-service\"} | json | routingKey != \"\"",
           "legendFormat": "Events",
           "refId": "A"
@@ -48,35 +53,35 @@
       ]
     },
     {
-      "datasource": { "type": "loki", "uid": "${ds_loki}" },
+      "datasource": {"type": "loki", "uid": "${ds_loki}"},
       "fieldConfig": {
-        "defaults": { "color": { "mode": "palette-classic" }, "custom": { "lineWidth": 1 } },
+        "defaults": {"color": {"mode": "palette-classic"}, "custom": {"lineWidth": 1}},
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 0},
       "id": 3,
       "options": {
-        "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom" },
-        "tooltip": { "mode": "multi" }
+        "legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom"},
+        "tooltip": {"mode": "multi"}
       },
-      "title": "Payment Status Events (LogQL)",
+      "title": "Payment State Transitions (LogQL)",
       "description": "COMPLETED vs REFUNDED vs FAILED payment events per minute.",
       "type": "timeseries",
       "targets": [
         {
-          "datasource": { "type": "loki", "uid": "${ds_loki}" },
+          "datasource": {"type": "loki", "uid": "${ds_loki}"},
           "expr": "sum(count_over_time({app=\"uber\", service=\"payment-service\"} |= \"COMPLETED\" [1m]))",
           "legendFormat": "COMPLETED/min",
           "refId": "A"
         },
         {
-          "datasource": { "type": "loki", "uid": "${ds_loki}" },
+          "datasource": {"type": "loki", "uid": "${ds_loki}"},
           "expr": "sum(count_over_time({app=\"uber\", service=\"payment-service\"} |= \"REFUNDED\" [1m]))",
           "legendFormat": "REFUNDED/min",
           "refId": "B"
         },
         {
-          "datasource": { "type": "loki", "uid": "${ds_loki}" },
+          "datasource": {"type": "loki", "uid": "${ds_loki}"},
           "expr": "sum(count_over_time({app=\"uber\", service=\"payment-service\"} |= \"FAILED\" [1m]))",
           "legendFormat": "FAILED/min",
           "refId": "C"
@@ -84,23 +89,23 @@
       ]
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${ds_prometheus}" },
+      "datasource": {"type": "prometheus", "uid": "${ds_prometheus}"},
       "fieldConfig": {
-        "defaults": { "color": { "mode": "palette-classic" }, "custom": { "lineWidth": 1 }, "unit": "reqps" },
+        "defaults": {"color": {"mode": "palette-classic"}, "custom": {"lineWidth": 1}, "unit": "reqps"},
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
       "id": 4,
       "options": {
-        "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom" },
-        "tooltip": { "mode": "multi" }
+        "legend": {"calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom"},
+        "tooltip": {"mode": "multi"}
       },
       "title": "HTTP Request Rate (PromQL)",
-      "description": "Requests/sec per endpoint and method for payment-service. Identifies busy endpoints during saga fan-out.",
+      "description": "Requests/sec per endpoint and method for payment-service.",
       "type": "timeseries",
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${ds_prometheus}" },
+          "datasource": {"type": "prometheus", "uid": "${ds_prometheus}"},
           "expr": "sum by (uri, method, status) (rate(http_server_requests_seconds_count{job=\"payment-service\"}[5m]))",
           "legendFormat": "{{method}} {{uri}} {{status}}",
           "refId": "A"
@@ -108,29 +113,29 @@
       ]
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${ds_prometheus}" },
+      "datasource": {"type": "prometheus", "uid": "${ds_prometheus}"},
       "fieldConfig": {
-        "defaults": { "color": { "mode": "palette-classic" }, "custom": { "lineWidth": 1 }, "unit": "s" },
+        "defaults": {"color": {"mode": "palette-classic"}, "custom": {"lineWidth": 1}, "unit": "s"},
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
       "id": 5,
       "options": {
-        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" },
-        "tooltip": { "mode": "multi" }
+        "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"},
+        "tooltip": {"mode": "multi"}
       },
-      "title": "HTTP Latency P99/P95 (PromQL)",
-      "description": "99th and 95th percentile latency per endpoint. High P99 on /analytics/vehicle-type = slow S5-F10 Feign fan-out to ride-service + driver-service.",
+      "title": "HTTP Latency P99 (PromQL)",
+      "description": "99th-percentile latency per endpoint for payment-service.",
       "type": "timeseries",
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${ds_prometheus}" },
+          "datasource": {"type": "prometheus", "uid": "${ds_prometheus}"},
           "expr": "histogram_quantile(0.99, sum by (uri, le) (rate(http_server_requests_seconds_bucket{job=\"payment-service\"}[5m])))",
           "legendFormat": "p99 {{uri}}",
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "${ds_prometheus}" },
+          "datasource": {"type": "prometheus", "uid": "${ds_prometheus}"},
           "expr": "histogram_quantile(0.95, sum by (uri, le) (rate(http_server_requests_seconds_bucket{job=\"payment-service\"}[5m])))",
           "legendFormat": "p95 {{uri}}",
           "refId": "B"
@@ -138,56 +143,32 @@
       ]
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${ds_prometheus}" },
+      "datasource": {"type": "prometheus", "uid": "${ds_prometheus}"},
       "fieldConfig": {
-        "defaults": { "color": { "mode": "palette-classic" }, "custom": { "lineWidth": 1 }, "unit": "bytes" },
+        "defaults": {"color": {"mode": "palette-classic"}, "custom": {"lineWidth": 1}, "unit": "bytes"},
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
       "id": 6,
       "options": {
-        "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom" },
-        "tooltip": { "mode": "multi" }
+        "legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom"},
+        "tooltip": {"mode": "multi"}
       },
       "title": "JVM Heap Usage (PromQL)",
-      "description": "Used vs committed heap for payment-service. Alert if heap approaches 768Mi pod limit.",
+      "description": "Used vs committed heap for payment-service.",
       "type": "timeseries",
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${ds_prometheus}" },
+          "datasource": {"type": "prometheus", "uid": "${ds_prometheus}"},
           "expr": "jvm_memory_used_bytes{job=\"payment-service\", area=\"heap\"}",
           "legendFormat": "heap used",
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "${ds_prometheus}" },
+          "datasource": {"type": "prometheus", "uid": "${ds_prometheus}"},
           "expr": "jvm_memory_committed_bytes{job=\"payment-service\", area=\"heap\"}",
           "legendFormat": "heap committed",
           "refId": "B"
-        }
-      ]
-    },
-    {
-      "datasource": { "type": "loki", "uid": "${ds_loki}" },
-      "fieldConfig": {
-        "defaults": { "color": { "mode": "palette-classic" }, "custom": { "lineWidth": 1 } },
-        "overrides": []
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
-      "id": 7,
-      "options": {
-        "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom" },
-        "tooltip": { "mode": "multi" }
-      },
-      "title": "Slow Operation Warnings (LogQL)",
-      "description": "Log lines where elapsed time exceeded 1000ms threshold. Identifies S5-F10 vehicle-type analytics taking > 1s.",
-      "type": "timeseries",
-      "targets": [
-        {
-          "datasource": { "type": "loki", "uid": "${ds_loki}" },
-          "expr": "count_over_time({app=\"uber\", service=\"payment-service\", level=\"WARN\"} |= \"Slow\" [5m])",
-          "legendFormat": "Slow Ops/5m",
-          "refId": "A"
         }
       ]
     }
@@ -222,7 +203,7 @@
       }
     ]
   },
-  "time": { "from": "now-1h", "to": "now" },
+  "time": {"from": "now-1h", "to": "now"},
   "timepicker": {},
   "timezone": "browser",
   "title": "Payment Service",
