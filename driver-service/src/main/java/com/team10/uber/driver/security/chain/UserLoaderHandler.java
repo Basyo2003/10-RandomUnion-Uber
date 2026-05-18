@@ -8,6 +8,7 @@ public class UserLoaderHandler extends AuthHandler {
             ctx.fail(401, "JWT token is missing user information");
             return ctx;
         }
+
         return passToNext(ctx);
     }
 }
