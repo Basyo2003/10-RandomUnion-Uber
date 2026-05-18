@@ -1,5 +1,6 @@
 package com.team10.uber.location.service;
 
+import feign.FeignException;
 import com.team10.uber.location.dto.BatchLocationRequest;
 import com.team10.uber.location.dto.DriverMovementSummaryDTO;
 import com.team10.uber.location.dto.DriverMovementSummaryProjection;
@@ -174,7 +175,7 @@ public class LocationService extends AbstractObservableService {
     }
 
     //S4-F3
-    public List<NearbyDriverDTO> findNearbyAvailableDrivers(Double lat, Double lon, Double radiusKm) {
+    public List<NearbyDriverDTO> findNearbyAvailableDrivers(Double lat, Double lon, Double radiusKm, int page, int size) {
         validateCoordinates(lat, lon);
 
         if (radiusKm == null) {
@@ -189,7 +190,17 @@ public class LocationService extends AbstractObservableService {
             return List.of();
         }
 
-        String cacheKey = featureKey("S4-F3", lat, lon, radiusKm);
+        if (page < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "page must be >= 0");
+        }
+
+        if (size <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "size must be > 0");
+        }
+
+        size = Math.min(size, 100);
+
+        String cacheKey = featureKey("S4-F3", lat, lon, radiusKm, page, size);
 
         Object cached = redisCacheService.get(cacheKey);
         if (cached instanceof List<?> cachedList) {
@@ -213,10 +224,14 @@ public class LocationService extends AbstractObservableService {
             DriverDTO driver;
             try {
                 driver = driverServiceClient.getDriver(driverId);
-            } catch (Exception e) {
+            } catch (FeignException.NotFound e) {
                 continue;
+            } catch (FeignException e) {
+                throw new ResponseStatusException(
+                        HttpStatus.SERVICE_UNAVAILABLE,
+                        "Driver service temporarily unavailable"
+                );
             }
-
             if (driver == null || driver.status() == null ||
                     !"AVAILABLE".equalsIgnoreCase(driver.status())) {
                 continue;
@@ -233,8 +248,17 @@ public class LocationService extends AbstractObservableService {
 
         result.sort(Comparator.comparing(NearbyDriverDTO::getDistanceKm));
 
-        redisCacheService.set(cacheKey, result, Duration.ofMinutes(10));
-        return result;
+        int fromIndex = page * size;
+
+        if (fromIndex >= result.size()) {
+            return List.of();
+        }
+
+        int toIndex = Math.min(fromIndex + size, result.size());
+        List<NearbyDriverDTO> pagedResult = result.subList(fromIndex, toIndex);
+
+        redisCacheService.set(cacheKey, pagedResult, Duration.ofMinutes(10));
+        return pagedResult;
     }
 
     private double calculateDistanceKm(Double lat1, Double lon1, Double lat2, Double lon2) {
@@ -565,8 +589,13 @@ public DriverMovementSummaryDTO getDriverMovementSummary(
 
                     try {
                         driver = driverServiceClient.getDriver(p.getDriverId());
-                    } catch (Exception e) {
+                    } catch (FeignException.NotFound e) {
                         return null;
+                    } catch (FeignException e) {
+                        throw new ResponseStatusException(
+                                HttpStatus.SERVICE_UNAVAILABLE,
+                                "Driver service temporarily unavailable"
+                        );
                     }
 
                     if (driver == null) {
