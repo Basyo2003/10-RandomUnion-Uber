@@ -540,7 +540,13 @@ public class RideService extends AbstractObservableService {
         Ride ride = rideRepository.findById(rideId)
                 .orElseThrow(() -> new RideNotFoundException("Ride not found with id: " + rideId));
 
-        if (ride.getStatus() != RideStatus.COMPLETED) {
+        // Accept COMPLETED and all post-completion SAGA states (PAYMENT_PENDING → PAID / PAYMENT_FAILED / REFUNDED)
+        boolean postCompletion = ride.getStatus() == RideStatus.COMPLETED
+                || ride.getStatus() == RideStatus.PAYMENT_PENDING
+                || ride.getStatus() == RideStatus.PAID
+                || ride.getStatus() == RideStatus.PAYMENT_FAILED
+                || ride.getStatus() == RideStatus.REFUNDED;
+        if (!postCompletion) {
             throw new InvalidRideStatusException(
                     "Ride must be COMPLETED to record interaction. Current status: " + ride.getStatus());
         }
@@ -650,8 +656,13 @@ public class RideService extends AbstractObservableService {
     }
 
     public DriverRideSummaryDTO getDriverRideSummary(Long driverId, String startDate, String endDate) {
-        // Driver existence is validated by the caller (driver-service) before this Feign call.
-        // A back-call here creates a circular Feign loop and causes 401 since no auth header is forwarded.
+        try {
+            driverServiceClient.getDriverAvailability(driverId);
+        } catch (FeignException.NotFound e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Driver not found with id: " + driverId);
+        } catch (FeignException e) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "driver-service temporarily unavailable");
+        }
         LocalDateTime start = startDate != null ? LocalDate.parse(startDate).atStartOfDay() : null;
         LocalDateTime end = endDate != null ? LocalDate.parse(endDate).atTime(LocalTime.MAX) : null;
 

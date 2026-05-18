@@ -1,6 +1,7 @@
 package com.team10.uber.ride.config;
 
 import feign.RequestInterceptor;
+import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.MDC;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -22,6 +23,21 @@ public class FeignCorrelationConfig {
                     (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
             if (attrs != null) {
                 String auth = attrs.getRequest().getHeader("Authorization");
+                if (auth != null) {
+                    template.header("Authorization", auth);
+                }
+            }
+        };
+    }
+
+    @Bean
+    public RequestInterceptor jwtForwardingInterceptor() {
+        return template -> {
+            ServletRequestAttributes attrs =
+                (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+            if (attrs != null) {
+                HttpServletRequest request = attrs.getRequest();
+                String auth = request.getHeader("Authorization");
                 if (auth != null) {
                     template.header("Authorization", auth);
                 }

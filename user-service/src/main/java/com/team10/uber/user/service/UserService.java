@@ -230,9 +230,9 @@ public class UserService extends AbstractObservableService {
         User user = findUserByIdOrThrow(id);
         MDC.put("userId", id.toString());
         try {
-            log.info("Calling RideServiceClient.getUserRideSummary with args={}", id);
+            log.info("Feign call to ride-service getUserRideSummary userId={}", id);
             RideSummaryDTO summary = rideServiceClient.getUserRideSummary(id);
-            log.info("RideServiceClient.getUserRideSummary returned successfully");
+            log.info("Feign call to ride-service succeeded: getUserRideSummary");
             return new UserRideSummaryDTO(
                     user.getId(),
                     user.getName(),
@@ -274,11 +274,11 @@ public class UserService extends AbstractObservableService {
 
         List<TopRiderDTO> topRiders = new ArrayList<>();
         for (User user : users) {
-            log.info("Calling PaymentServiceClient.getUserPaymentTotal with args={}", user.getId());
+            log.info("Feign call to payment-service getUserPaymentTotal userId={}", user.getId());
             try {
                 BigDecimal total = paymentServiceClient.getUserPaymentTotal(
                         user.getId(), startDate, endDate);
-                log.info("PaymentServiceClient.getUserPaymentTotal returned successfully");
+                log.info("Feign call to payment-service succeeded: getUserPaymentTotal");
                 if (total != null && total.compareTo(BigDecimal.ZERO) > 0) {
                     topRiders.add(new TopRiderDTO(
                             user.getId(),
@@ -319,10 +319,10 @@ public class UserService extends AbstractObservableService {
 
         List<User> result = new ArrayList<>();
         for (User user : candidates) {
-            log.info("Calling RideServiceClient.getCompletedRideCount with args={}", user.getId());
+            log.info("Feign call to ride-service getCompletedRideCount userId={}", user.getId());
             try {
                 long completedCount = rideServiceClient.getCompletedRideCount(user.getId());
-                log.info("RideServiceClient.getCompletedRideCount returned successfully");
+                log.info("Feign call to ride-service succeeded: getCompletedRideCount");
                 if (completedCount >= rides) {
                     result.add(user);
                 }
@@ -349,9 +349,9 @@ public class UserService extends AbstractObservableService {
 
         MDC.put("userId", id.toString());
         try {
-            log.info("Calling RideServiceClient.getActiveRideCount with args={}", id);
+            log.info("Feign call to ride-service getActiveRideCount userId={}", id);
             int activeCount = rideServiceClient.getActiveRideCount(id);
-            log.info("RideServiceClient.getActiveRideCount returned successfully");
+            log.info("Feign call to ride-service succeeded: getActiveRideCount");
             if (activeCount > 0) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User has active rides");
             }
@@ -434,6 +434,7 @@ public class UserService extends AbstractObservableService {
         }
         if (userRepository.existsByEmail(user.getEmail()) ||
                 userRepository.existsByPhone(user.getPhone())) {
+            log.error("Registration conflict: email or phone already exists for {}", user.getEmail());
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Email or Phone already exists");
         }

@@ -34,8 +34,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class JwtAuthChainTest {
 
-    private static final String TEST_SECRET =
-            "dVJlckp3dFNoYXJlZFNlY3JldEtleUZvckFsbEZpdmVTZXJ2aWNlczEyMzQ1Ng==";
+    private static final String TEST_SECRET = "dVJlckp3dFNoYXJlZFNlY3JldEtleUZvckFsbEZpdmVTZXJ2aWNlczEyMzQ1Ng==";
 
     private MockMvc mockMvc;
 
@@ -63,17 +62,19 @@ class JwtAuthChainTest {
     void atLeastThreeConcreteHandlersExist() throws Exception {
         Class<?> base = Class.forName("com.team10.uber.driver.security.chain.AuthHandler");
         String[] handlers = {
-            "com.team10.uber.driver.security.chain.TokenExtractionHandler",
-            "com.team10.uber.driver.security.chain.SignatureValidationHandler",
-            "com.team10.uber.driver.security.chain.UserLoaderHandler",
-            "com.team10.uber.driver.security.chain.RoleAuthorizationHandler"
+                "com.team10.uber.driver.security.chain.TokenExtractionHandler",
+                "com.team10.uber.driver.security.chain.SignatureValidationHandler",
+                "com.team10.uber.driver.security.chain.UserLoaderHandler",
+                "com.team10.uber.driver.security.chain.RoleAuthorizationHandler"
         };
         int found = 0;
         for (String name : handlers) {
             try {
                 Class<?> h = Class.forName(name);
-                if (base.isAssignableFrom(h)) found++;
-            } catch (ClassNotFoundException ignored) {}
+                if (base.isAssignableFrom(h))
+                    found++;
+            } catch (ClassNotFoundException ignored) {
+            }
         }
         assertTrue(found >= 3, "Expected ≥3 concrete AuthHandler subclasses, found: " + found);
     }
@@ -89,11 +90,12 @@ class JwtAuthChainTest {
     @Test
     void invalidToken_returns401() throws Exception {
         mockMvc.perform(get("/api/drivers/1")
-                        .header("Authorization", "Bearer invalid.token.here"))
+                .header("Authorization", "Bearer invalid.token.here"))
                 .andExpect(status().isUnauthorized());
     }
 
-    // ── Test e) Token missing uid claim → 401 (UserLoaderHandler validates JWT claims, not DB) ─
+    // ── Test e) Token missing uid claim → 401 (UserLoaderHandler validates JWT
+    // claims, not DB) ─
     @Test
     void tokenMissingUidClaim_returns401() throws Exception {
         // Build a token that has subject but no "uid" claim
@@ -107,7 +109,7 @@ class JwtAuthChainTest {
                 .compact();
 
         mockMvc.perform(get("/api/drivers/1")
-                        .header("Authorization", "Bearer " + tokenNoUid))
+                .header("Authorization", "Bearer " + tokenNoUid))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -135,9 +137,9 @@ class JwtAuthChainTest {
         String token = generateToken("rider@test.com", 1L, "RIDER");
 
         mockMvc.perform(put("/api/users/1/role")
-                        .header("Authorization", "Bearer " + token)
-                        .contentType("application/json")
-                        .content("{\"role\":\"ADMIN\"}"))
+                .header("Authorization", "Bearer " + token)
+                .contentType("application/json")
+                .content("{\"role\":\"ADMIN\"}"))
                 .andExpect(status().isForbidden());
     }
 
@@ -147,9 +149,9 @@ class JwtAuthChainTest {
         String token = generateToken("admin@test.com", 2L, "ADMIN");
 
         mockMvc.perform(put("/api/users/1/role")
-                        .header("Authorization", "Bearer " + token)
-                        .contentType("application/json")
-                        .content("{\"role\":\"ADMIN\"}"))
+                .header("Authorization", "Bearer " + token)
+                .contentType("application/json")
+                .content("{\"role\":\"ADMIN\"}"))
                 .andExpect(status().isOk());
     }
 
@@ -183,7 +185,7 @@ class JwtAuthChainTest {
     @Test
     void fullChain_withValidToken_populatesContextCorrectly() {
         AuthHandler head = new TokenExtractionHandler();
-        AuthHandler sig  = new SignatureValidationHandler();
+        AuthHandler sig = new SignatureValidationHandler();
         AuthHandler user = new UserLoaderHandler();
         AuthHandler role = new RoleAuthorizationHandler();
         head.setNext(sig);
@@ -194,7 +196,7 @@ class JwtAuthChainTest {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("Authorization", "Bearer " + token);
 
-        AuthContext ctx    = new AuthContext(request, new MockHttpServletResponse());
+        AuthContext ctx = new AuthContext(request, new MockHttpServletResponse());
         AuthContext result = head.handle(ctx);
 
         assertTrue(result.isPassed());

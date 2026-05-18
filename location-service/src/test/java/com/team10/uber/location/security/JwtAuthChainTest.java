@@ -12,7 +12,6 @@ import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ResponseEntity;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
@@ -38,19 +37,17 @@ class JwtAuthChainTest {
     private static final String TEST_SECRET =
             "dVJlckp3dFNoYXJlZFNlY3JldEtleUZvckFsbEZpdmVTZXJ2aWNlczEyMzQ1Ng==";
 
-    private JdbcTemplate jdbcTemplate;
     private JwtService jwtService;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        jdbcTemplate = mock(JdbcTemplate.class);
-        jwtService   = new JwtService();
+        jwtService = new JwtService();
         ReflectionTestUtils.setField(jwtService, "jwtSecret", TEST_SECRET);
 
         TokenExtractionHandler    tokenHandler = new TokenExtractionHandler();
         SignatureValidationHandler sigHandler   = new SignatureValidationHandler(jwtService);
-        UserLoaderHandler          userHandler  = new UserLoaderHandler(jdbcTemplate);
+        UserLoaderHandler          userHandler  = new UserLoaderHandler();
         RoleAuthorizationHandler   roleHandler  = new RoleAuthorizationHandler();
 
         JwtAuthFilter filter = new JwtAuthFilter(tokenHandler, sigHandler, userHandler, roleHandler);
@@ -104,12 +101,18 @@ class JwtAuthChainTest {
                 .andExpect(status().isUnauthorized());
     }
 
-    // ── Test e) Valid token but user deleted from PG → 401 ───────────────────
+    // ── Test e) Valid signature but missing uid claim → 401 ──────────────────
+    // UserLoaderHandler trusts JWT claims (no DB lookup); it rejects tokens
+    // that are missing the uid or email fields required to build a security context.
     @Test
-    void deletedUser_validToken_returns401() throws Exception {
-        String token = generateToken("deleted@test.com", 99L, "RIDER");
-        when(jdbcTemplate.queryForObject(anyString(), eq(Integer.class),
-                eq(99L), eq("deleted@test.com"))).thenReturn(0);
+    void missingUidClaim_validToken_returns401() throws Exception {
+        SecretKey key = Keys.hmacShaKeyFor(Base64.getDecoder().decode(TEST_SECRET));
+        String token = Jwts.builder()
+                .subject("nouid@test.com")
+                .claim("role", "RIDER")
+                .expiration(new Date(System.currentTimeMillis() + 3_600_000L))
+                .signWith(key)
+                .compact();
 
         mockMvc.perform(get("/api/locations/1")
                         .header("Authorization", "Bearer " + token))
@@ -172,12 +175,9 @@ class JwtAuthChainTest {
     // ── Chain unit test: full chain populates context on success ─────────────
     @Test
     void fullChain_withValidToken_populatesContextCorrectly() {
-        when(jdbcTemplate.queryForObject(anyString(), eq(Integer.class),
-                eq(5L), eq("rider@test.com"))).thenReturn(1);
-
         TokenExtractionHandler    tokenHandler = new TokenExtractionHandler();
         SignatureValidationHandler sigHandler   = new SignatureValidationHandler(jwtService);
-        UserLoaderHandler          userHandler  = new UserLoaderHandler(jdbcTemplate);
+        UserLoaderHandler          userHandler  = new UserLoaderHandler();
         RoleAuthorizationHandler   roleHandler  = new RoleAuthorizationHandler();
         tokenHandler.setNext(sigHandler);
         sigHandler.setNext(userHandler);

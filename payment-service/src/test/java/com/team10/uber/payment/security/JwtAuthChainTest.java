@@ -1,6 +1,5 @@
 package com.team10.uber.payment.security;
 
-import com.team10.uber.contracts.feign.UserServiceClient;
 import com.team10.uber.payment.security.chain.AuthContext;
 import com.team10.uber.payment.security.chain.AuthHandler;
 import com.team10.uber.payment.security.chain.RoleAuthorizationHandler;
@@ -28,7 +27,6 @@ import java.util.Base64;
 import java.util.Date;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -38,14 +36,12 @@ class JwtAuthChainTest {
     private static final String TEST_SECRET =
             "dVJlckp3dFNoYXJlZFNlY3JldEtleUZvckFsbEZpdmVTZXJ2aWNlczEyMzQ1Ng==";
 
-    private UserServiceClient userServiceClient;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         JwtConfigurationManager.initConfig(TEST_SECRET, 86_400_000L);
-        userServiceClient = mock(UserServiceClient.class);
-        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(userServiceClient);
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter();
 
         mockMvc = MockMvcBuilders.standaloneSetup(new AdminEndpointController())
                 .addFilter(filter, "/*")
@@ -93,21 +89,19 @@ class JwtAuthChainTest {
     }
 
     @Test
-    void deletedUser_validToken_returns401() throws Exception {
-        String token = generateToken("deleted@test.com", 99L, "RIDER");
-        when(userServiceClient.getUser(99L))
-                .thenThrow(feign.FeignException.NotFound.class);
+    void validToken_passesAuthChain() throws Exception {
+        String token = generateToken("rider@test.com", 1L, "RIDER");
 
+        // Auth passes (UserLoaderHandler trusts JWT claims, no Feign lookup).
+        // /api/payments/1 is not registered in the mock — expect 404 not 401.
         mockMvc.perform(get("/api/payments/1")
                         .header("Authorization", "Bearer " + token))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isNotFound());
     }
 
     @Test
     void riderToken_onAdminEndpoint_returns403() throws Exception {
         String token = generateToken("rider@test.com", 1L, "RIDER");
-        com.team10.uber.contracts.dto.UserDTO user = new com.team10.uber.contracts.dto.UserDTO(1L, "Rider", "rider@test.com", "0100", "RIDER", "ACTIVE");
-        when(userServiceClient.getUser(1L)).thenReturn(user);
 
         mockMvc.perform(put("/api/users/1/role")
                         .header("Authorization", "Bearer " + token)
@@ -119,8 +113,6 @@ class JwtAuthChainTest {
     @Test
     void adminToken_onAdminEndpoint_returns200() throws Exception {
         String token = generateToken("admin@test.com", 2L, "ADMIN");
-        com.team10.uber.contracts.dto.UserDTO user = new com.team10.uber.contracts.dto.UserDTO(2L, "Admin", "admin@test.com", "0100", "ADMIN", "ACTIVE");
-        when(userServiceClient.getUser(2L)).thenReturn(user);
 
         mockMvc.perform(put("/api/users/1/role")
                         .header("Authorization", "Bearer " + token)
@@ -155,12 +147,9 @@ class JwtAuthChainTest {
 
     @Test
     void fullChain_withValidToken_populatesContextCorrectly() {
-        com.team10.uber.contracts.dto.UserDTO user = new com.team10.uber.contracts.dto.UserDTO(5L, "Rider", "rider@test.com", "0100", "RIDER", "ACTIVE");
-        when(userServiceClient.getUser(5L)).thenReturn(user);
-
         AuthHandler head = new TokenExtractionHandler();
         AuthHandler sig  = new SignatureValidationHandler();
-        AuthHandler userLoader = new UserLoaderHandler(userServiceClient);
+        AuthHandler userLoader = new UserLoaderHandler();
         AuthHandler role = new RoleAuthorizationHandler();
         head.setNext(sig);
         sig.setNext(userLoader);
