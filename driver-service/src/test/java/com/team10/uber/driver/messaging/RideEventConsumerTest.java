@@ -3,6 +3,7 @@ package com.team10.uber.driver.messaging;
 import com.team10.uber.contracts.events.RideCancelledEvent;
 import com.team10.uber.contracts.events.RideCompletedEvent;
 import com.team10.uber.contracts.events.RidePlacedEvent;
+import com.team10.uber.driver.cache.RedisCacheService;
 import com.team10.uber.driver.enums.DriverStatus;
 import com.team10.uber.driver.model.Driver;
 import com.team10.uber.driver.repository.DriverRepository;
@@ -17,12 +18,14 @@ import static org.mockito.Mockito.*;
 class RideEventConsumerTest {
 
     private DriverRepository driverRepository;
+    private RedisCacheService cache;
     private RideEventConsumer consumer;
 
     @BeforeEach
     void setUp() {
         driverRepository = mock(DriverRepository.class);
-        consumer = new RideEventConsumer(driverRepository, new com.fasterxml.jackson.databind.ObjectMapper());
+        cache = mock(RedisCacheService.class);
+        consumer = new RideEventConsumer(driverRepository, new com.fasterxml.jackson.databind.ObjectMapper(), cache);
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────

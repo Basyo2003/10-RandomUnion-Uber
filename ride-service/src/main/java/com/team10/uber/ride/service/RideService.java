@@ -656,18 +656,13 @@ public class RideService extends AbstractObservableService {
     }
 
     public DriverRideSummaryDTO getDriverRideSummary(Long driverId, String startDate, String endDate) {
-        log.info("FEIGN_CALL driver-service.getDriver driverId={} start", driverId);
         try {
-            driverServiceClient.getDriver(driverId);
-            log.info("FEIGN_CALL driver-service.getDriver driverId={} success", driverId);
+            driverServiceClient.getDriverAvailability(driverId);
         } catch (FeignException.NotFound e) {
-            log.warn("FEIGN_CALL driver-service.getDriver driverId={} not-found", driverId);
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Driver not found with id: " + driverId);
         } catch (FeignException e) {
-            log.error("FEIGN_CALL driver-service.getDriver driverId={} error: {}", driverId, e.getMessage());
-            throw new ServiceUnavailableException("Driver service unavailable", e);
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "driver-service temporarily unavailable");
         }
-
         LocalDateTime start = startDate != null ? LocalDate.parse(startDate).atStartOfDay() : null;
         LocalDateTime end = endDate != null ? LocalDate.parse(endDate).atTime(LocalTime.MAX) : null;
 

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.team10.uber.contracts.events.RideCancelledEvent;
 import com.team10.uber.contracts.events.RideCompletedEvent;
 import com.team10.uber.contracts.events.RidePlacedEvent;
+import com.team10.uber.driver.cache.RedisCacheService;
 import com.team10.uber.driver.config.RabbitMQConfig;
 import com.team10.uber.driver.enums.DriverStatus;
 import com.team10.uber.driver.repository.DriverRepository;
@@ -24,10 +25,12 @@ public class RideEventConsumer {
 
     private final DriverRepository driverRepository;
     private final ObjectMapper objectMapper;
+    private final RedisCacheService cache;
 
-    public RideEventConsumer(DriverRepository driverRepository, ObjectMapper objectMapper) {
+    public RideEventConsumer(DriverRepository driverRepository, ObjectMapper objectMapper, RedisCacheService cache) {
         this.driverRepository = driverRepository;
         this.objectMapper = objectMapper;
+        this.cache = cache;
     }
 
     @RabbitListener(queues = RabbitMQConfig.RIDE_SAGA_QUEUE)
@@ -37,7 +40,7 @@ public class RideEventConsumer {
         MDC.put("routingKey", routingKey);
         try {
             switch (routingKey) {
-                case "ride.placed"    -> handleRidePlaced(objectMapper.readValue(body, RidePlacedEvent.class));
+                case "ride.placed" -> handleRidePlaced(objectMapper.readValue(body, RidePlacedEvent.class));
                 case "ride.completed" -> handleRideCompleted(objectMapper.readValue(body, RideCompletedEvent.class));
                 case "ride.cancelled" -> handleRideCancelled(objectMapper.readValue(body, RideCancelledEvent.class));
                 default -> log.warn("Unhandled routing key on ride-saga queue: {}", routingKey);
@@ -62,6 +65,7 @@ public class RideEventConsumer {
             }
             driver.setStatus(DriverStatus.BUSY);
             driverRepository.save(driver);
+            cache.evict("driver::" + event.driverId());
             log.info("ride.placed: driver {} set to BUSY (rideId={})", event.driverId(), event.rideId());
         }, () -> log.warn("ride.placed: driver {} not found (rideId={})", event.driverId(), event.rideId()));
     }
@@ -71,6 +75,7 @@ public class RideEventConsumer {
             driver.setStatus(DriverStatus.AVAILABLE);
             driver.setTotalRatings(driver.getTotalRatings() + 1);
             driverRepository.save(driver);
+            cache.evict("driver::" + event.driverId());
             log.info("ride.completed: driver {} set to AVAILABLE, totalRatings incremented (rideId={})",
                     event.driverId(), event.rideId());
         }, () -> log.warn("ride.completed: driver {} not found (rideId={})", event.driverId(), event.rideId()));
@@ -83,6 +88,7 @@ public class RideEventConsumer {
                 driver.setTotalRatings(driver.getTotalRatings() - 1);
             }
             driverRepository.save(driver);
+            cache.evict("driver::" + event.driverId());
             log.info("ride.cancelled: driver {} set to AVAILABLE, stats reversed (rideId={})",
                     event.driverId(), event.rideId());
         }, () -> log.warn("ride.cancelled: driver {} not found (rideId={})", event.driverId(), event.rideId()));
