@@ -137,12 +137,24 @@ public class PaymentService extends AbstractObservableService {
     // ── CRUD ─────────────────────────────────────────────────────────────────
 
     public Payment createPayment(Payment payment) {
-        if (paymentRepository.countUserById(payment.getUserId()) == 0)
+        try {
+            userServiceClient.getUser(payment.getUserId());
+        } catch (FeignException.NotFound e) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,
                     "User not found with id: " + payment.getUserId());
-        if (paymentRepository.countRideById(payment.getRideId()) == 0)
+        } catch (FeignException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "User not found with id: " + payment.getUserId());
+        }
+        try {
+            rideServiceClient.getRide(payment.getRideId());
+        } catch (FeignException.NotFound e) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,
                     "Ride not found with id: " + payment.getRideId());
+        } catch (FeignException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "Ride not found with id: " + payment.getRideId());
+        }
         if (paymentRepository.countPaymentsByRideId(payment.getRideId()) > 0)
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "A payment already exists for ride id: " + payment.getRideId());
@@ -225,10 +237,13 @@ public class PaymentService extends AbstractObservableService {
     // §4.4.1 — S5-F2: refund payment — write, invalidates caches
     @Transactional
     public Payment refundPayment(Long id, String reason) {
-        Payment payment = getPaymentById(id);
-        if (payment.getStatus() != PaymentStatus.COMPLETED)
+        Payment payment = paymentRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Payment not found with id: " + id));
+        String currentStatus = paymentRepository.findStatusAsTextById(id);
+        if (!"COMPLETED".equals(currentStatus))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Payment cannot be refunded. Current status: " + payment.getStatus());
+                    "Payment cannot be refunded. Current status: " + currentStatus);
 
         payment.setStatus(PaymentStatus.REFUNDED);
         Map<String, Object> details = payment.getTransactionDetails();
@@ -697,9 +712,11 @@ public class PaymentService extends AbstractObservableService {
     // §10.5.3 — S5-F12: surge-adjusted refund with Strategy pattern
     @Transactional
     public Payment refundSurgeAdjusted(Long id, RefundRequest request) {
-        Payment payment = getPaymentById(id);
-
-        if (payment.getStatus() != PaymentStatus.COMPLETED)
+        Payment payment = paymentRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Payment not found with id: " + id));
+        String currentStatus = paymentRepository.findStatusAsTextById(id);
+        if (!"COMPLETED".equals(currentStatus))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Payment must be COMPLETED to be refunded");
 
