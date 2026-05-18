@@ -3,6 +3,8 @@ package com.team10.uber.driver.cache;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -19,13 +21,23 @@ public class RedisCacheService {
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final Counter cacheHitCounter;
+    private final Counter cacheMissCounter;
 
-    public RedisCacheService(StringRedisTemplate redisTemplate) {
+    public RedisCacheService(StringRedisTemplate redisTemplate, MeterRegistry meterRegistry) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = new ObjectMapper();
         this.objectMapper.registerModule(new JavaTimeModule());
         this.objectMapper.disable(
                 com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        this.cacheHitCounter = Counter.builder("cache.gets")
+                .tag("name", "driver-service")
+                .tag("result", "hit")
+                .register(meterRegistry);
+        this.cacheMissCounter = Counter.builder("cache.gets")
+                .tag("name", "driver-service")
+                .tag("result", "miss")
+                .register(meterRegistry);
     }
 
     public <T> void put(String key, T value, long ttlSeconds) {
@@ -40,7 +52,11 @@ public class RedisCacheService {
     public <T> T get(String key, Class<T> type) {
         try {
             String json = redisTemplate.opsForValue().get(SERVICE_PREFIX + key);
-            if (json == null) return null;
+            if (json == null) {
+                cacheMissCounter.increment();
+                return null;
+            }
+            cacheHitCounter.increment();
             return objectMapper.readValue(json, type);
         } catch (Exception e) {
             log.warn("Redis get failed for key {}: {}", key, e.getMessage());
@@ -51,7 +67,11 @@ public class RedisCacheService {
     public <T> T get(String key, TypeReference<T> typeRef) {
         try {
             String json = redisTemplate.opsForValue().get(SERVICE_PREFIX + key);
-            if (json == null) return null;
+            if (json == null) {
+                cacheMissCounter.increment();
+                return null;
+            }
+            cacheHitCounter.increment();
             return objectMapper.readValue(json, typeRef);
         } catch (Exception e) {
             log.warn("Redis get failed for key {}: {}", key, e.getMessage());

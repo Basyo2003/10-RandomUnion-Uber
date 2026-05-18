@@ -48,6 +48,9 @@ management:
   metrics:
     tags:
       application: payment-service
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
 
 feign:
   user-service:
