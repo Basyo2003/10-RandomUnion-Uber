@@ -40,10 +40,10 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
             @Param("endDate") LocalDateTime endDate);
 
     @Query(value = "SELECT * FROM payments WHERE " +
-            "(:startDate IS NULL OR created_at >= :startDate) " +
-            "AND (:endDate IS NULL OR created_at <= :endDate) " +
+            "(CAST(:startDate AS TIMESTAMP) IS NULL OR created_at >= CAST(:startDate AS TIMESTAMP)) " +
+            "AND (CAST(:endDate AS TIMESTAMP) IS NULL OR created_at <= CAST(:endDate AS TIMESTAMP)) " +
             "AND (:status IS NULL OR CAST(status AS TEXT) = :status) " +
-            "AND (:userId IS NULL OR user_id = :userId) " +
+            "AND (CAST(:userId AS BIGINT) IS NULL OR user_id = CAST(:userId AS BIGINT)) " +
             "ORDER BY created_at DESC",
             nativeQuery = true)
     List<Payment> searchPayments(
@@ -119,6 +119,9 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
             @Param("endDate") LocalDateTime endDate);
     @Query(value = "SELECT metadata->>'surgeMultiplier' FROM rides WHERE id = :rideId", nativeQuery = true)
     String findSurgeMultiplierByRideId(@Param("rideId") Long rideId);
+
+    @Query(value = "SELECT CAST(status AS TEXT) FROM payments WHERE id = :id", nativeQuery = true)
+    String findStatusAsTextById(@Param("id") Long id);
 
     @Query(value = "SELECT COALESCE(SUM(amount), 0) FROM payments " +
             "WHERE user_id = :userId AND CAST(status AS TEXT) = 'COMPLETED' " +
