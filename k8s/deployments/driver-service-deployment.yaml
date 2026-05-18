@@ -41,7 +41,7 @@ spec:
               value: "-XX:TieredStopAtLevel=1 -Xms128m -Xmx700m"
           resources:
             requests:
-              memory: 256Mi
+              memory: 512Mi
             limits:
               memory: 768Mi
           readinessProbe:

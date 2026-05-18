@@ -68,7 +68,7 @@ class DriverDashboardServiceTest {
         when(rideServiceClient.getDriverRideSummary(5L, null, null))
                 .thenReturn(new DriverRideSummaryDTO(5L, 1000.0, 200.0));
 
-        DriverDashboardDTO dto = driverService.getDriverDashboard(5L);
+        DriverDashboardDTO dto = driverService.getDriverDashboard(5L, 5L, "ADMIN");
 
         assertThat(dto.getTotalRides()).isEqualTo(5L);
         assertThat(dto.getTotalEarnings()).isEqualTo(1000.0);
@@ -83,7 +83,7 @@ class DriverDashboardServiceTest {
     void dashboard_driverNotFound_throws404() {
         when(driverRepository.findById(999L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> driverService.getDriverDashboard(999L))
+        assertThatThrownBy(() -> driverService.getDriverDashboard(999L, 999L, "ADMIN"))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode())
                         .isEqualTo(HttpStatus.NOT_FOUND));
@@ -100,7 +100,7 @@ class DriverDashboardServiceTest {
         when(rideServiceClient.getDriverRideSummary(5L, null, null))
                 .thenThrow(mock(FeignException.NotFound.class));
 
-        DriverDashboardDTO dto = driverService.getDriverDashboard(5L);
+        DriverDashboardDTO dto = driverService.getDriverDashboard(5L, 5L, "ADMIN");
 
         assertThat(dto.getTotalRides()).isEqualTo(0L);
         assertThat(dto.getTotalEarnings()).isEqualTo(0.0);
@@ -117,7 +117,7 @@ class DriverDashboardServiceTest {
         when(rideServiceClient.getDriverRideSummary(5L, null, null))
                 .thenThrow(mock(FeignException.ServiceUnavailable.class));
 
-        assertThatThrownBy(() -> driverService.getDriverDashboard(5L))
+        assertThatThrownBy(() -> driverService.getDriverDashboard(5L, 5L, "ADMIN"))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode())
                         .isEqualTo(HttpStatus.SERVICE_UNAVAILABLE));
@@ -133,7 +133,7 @@ class DriverDashboardServiceTest {
                 .averageRideFare(200.0).averageRating(4.5).totalRatings(100).build();
         when(cache.get("S2-F12::5", DriverDashboardDTO.class)).thenReturn(cached);
 
-        DriverDashboardDTO result = driverService.getDriverDashboard(5L);
+        DriverDashboardDTO result = driverService.getDriverDashboard(5L, 5L, "ADMIN");
 
         assertThat(result).isSameAs(cached);
         verifyNoInteractions(rideServiceClient);
@@ -148,7 +148,7 @@ class DriverDashboardServiceTest {
         when(rideServiceClient.getDriverRideSummary(5L, null, null))
                 .thenReturn(new DriverRideSummaryDTO(5L, 1000.0, 200.0));
 
-        driverService.getDriverDashboard(5L);
+        driverService.getDriverDashboard(5L, 5L, "ADMIN");
 
         verify(cache).put(eq("S2-F12::5"), any(DriverDashboardDTO.class), eq(10 * 60L));
     }
@@ -162,7 +162,7 @@ class DriverDashboardServiceTest {
         when(rideServiceClient.getDriverRideSummary(5L, null, null))
                 .thenReturn(new DriverRideSummaryDTO(5L, 1000.0, 200.0));
 
-        driverService.getDriverDashboard(5L);
+        driverService.getDriverDashboard(5L, 5L, "ADMIN");
 
         // getDashboardAggregate does not exist — Feign replaces it; verifying no save() proves no read-modify-write
         verify(driverRepository, never()).save(any());
