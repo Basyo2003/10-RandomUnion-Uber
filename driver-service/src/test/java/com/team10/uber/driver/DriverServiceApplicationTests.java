@@ -15,7 +15,7 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
-@SpringBootTest
+@SpringBootTest(properties = "spring.main.web-application-type=servlet")
 class DriverServiceApplicationTests {
 
     // Infrastructure mocks — all external services are unavailable in unit test env

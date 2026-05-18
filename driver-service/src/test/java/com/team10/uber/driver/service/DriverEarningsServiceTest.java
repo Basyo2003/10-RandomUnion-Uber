@@ -75,7 +75,7 @@ class DriverEarningsServiceTest {
         when(rideServiceClient.getDriverRideSummary(1L, "2026-03-01", "2026-03-31"))
                 .thenReturn(new DriverRideSummaryDTO(5L, 350.0, 70.0));
 
-        DriverEarningsDTO dto = driverService.getDriverEarningsSummary(1L, START, END);
+        DriverEarningsDTO dto = driverService.getDriverEarningsSummary(1L, START, END, 1L, "ADMIN");
 
         assertThat(dto.getTotalRides()).isEqualTo(5L);
         assertThat(dto.getTotalEarnings()).isEqualTo(350.0);
@@ -88,7 +88,7 @@ class DriverEarningsServiceTest {
     void earnings_driverNotFound_throws404() {
         when(driverRepository.findById(99L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> driverService.getDriverEarningsSummary(99L, START, END))
+        assertThatThrownBy(() -> driverService.getDriverEarningsSummary(99L, START, END, 99L, "ADMIN"))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode())
                         .isEqualTo(HttpStatus.NOT_FOUND));
@@ -101,7 +101,7 @@ class DriverEarningsServiceTest {
     void earnings_invalidDateRange_throws400() {
         when(driverRepository.findById(1L)).thenReturn(Optional.of(driver(1L)));
 
-        assertThatThrownBy(() -> driverService.getDriverEarningsSummary(1L, END, START))
+        assertThatThrownBy(() -> driverService.getDriverEarningsSummary(1L, END, START, 1L, "ADMIN"))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode())
                         .isEqualTo(HttpStatus.BAD_REQUEST));
@@ -117,7 +117,7 @@ class DriverEarningsServiceTest {
         when(rideServiceClient.getDriverRideSummary(1L, "2026-03-01", "2026-03-31"))
                 .thenThrow(mock(FeignException.NotFound.class));
 
-        DriverEarningsDTO dto = driverService.getDriverEarningsSummary(1L, START, END);
+        DriverEarningsDTO dto = driverService.getDriverEarningsSummary(1L, START, END, 1L, "ADMIN");
 
         assertThat(dto.getTotalRides()).isEqualTo(0L);
         assertThat(dto.getTotalEarnings()).isEqualTo(0.0);
@@ -132,7 +132,7 @@ class DriverEarningsServiceTest {
         when(rideServiceClient.getDriverRideSummary(1L, "2026-03-01", "2026-03-31"))
                 .thenThrow(mock(FeignException.ServiceUnavailable.class));
 
-        assertThatThrownBy(() -> driverService.getDriverEarningsSummary(1L, START, END))
+        assertThatThrownBy(() -> driverService.getDriverEarningsSummary(1L, START, END, 1L, "ADMIN"))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode())
                         .isEqualTo(HttpStatus.SERVICE_UNAVAILABLE));
@@ -145,7 +145,7 @@ class DriverEarningsServiceTest {
         DriverEarningsDTO cached = new DriverEarningsDTO(1L, "Driver 1", 5L, 350.0, 70.0);
         when(cache.get(cacheKey(1L), DriverEarningsDTO.class)).thenReturn(cached);
 
-        DriverEarningsDTO result = driverService.getDriverEarningsSummary(1L, START, END);
+        DriverEarningsDTO result = driverService.getDriverEarningsSummary(1L, START, END, 1L, "ADMIN");
 
         assertThat(result).isSameAs(cached);
         verifyNoInteractions(rideServiceClient);
@@ -159,7 +159,7 @@ class DriverEarningsServiceTest {
         when(rideServiceClient.getDriverRideSummary(1L, "2026-03-01", "2026-03-31"))
                 .thenReturn(new DriverRideSummaryDTO(5L, 350.0, 70.0));
 
-        driverService.getDriverEarningsSummary(1L, START, END);
+        driverService.getDriverEarningsSummary(1L, START, END, 1L, "ADMIN");
 
         verify(cache).put(eq(cacheKey(1L)), any(DriverEarningsDTO.class), eq(10 * 60L));
     }
@@ -172,7 +172,7 @@ class DriverEarningsServiceTest {
         when(rideServiceClient.getDriverRideSummary(1L, "2026-03-01", "2026-03-31"))
                 .thenReturn(new DriverRideSummaryDTO(5L, 350.0, 70.0));
 
-        driverService.getDriverEarningsSummary(1L, START, END);
+        driverService.getDriverEarningsSummary(1L, START, END, 1L, "ADMIN");
 
         verify(rideServiceClient).getDriverRideSummary(1L, "2026-03-01", "2026-03-31");
     }
@@ -185,7 +185,7 @@ class DriverEarningsServiceTest {
         when(rideServiceClient.getDriverRideSummary(1L, "2026-03-01", "2026-03-31"))
                 .thenReturn(new DriverRideSummaryDTO(5L, 350.0, 70.0));
 
-        driverService.getDriverEarningsSummary(1L, START, END);
+        driverService.getDriverEarningsSummary(1L, START, END, 1L, "ADMIN");
 
         // getEarningsAggregate does not exist — Feign replaces cross-service SQL; verifying rideServiceClient was called is sufficient
         verify(rideServiceClient).getDriverRideSummary(anyLong(), any(), any());

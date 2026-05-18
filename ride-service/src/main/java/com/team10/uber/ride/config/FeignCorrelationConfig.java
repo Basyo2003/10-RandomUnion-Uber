@@ -18,6 +18,15 @@ public class FeignCorrelationConfig {
             if (correlationId != null) {
                 template.header("X-Correlation-ID", correlationId);
             }
+            // Propagate Authorization header to downstream services
+            ServletRequestAttributes attrs =
+                    (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+            if (attrs != null) {
+                String auth = attrs.getRequest().getHeader("Authorization");
+                if (auth != null) {
+                    template.header("Authorization", auth);
+                }
+            }
         };
     }
 
