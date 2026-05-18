@@ -145,15 +145,15 @@ public interface RideRepository extends JpaRepository<Ride, Long> {
 
     // Spec: driver summary totalRides = completed rides (COMPLETED or PAID) in optional date range
     @Query(value = "SELECT COUNT(*) FROM rides WHERE driver_id = :driverId AND status IN ('COMPLETED', 'PAID')" +
-            " AND (:startDate IS NULL OR requested_at >= :startDate)" +
-            " AND (:endDate IS NULL OR requested_at <= :endDate)", nativeQuery = true)
+            " AND (CAST(:startDate AS timestamp) IS NULL OR requested_at >= :startDate)" +
+            " AND (CAST(:endDate AS timestamp) IS NULL OR requested_at <= :endDate)", nativeQuery = true)
     long countCompletedRidesByDriverIdInRange(@Param("driverId") Long driverId,
                                               @Param("startDate") LocalDateTime startDate,
                                               @Param("endDate") LocalDateTime endDate);
 
     @Query(value = "SELECT COALESCE(SUM(fare), 0) FROM rides WHERE driver_id = :driverId AND status IN ('COMPLETED', 'PAID')" +
-            " AND (:startDate IS NULL OR requested_at >= :startDate)" +
-            " AND (:endDate IS NULL OR requested_at <= :endDate)", nativeQuery = true)
+            " AND (CAST(:startDate AS timestamp) IS NULL OR requested_at >= :startDate)" +
+            " AND (CAST(:endDate AS timestamp) IS NULL OR requested_at <= :endDate)", nativeQuery = true)
     Double sumFareByDriverIdInRange(@Param("driverId") Long driverId,
                                     @Param("startDate") LocalDateTime startDate,
                                     @Param("endDate") LocalDateTime endDate);
