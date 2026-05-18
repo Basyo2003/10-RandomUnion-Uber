@@ -71,10 +71,10 @@ public interface RideRepository extends JpaRepository<Ride, Long> {
                                             @Param("status") String status);
 
     @Query(value = "SELECT * FROM rides " +
-            "WHERE (:startDate IS NULL OR requested_at >= :startDate) " +
-            "AND (:endDate IS NULL OR requested_at <= :endDate) " +
-            "AND (:status IS NULL OR status::text = :status) " +
-            "AND (:userId IS NULL OR user_id = :userId) " +
+            "WHERE (CAST(:startDate AS timestamp) IS NULL OR requested_at >= :startDate) " +
+            "AND (CAST(:endDate AS timestamp) IS NULL OR requested_at <= :endDate) " +
+            "AND (CAST(:status AS text) IS NULL OR status::text = :status) " +
+            "AND (CAST(:userId AS bigint) IS NULL OR user_id = :userId) " +
             "ORDER BY requested_at DESC",
             nativeQuery = true)
     List<Ride> searchRides(@Param("startDate") LocalDateTime startDate,
@@ -102,11 +102,10 @@ public interface RideRepository extends JpaRepository<Ride, Long> {
     boolean userExists(@Param("userId") Long userId);
 
     @Query(value = """
-        SELECT COALESCE(SUM(p.amount), 0)
-        FROM rides r
-        JOIN payments p ON p.ride_id = r.id
-        WHERE r.status = 'COMPLETED'
-          AND r.requested_at BETWEEN :startDateTime AND :endDateTime
+        SELECT COALESCE(SUM(fare), 0)
+        FROM rides
+        WHERE status = 'COMPLETED'
+          AND requested_at BETWEEN :startDateTime AND :endDateTime
         """, nativeQuery = true)
     Double sumCompletedRideRevenueBetween(@Param("startDateTime") LocalDateTime startDateTime,
                                           @Param("endDateTime") LocalDateTime endDateTime);

@@ -540,7 +540,13 @@ public class RideService extends AbstractObservableService {
         Ride ride = rideRepository.findById(rideId)
                 .orElseThrow(() -> new RideNotFoundException("Ride not found with id: " + rideId));
 
-        if (ride.getStatus() != RideStatus.COMPLETED) {
+        // Accept COMPLETED and all post-completion SAGA states (PAYMENT_PENDING → PAID / PAYMENT_FAILED / REFUNDED)
+        boolean postCompletion = ride.getStatus() == RideStatus.COMPLETED
+                || ride.getStatus() == RideStatus.PAYMENT_PENDING
+                || ride.getStatus() == RideStatus.PAID
+                || ride.getStatus() == RideStatus.PAYMENT_FAILED
+                || ride.getStatus() == RideStatus.REFUNDED;
+        if (!postCompletion) {
             throw new InvalidRideStatusException(
                     "Ride must be COMPLETED to record interaction. Current status: " + ride.getStatus());
         }
