@@ -385,8 +385,13 @@ public class DriverService extends AbstractObservableService {
         return saved;
     }
 
-    /** S2-F3 — earnings summary via ride-service (M3 Feign), cached 10 min. */
-    public DriverEarningsDTO getDriverEarningsSummary(Long driverId, LocalDate startDate, LocalDate endDate) {
+    /** S2-F3 — earnings summary via ride-service (M3 Feign), cached 10 min. Ownership check: §2.10 */
+    public DriverEarningsDTO getDriverEarningsSummary(Long driverId, LocalDate startDate, LocalDate endDate,
+                                                       Long callerId, String callerRole) {
+        if (!driverId.equals(callerId) && !"ADMIN".equals(callerRole)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Access denied: you can only view your own earnings summary");
+        }
         Driver driver = getDriverById(driverId);
         if (startDate.isAfter(endDate)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid date range: startDate > endDate");
@@ -436,9 +441,6 @@ public class DriverService extends AbstractObservableService {
     public List<Driver> filterByVehicleType(String type, String status) {
         if (type == null || type.isBlank())
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vehicle type is required");
-        if (!ALLOWED_VEHICLE_TYPES.contains(type.trim().toUpperCase()))
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Unknown vehicle type: " + type + ". Must be one of " + ALLOWED_VEHICLE_TYPES);
 
         DriverStatus driverStatus = null;
         if (status != null) {
@@ -461,6 +463,8 @@ public class DriverService extends AbstractObservableService {
 
     /** S2-F6 — top rated drivers, cached 10 min. (M3: cap 100 candidates, enrich totalRides via ride-service Feign) */
     public List<TopRatedDriverDTO> getTopRatedDrivers(int limit) {
+        if (limit <= 0)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Limit must be greater than 0");
         String key = "S2-F6::" + limit;
         List<TopRatedDriverDTO> cached = cache.get(key,
                 new TypeReference<List<TopRatedDriverDTO>>() {});
@@ -515,7 +519,8 @@ public class DriverService extends AbstractObservableService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Ride does not belong to the requested driver");
 
-        if (!"COMPLETED".equals(ride.status()))
+        String rideStatus = ride.status();
+        if (!"COMPLETED".equals(rideStatus) && !"PAYMENT_PENDING".equals(rideStatus) && !"PAID".equals(rideStatus))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Cannot rate driver for a ride that is not completed");
 
@@ -556,9 +561,13 @@ public class DriverService extends AbstractObservableService {
         return result;
     }
 
-    /** S2-F12 — Driver Performance Dashboard, cached 10 min.
+    /** S2-F12 — Driver Performance Dashboard, cached 10 min. Ownership check: §2.10
      *  MongoDB DASHBOARD_VIEWED fires on every invocation (cache hit or miss). */
-    public DriverDashboardDTO getDriverDashboard(Long driverId) {
+    public DriverDashboardDTO getDriverDashboard(Long driverId, Long callerId, String callerRole) {
+        if (!driverId.equals(callerId) && !"ADMIN".equals(callerRole)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Access denied: you can only view your own dashboard");
+        }
         Driver driver = driverRepository.findById(driverId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Driver not found with id: " + driverId));

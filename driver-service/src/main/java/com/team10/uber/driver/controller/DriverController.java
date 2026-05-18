@@ -80,8 +80,11 @@ public class DriverController {
     }
 
     @GetMapping("/{id}/dashboard")
-    public DriverDashboardDTO getDriverDashboard(@PathVariable Long id) {
-        return driverService.getDriverDashboard(id);
+    public DriverDashboardDTO getDriverDashboard(
+            @PathVariable Long id,
+            @RequestHeader("X-User-Id") Long callerId,
+            @RequestHeader("X-User-Role") String callerRole) {
+        return driverService.getDriverDashboard(id, callerId, callerRole);
     }
 
     @GetMapping("/{id}")
@@ -98,8 +101,10 @@ public class DriverController {
     public DriverEarningsDTO getDriverEarningsSummary(
             @PathVariable Long id,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
-        return driverService.getDriverEarningsSummary(id, startDate, endDate);
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestHeader("X-User-Id") Long callerId,
+            @RequestHeader("X-User-Role") String callerRole) {
+        return driverService.getDriverEarningsSummary(id, startDate, endDate, callerId, callerRole);
     }
 
     @PutMapping("/{id}/vehicle")
@@ -112,7 +117,13 @@ public class DriverController {
             @PathVariable Long id,
             @RequestBody Map<String, String> body) {
 
-        DriverStatus status = DriverStatus.valueOf(body.get("status"));
+        DriverStatus status;
+        try {
+            status = DriverStatus.valueOf(body.get("status"));
+        } catch (IllegalArgumentException e) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.BAD_REQUEST, "Invalid status value");
+        }
 
         driverService.updateDriverAvailability(id, status);
 

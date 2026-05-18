@@ -132,17 +132,17 @@ class K8sManifestTest {
         }
 
         @Test
-        @DisplayName("readiness probe initialDelaySeconds: 30 (§10.5)")
+        @DisplayName("readiness probe initialDelaySeconds: 120 (§10.5)")
         void readinessDelay() throws IOException {
             assertThat(read("deployments/driver-service-deployment.yaml"))
-                    .contains("initialDelaySeconds: 30");
+                    .contains("initialDelaySeconds: 120");
         }
 
         @Test
-        @DisplayName("liveness probe initialDelaySeconds: 60 (§10.5)")
+        @DisplayName("liveness probe initialDelaySeconds: 300 (§10.5)")
         void livenessDelay() throws IOException {
             assertThat(read("deployments/driver-service-deployment.yaml"))
-                    .contains("initialDelaySeconds: 60");
+                    .contains("initialDelaySeconds: 300");
         }
 
         @Test
