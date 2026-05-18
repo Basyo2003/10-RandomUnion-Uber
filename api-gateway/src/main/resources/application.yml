@@ -9,15 +9,15 @@ spring:
             - id: user-service
               uri: http://user-service:8080
               predicates:
-                - Path=/api/users/**, /api/auth/**
+                - Path=/api/users/**, /api/auth/**,/api/addresses/**
             - id: driver-service
               uri: http://driver-service:8080
               predicates:
-                - Path=/api/drivers/**
+                - Path=/api/drivers/**, /api/driver-documents/**
             - id: ride-service
               uri: http://ride-service:8080
               predicates:
-                - Path=/api/rides/**
+                - Path=/api/rides/**,/api/ride-stops/**
             - id: location-service
               uri: http://location-service:8080
               predicates:
@@ -25,7 +25,7 @@ spring:
             - id: payment-service
               uri: http://payment-service:8080
               predicates:
-                - Path=/api/payments/**
+                - Path=/api/payments/**,/api/coupons/**,/api/payment-coupons/**
 
 server:
   port: 8080
