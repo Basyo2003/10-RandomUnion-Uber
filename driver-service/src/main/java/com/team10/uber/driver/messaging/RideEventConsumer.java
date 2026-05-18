@@ -10,6 +10,7 @@ import com.team10.uber.driver.enums.DriverStatus;
 import com.team10.uber.driver.repository.DriverRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
@@ -33,6 +34,7 @@ public class RideEventConsumer {
     public void onRideEvent(Message message) {
         String routingKey = message.getMessageProperties().getReceivedRoutingKey();
         String body = new String(message.getBody(), StandardCharsets.UTF_8);
+        MDC.put("routingKey", routingKey);
         try {
             switch (routingKey) {
                 case "ride.placed"    -> handleRidePlaced(objectMapper.readValue(body, RidePlacedEvent.class));
@@ -44,6 +46,8 @@ public class RideEventConsumer {
             log.error("Failed to deserialize ride event [{}]: {}", routingKey, e.getMessage());
             // rethrow so Spring retries and routes to DLQ after max-attempts
             throw new RuntimeException("Deserialization failed for routing key: " + routingKey, e);
+        } finally {
+            MDC.remove("routingKey");
         }
     }
 
@@ -58,7 +62,7 @@ public class RideEventConsumer {
             }
             driver.setStatus(DriverStatus.BUSY);
             driverRepository.save(driver);
-            log.debug("ride.placed: driver {} set to BUSY (rideId={})", event.driverId(), event.rideId());
+            log.info("ride.placed: driver {} set to BUSY (rideId={})", event.driverId(), event.rideId());
         }, () -> log.warn("ride.placed: driver {} not found (rideId={})", event.driverId(), event.rideId()));
     }
 
@@ -67,7 +71,7 @@ public class RideEventConsumer {
             driver.setStatus(DriverStatus.AVAILABLE);
             driver.setTotalRatings(driver.getTotalRatings() + 1);
             driverRepository.save(driver);
-            log.debug("ride.completed: driver {} set to AVAILABLE, totalRatings incremented (rideId={})",
+            log.info("ride.completed: driver {} set to AVAILABLE, totalRatings incremented (rideId={})",
                     event.driverId(), event.rideId());
         }, () -> log.warn("ride.completed: driver {} not found (rideId={})", event.driverId(), event.rideId()));
     }
@@ -79,7 +83,7 @@ public class RideEventConsumer {
                 driver.setTotalRatings(driver.getTotalRatings() - 1);
             }
             driverRepository.save(driver);
-            log.debug("ride.cancelled: driver {} set to AVAILABLE, stats reversed (rideId={})",
+            log.info("ride.cancelled: driver {} set to AVAILABLE, stats reversed (rideId={})",
                     event.driverId(), event.rideId());
         }, () -> log.warn("ride.cancelled: driver {} not found (rideId={})", event.driverId(), event.rideId()));
     }
