@@ -60,7 +60,8 @@ public class LocationService extends AbstractObservableService {
 
     // 4.4.4 Cache Invalidation - create location invalidates feature caches
     public Location createLocation(Location location) {
-        //locationRepository.driverExists(jdbcTemplate, location.getDriverId());
+        validateCoordinates(location.getLatitude(), location.getLongitude());
+        checkDriverExists(location.getDriverId());
         Location saved = locationRepository.save(location);
         locationTrackingEventService.recordTrackingEvent(saved);
         invalidateLocationCaches(saved.getId(), saved.getDriverId());
@@ -100,6 +101,7 @@ public class LocationService extends AbstractObservableService {
 
         if (updated.getDriverId() != null) {
             //locationRepository.driverExists(jdbcTemplate, updated.getDriverId());
+            checkDriverExists(updated.getDriverId());
             existing.setDriverId(updated.getDriverId());
         }
 
@@ -118,6 +120,8 @@ public class LocationService extends AbstractObservableService {
         if (updated.getMetadata() != null) {
             existing.setMetadata(updated.getMetadata());
         }
+
+        validateCoordinates(existing.getLatitude(), existing.getLongitude());
 
         Location saved = locationRepository.save(existing);
         ///new line 
@@ -139,7 +143,7 @@ public class LocationService extends AbstractObservableService {
 
     // S4-F1 - 4.4.1 Redis cache, TTL 5 min
     public Location getLatestLocationByDriverId(Long driverId) {
-        checkDriverExists(driverId);
+        //checkDriverExists(driverId);
 
         String cacheKey = featureKey("S4-F1", driverId);
 
@@ -160,7 +164,7 @@ public class LocationService extends AbstractObservableService {
 
     // S4-F2 - 4.4.4 Cache invalidation after location write
     public Location createLocationForDriver(Long driverId, Location location) {
-        checkDriverExists(driverId);
+        //checkDriverExists(driverId);
 
         validateCoordinates(location.getLatitude(), location.getLongitude());
 
@@ -280,7 +284,7 @@ public Map<String, Object> batchCreateLocations(BatchLocationRequest request) {
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Locations list cannot be empty");
     }
 
-    checkDriverExists(request.getDriverId());
+   // checkDriverExists(request.getDriverId());
 
     List<Location> locationsToSave = new ArrayList<>();
     LocalDateTime baseTime = LocalDateTime.now();
@@ -497,7 +501,7 @@ public DriverMovementSummaryDTO getDriverMovementSummary(
         );
     }
 
-    checkDriverExists(driverId);
+    //checkDriverExists(driverId);
 
     String cacheKey = featureKey("S4-F8", driverId, startDate, endDate);
 
@@ -768,7 +772,7 @@ public DriverMovementSummaryDTO getDriverMovementSummary(
 
     // S4-F11 - Record Location GPS Event
     public void recordLocationGpsEvent(Long driverId, TrackingEventRequest request) {
-        checkDriverExists(driverId);
+       // checkDriverExists(driverId);
 
         validateCoordinates(request.getLatitude(), request.getLongitude());
 
@@ -873,12 +877,24 @@ public DriverMovementSummaryDTO getDriverMovementSummary(
 
 
     private void checkDriverExists(Long driverId) {
+        if (driverId == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "driverId is required"
+            );
+        }
         try {
             driverServiceClient.getDriver(driverId);
         } catch (FeignException.NotFound e) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Driver not found: " + driverId);
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "Driver not found: " + driverId
+            );
         } catch (FeignException e) {
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Driver service temporarily unavailable");
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "Driver service temporarily unavailable"
+            );
         }
     }
 
