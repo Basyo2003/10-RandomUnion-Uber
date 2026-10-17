@@ -22,26 +22,37 @@ Traffic enters through a reactive Spring Cloud Gateway, which validates JWT cred
 
 ```mermaid
 flowchart TD
-    Clients["Client Applications (Rider • Driver • Admin)"]
-    Gateway["Spring Cloud API Gateway :8080<br/>(JWT Auth • Dynamic Routing • Correlation ID Injection)"]
+    classDef clientStyle fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#ffffff;
+    classDef gatewayStyle fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#ffffff;
+    classDef serviceStyle fill:#064e3b,stroke:#34d399,stroke-width:2px,color:#ffffff;
+    classDef brokerStyle fill:#431407,stroke:#fb923c,stroke-width:2px,color:#ffffff;
+    classDef pgStyle fill:#172554,stroke:#60a5fa,stroke-width:2px,color:#ffffff;
+    classDef redisStyle fill:#4c0519,stroke:#fb7185,stroke-width:2px,color:#ffffff;
+    classDef mongoStyle fill:#052e16,stroke:#4ade80,stroke-width:2px,color:#ffffff;
+    classDef esStyle fill:#042f2e,stroke:#2dd4bf,stroke-width:2px,color:#ffffff;
+    classDef neoStyle fill:#022c22,stroke:#38bdf8,stroke-width:2px,color:#ffffff;
+    classDef casStyle fill:#2e1065,stroke:#c084fc,stroke-width:2px,color:#ffffff;
 
-    subgraph Services ["Domain Microservices"]
-        User["User Service :8081"]
-        Driver["Driver Service :8082"]
-        Ride["Ride Service :8083"]
-        Loc["Location Service :8084"]
-        Pay["Payment Service :8085"]
+    Clients["📱 Client Apps<br/><small>Rider • Driver • Admin</small>"]:::clientStyle
+    Gateway["🌐 Spring Cloud API Gateway :8080<br/><small>JWT Auth • Dynamic Routing • Correlation ID</small>"]:::gatewayStyle
+
+    subgraph Services ["Core Domain Microservices"]
+        User["👤 User Service<br/>:8081"]:::serviceStyle
+        Driver["🚗 Driver Service<br/>:8082"]:::serviceStyle
+        Ride["📍 Ride Service<br/>:8083"]:::serviceStyle
+        Loc["📡 Location Service<br/>:8084"]:::serviceStyle
+        Pay["💳 Payment Service<br/>:8085"]:::serviceStyle
     end
 
-    Broker["RabbitMQ Event Bus (Topic Exchanges & DLQs)"]
+    Broker["🐰 RabbitMQ Event Bus<br/><small>Topic Exchanges & DLQs</small>"]:::brokerStyle
 
-    subgraph Storage ["Polyglot Storage Layer"]
-        PG[("PostgreSQL 17<br/>5 Isolated DBs")]
-        Redis[("Redis<br/>Cache")]
-        Mongo[("MongoDB<br/>Audit Log")]
-        ES[("Elasticsearch<br/>Driver Search")]
-        Neo4j[("Neo4j<br/>Trip Graph")]
-        Cassandra[("Cassandra<br/>GPS Pings")]
+    subgraph Storage ["Polyglot Storage Tier"]
+        PG[("🐘 PostgreSQL 17<br/>5 Isolated DBs")]:::pgStyle
+        Redis[("⚡ Redis 7<br/>Cache")]:::redisStyle
+        Mongo[("🍃 MongoDB<br/>Audit")]:::mongoStyle
+        ES[("🔍 Elasticsearch 9<br/>Search")]:::esStyle
+        Neo4j[("🕸️ Neo4j<br/>Graph")]:::neoStyle
+        Cassandra[("👁️ Cassandra<br/>GPS")]:::casStyle
     end
 
     Clients --> Gateway
@@ -56,13 +67,13 @@ flowchart TD
 
 | Service | Port | Primary Database | Key Responsibilities |
 | :--- | :---: | :--- | :--- |
-| **`api-gateway`** | `8080` | None (Stateless) | Ingress routing, reactive JWT validation, correlation ID injection. |
-| **`user-service`** | `8081` | `uberdb-users` (PostgreSQL) | Authentication (JWT), user registration, role RBAC (`RIDER`, `DRIVER`, `ADMIN`). |
-| **`driver-service`** | `8082` | `uberdb-drivers` (PostgreSQL) | Driver profiles, status tracking (`AVAILABLE`, `BUSY`, `OFFLINE`), ratings, fuzzy search (Elasticsearch). |
-| **`ride-service`** | `8083` | `uberdb-rides` (PostgreSQL) | Booking lifecycle, surge pricing, driver recommendation graph (Neo4j). |
-| **`location-service`** | `8084` | `uberdb-locations` (PostgreSQL) | Real-time GPS ping ingestion (Cassandra), nearby driver discovery. |
-| **`payment-service`** | `8085` | `uberdb-payments` (PostgreSQL) | Payment settlement (Card, Wallet, Cash), coupons, dynamic refund calculation. |
-| **`contracts`** | N/A | None (Library) | Shared DTOs, RabbitMQ event payloads, and OpenFeign client interfaces. |
+| <img src="https://raw.githubusercontent.com/devicons/devicon/master/icons/spring/spring-original.svg" width="16" height="16"/> **`api-gateway`** | `8080` | None (Stateless) | Ingress routing, reactive JWT validation, correlation ID injection. |
+| <img src="https://raw.githubusercontent.com/devicons/devicon/master/icons/spring/spring-original.svg" width="16" height="16"/> **`user-service`** | `8081` | <img src="https://raw.githubusercontent.com/devicons/devicon/master/icons/postgresql/postgresql-original.svg" width="16" height="16"/> `uberdb-users` | Authentication (JWT), user registration, role RBAC (`RIDER`, `DRIVER`, `ADMIN`). |
+| <img src="https://raw.githubusercontent.com/devicons/devicon/master/icons/spring/spring-original.svg" width="16" height="16"/> **`driver-service`** | `8082` | <img src="https://raw.githubusercontent.com/devicons/devicon/master/icons/postgresql/postgresql-original.svg" width="16" height="16"/> `uberdb-drivers` | Driver profiles, status tracking (`AVAILABLE`, `BUSY`, `OFFLINE`), ratings, fuzzy search (Elasticsearch). |
+| <img src="https://raw.githubusercontent.com/devicons/devicon/master/icons/spring/spring-original.svg" width="16" height="16"/> **`ride-service`** | `8083` | <img src="https://raw.githubusercontent.com/devicons/devicon/master/icons/postgresql/postgresql-original.svg" width="16" height="16"/> `uberdb-rides` | Booking lifecycle, surge pricing, driver recommendation graph (Neo4j). |
+| <img src="https://raw.githubusercontent.com/devicons/devicon/master/icons/spring/spring-original.svg" width="16" height="16"/> **`location-service`** | `8084` | <img src="https://raw.githubusercontent.com/devicons/devicon/master/icons/postgresql/postgresql-original.svg" width="16" height="16"/> `uberdb-locations` | Real-time GPS ping ingestion (Cassandra), nearby driver discovery. |
+| <img src="https://raw.githubusercontent.com/devicons/devicon/master/icons/spring/spring-original.svg" width="16" height="16"/> **`payment-service`** | `8085` | <img src="https://raw.githubusercontent.com/devicons/devicon/master/icons/postgresql/postgresql-original.svg" width="16" height="16"/> `uberdb-payments` | Payment settlement (Card, Wallet, Cash), coupons, dynamic refund calculation. |
+| <img src="https://raw.githubusercontent.com/devicons/devicon/master/icons/java/java-original.svg" width="16" height="16"/> **`contracts`** | N/A | None (Library) | Shared DTOs, RabbitMQ event payloads, and OpenFeign client interfaces. |
 
 ---
 
@@ -73,12 +84,18 @@ Distributed transactions between ride completion and payment settlement are mana
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Driver as Driver
-    actor Rider as Rider
-    participant RideSvc as Ride Service
-    participant Rabbit as RabbitMQ
-    participant PaySvc as Payment Service
-    participant Others as User / Driver / Location
+    box rgba(56, 189, 248, 0.08) Clients
+    actor Driver as 🚗 Driver
+    actor Rider as 📱 Rider
+    end
+    box rgba(52, 211, 153, 0.08) Application Tier
+    participant RideSvc as 📍 Ride Service
+    participant PaySvc as 💳 Payment Service
+    participant Others as 👥 User / Driver / Location
+    end
+    box rgba(251, 146, 60, 0.08) Event Bus
+    participant Rabbit as 🐰 RabbitMQ
+    end
 
     Driver->>RideSvc: PUT /api/rides/{id}/complete
     RideSvc->>RideSvc: Set status COMPLETED
@@ -114,12 +131,12 @@ Each storage engine handles workloads tailored to its access pattern:
 
 | Engine | Service | Primary Role | Why Selected |
 | :--- | :--- | :--- | :--- |
-| **PostgreSQL 17** | All Services | Core transactional data (5 isolated DBs) | ACID guarantees, row-level locking, strict domain encapsulation. |
-| **Cassandra** | `location-service` | High-frequency GPS ping streams | High-write throughput, LSM-tree appends, TTL expiration. |
-| **Elasticsearch 9** | `driver-service` | Driver catalog search | Fuzzy search, n-gram matching, multi-criteria filtering. |
-| **Neo4j** | `ride-service` | Passenger-driver trip graph | Native Cypher traversals for collaborative driver recommendations. |
-| **Redis 7** | All Services | In-memory read cache | Sub-millisecond response times, LRU eviction for frequent queries. |
-| **MongoDB** | All Services | Audit trail & domain events | Schemaless event storage for immutable audit logging. |
+| <img src="https://raw.githubusercontent.com/devicons/devicon/master/icons/postgresql/postgresql-original.svg" width="18" height="18"/> **PostgreSQL 17** | All Services | Core transactional data (5 isolated DBs) | ACID guarantees, row-level locking, strict domain encapsulation. |
+| <img src="https://raw.githubusercontent.com/devicons/devicon/master/icons/apache/apache-original.svg" width="18" height="18"/> **Cassandra** | `location-service` | High-frequency GPS ping streams | High-write throughput, LSM-tree appends, TTL expiration. |
+| <img src="https://raw.githubusercontent.com/devicons/devicon/master/icons/elasticsearch/elasticsearch-original.svg" width="18" height="18"/> **Elasticsearch 9** | `driver-service` | Driver catalog search | Fuzzy search, n-gram matching, multi-criteria filtering. |
+| <img src="https://raw.githubusercontent.com/devicons/devicon/master/icons/neo4j/neo4j-original.svg" width="18" height="18"/> **Neo4j** | `ride-service` | Passenger-driver trip graph | Native Cypher traversals for collaborative driver recommendations. |
+| <img src="https://raw.githubusercontent.com/devicons/devicon/master/icons/redis/redis-original.svg" width="18" height="18"/> **Redis 7** | All Services | In-memory read cache | Sub-millisecond response times, LRU eviction for frequent queries. |
+| <img src="https://raw.githubusercontent.com/devicons/devicon/master/icons/mongodb/mongodb-original.svg" width="18" height="18"/> **MongoDB** | All Services | Audit trail & domain events | Schemaless event storage for immutable audit logging. |
 
 ---
 
@@ -127,22 +144,26 @@ Each storage engine handles workloads tailored to its access pattern:
 
 ```mermaid
 flowchart LR
+    classDef m1Style fill:#0f172a,stroke:#64748b,stroke-width:2px,color:#ffffff;
+    classDef m2Style fill:#172554,stroke:#3b82f6,stroke-width:2px,color:#ffffff;
+    classDef m3Style fill:#064e3b,stroke:#10b981,stroke-width:2px,color:#ffffff;
+
     subgraph M1 ["Milestone 1: Foundation"]
-        M1_1["Shared PostgreSQL DB"]
-        M1_2["45 Business Endpoints"]
-        M1_3["Cross-Service SQL Joins"]
+        M1_1["🐘 Shared PostgreSQL DB"]:::m1Style
+        M1_2["📋 45 Business Endpoints"]:::m1Style
+        M1_3["🔗 Cross-Service SQL Joins"]:::m1Style
     end
 
     subgraph M2 ["Milestone 2: Polyglot & Patterns"]
-        M2_1["6 Polyglot Storage Engines"]
-        M2_2["7 GoF Design Patterns"]
-        M2_3["Neo4j Graph & Cassandra Telemetry"]
+        M2_1["💾 6 Polyglot Storage Engines"]:::m2Style
+        M2_2["🧩 7 GoF Design Patterns"]:::m2Style
+        M2_3["🕸️ Neo4j Graph & 👁️ Cassandra GPS"]:::m2Style
     end
 
     subgraph M3 ["Milestone 3: Microservices & K8s"]
-        M3_1["Database-per-Service Isolation"]
-        M3_2["RabbitMQ Choreography Saga"]
-        M3_3["Spring Cloud Gateway & Minikube"]
+        M3_1["🛡️ Database-per-Service Isolation"]:::m3Style
+        M3_2["🐰 RabbitMQ Choreography Saga"]:::m3Style
+        M3_3["☸️ Spring Cloud Gateway & Minikube"]:::m3Style
     end
 
     M1 --> M2 --> M3
